@@ -1,0 +1,3640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>GLIDE</title>
+<style>
+:root{
+  --bg:#060a10; --bg2:#0b131d;
+  --deck:#16212e; --deck2:#1b2836; --grout:#0d151f;
+  --wall:#2b3a4f; --wallTop:#41587a; --wallEdge:#1a2433;
+  --cyan:#4fe3d2; --cyanDim:#1f6b66;
+  --gold:#ffc65c; --violet:#a97bff; --rust:#c8794a; --red:#ff6b6b;
+  --ink:#e8f2f6; --mute:#7d93a8; --mute2:#54687c;
+  --ui:#101a26; --uiLine:#22344a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:radial-gradient(120% 100% at 50% 0%,var(--bg2) 0%,var(--bg) 70%);
+  color:var(--ink); overflow:hidden;
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+  touch-action:none;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+
+/* ---------- screens ---------- */
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transition:opacity .28s ease}
+.screen.on{opacity:1;pointer-events:auto}
+
+/* ---------- title ---------- */
+#title{align-items:center;justify-content:center;gap:0}
+.logo{font-size:clamp(58px,17vw,140px);font-weight:800;letter-spacing:.22em;text-indent:.22em;
+  background:linear-gradient(180deg,#eafffd 0%,var(--cyan) 55%,#1d8d86 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 30px rgba(79,227,210,.35));line-height:1}
+.tag{color:var(--mute);letter-spacing:.32em;text-transform:uppercase;font-size:clamp(9px,2.4vw,12px);margin-top:14px;text-align:center;padding:0 20px}
+.menu{margin-top:44px;display:flex;flex-direction:column;gap:12px;width:min(300px,74vw)}
+.btn{padding:14px 20px;border:1px solid var(--uiLine);border-radius:12px;background:rgba(16,26,38,.75);
+  letter-spacing:.14em;text-transform:uppercase;font-size:12px;font-weight:600;text-align:center;
+  transition:border-color .18s,background .18s,transform .1s,color .18s}
+.btn:hover{border-color:var(--cyanDim);background:rgba(31,107,102,.16);color:#fff}
+.btn:active{transform:translateY(1px)}
+.btn.primary{border-color:var(--cyanDim);background:rgba(31,107,102,.2);color:var(--cyan)}
+.btn.primary:hover{background:rgba(31,107,102,.34)}
+.credit{position:absolute;bottom:18px;color:var(--mute2);font-size:10px;letter-spacing:.18em;text-transform:uppercase}
+
+/* ---------- top bar ---------- */
+.bar{display:flex;align-items:center;gap:10px;padding:12px 14px;padding-top:max(12px,env(safe-area-inset-top));
+  border-bottom:1px solid rgba(34,52,74,.5);flex:0 0 auto;min-height:56px}
+.ico{width:36px;height:36px;border-radius:9px;border:1px solid var(--uiLine);display:grid;place-items:center;
+  color:var(--mute);transition:color .16s,border-color .16s,background .16s;flex:0 0 auto}
+.ico:hover{color:var(--cyan);border-color:var(--cyanDim);background:rgba(31,107,102,.14)}
+.ico:disabled{opacity:.3;cursor:default}
+.ico:disabled:hover{color:var(--mute);border-color:var(--uiLine);background:none}
+.ico svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.barmid{flex:1;min-width:0;text-align:center}
+.lvname{font-size:14px;font-weight:600;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lvsub{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--mute2);margin-top:3px}
+.counts{display:flex;gap:14px;align-items:baseline;flex:0 0 auto}
+.ct{text-align:right}
+.ctv{font-size:17px;font-weight:600;line-height:1}
+.ctl{font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--mute2);margin-top:3px}
+
+/* ---------- board ---------- */
+#stage{flex:1;position:relative;display:grid;place-items:center;padding:14px;min-height:0}
+#cv{display:block;touch-action:none}
+.hint{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;max-width:min(560px,92vw);
+  background:rgba(11,19,29,.94);border:1px solid var(--uiLine);border-left:2px solid var(--cyan);
+  border-radius:10px;padding:11px 14px;font-size:12.5px;line-height:1.5;color:#cfe0e8;
+  box-shadow:0 12px 40px rgba(0,0,0,.6);animation:rise .35s ease both}
+@keyframes rise{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+.stuck{position:absolute;left:50%;transform:translateX(-50%);top:12px;background:rgba(46,14,14,.94);
+  border:1px solid #6d2b2b;border-radius:9px;padding:8px 13px;font-size:11.5px;color:#ffc9c9;
+  letter-spacing:.04em;animation:rise .3s ease both;display:flex;gap:9px;align-items:center}
+.stuck b{color:#fff;font-weight:600}
+.stuck button{color:#ff9b9b;text-decoration:underline;font-size:11.5px}
+
+/* ---------- level select ---------- */
+#select{background:var(--bg)}
+.grid{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:14px 14px 40px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:9px;align-content:start;
+  max-width:760px;width:100%;margin:0 auto}
+.tierhd{grid-column:1/-1;display:flex;align-items:center;gap:11px;margin:20px 2px 4px;
+  font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--mute2)}
+.tierhd:first-child{margin-top:4px}
+.tierhd::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--uiLine),transparent)}
+.cell{aspect-ratio:1;border:1px solid var(--uiLine);border-radius:11px;background:rgba(16,26,38,.6);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  transition:transform .12s,border-color .16s,background .16s}
+.cell:hover{transform:translateY(-2px);border-color:var(--cyanDim);background:rgba(31,107,102,.15)}
+.cell .n{font-size:16px;font-weight:600}
+.cell .m{font-size:9px;letter-spacing:.1em;color:var(--mute2)}
+.cell.done{border-color:rgba(79,227,210,.34)}
+.cell.done .n{color:var(--cyan)}
+.cell.perfect{border-color:rgba(255,198,92,.5);background:rgba(255,198,92,.07)}
+.cell.perfect .n{color:var(--gold)}
+.cell.perfect .m{color:rgba(255,198,92,.75)}
+.cell.locked{opacity:.3;cursor:default;pointer-events:none}
+.cell.locked .n{color:var(--mute2)}
+
+/* ---------- win overlay ---------- */
+#win{position:fixed;inset:0;display:grid;place-items:center;background:rgba(4,8,13,.8);
+  backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  opacity:0;pointer-events:none;transition:opacity .25s;z-index:20}
+#win.on{opacity:1;pointer-events:auto}
+.card{width:min(340px,86vw);background:linear-gradient(180deg,#101b27,#0a121b);
+  border:1px solid var(--uiLine);border-radius:18px;padding:26px 24px;text-align:center;
+  box-shadow:0 30px 90px rgba(0,0,0,.7);transform:translateY(12px) scale(.97);transition:transform .3s cubic-bezier(.2,1.3,.4,1)}
+#win.on .card{transform:none}
+.wtitle{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--cyan)}
+.wname{font-size:23px;font-weight:700;margin-top:7px;letter-spacing:.01em}
+.wstat{display:flex;justify-content:center;gap:26px;margin:20px 0 6px}
+.ws{text-align:center}
+.wsv{font-size:26px;font-weight:700;line-height:1}
+.wsl{font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute2);margin-top:5px}
+.stars{margin-top:14px;font-size:21px;letter-spacing:.16em;color:var(--gold);min-height:24px;line-height:1}
+.badge{margin-top:12px;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);min-height:14px}
+.cell .s{font-size:8px;letter-spacing:.06em;color:rgba(255,198,92,.8);line-height:1;min-height:9px}
+.strow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  border-bottom:1px solid rgba(34,52,74,.5);padding:9px 2px}
+.strow:last-child{border-bottom:none}
+.strow .k{font-size:12px;color:var(--mute)}
+.strow .v{font-size:15px;font-weight:600}
+.stbar{height:6px;border-radius:3px;background:rgba(34,52,74,.6);overflow:hidden;margin:10px 2px 2px}
+.stbar i{display:block;height:100%;background:linear-gradient(90deg,var(--cyan),var(--gold))}
+.wbtns{display:flex;flex-direction:column;gap:9px;margin-top:20px}
+
+/* ---------- sandbox editor ---------- */
+#estage{flex:1;position:relative;display:grid;place-items:center;padding:12px;min-height:0}
+#ecv{display:block;touch-action:none;cursor:crosshair}
+.palbar{display:flex;justify-content:center;padding:8px 12px 0}
+.palbar select{width:auto;min-width:190px;font-size:11px;letter-spacing:.08em;padding:6px 10px;cursor:pointer}
+.pal{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:6px 12px 0;max-width:830px;margin:0 auto;width:100%;
+  max-height:132px;overflow-y:auto;overscroll-behavior:contain}
+.tool{width:44px;border:1px solid var(--uiLine);border-radius:10px;background:rgba(16,26,38,.6);padding:4px 0 5px;
+  display:flex;flex-direction:column;align-items:center;gap:3px;transition:border-color .15s,background .15s}
+.tool canvas{width:26px;height:26px;display:block}
+.tool span{font-size:7.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute2);line-height:1}
+.tool:hover{border-color:var(--cyanDim);background:rgba(31,107,102,.14)}
+.tool.sel{border-color:var(--cyan);background:rgba(31,107,102,.24)}
+.tool.sel span{color:var(--cyan)}
+.emsg{text-align:center;font-size:11.5px;min-height:17px;color:var(--mute);padding:7px 14px 0;line-height:1.4}
+.emsg.good{color:var(--cyan)} .emsg.bad{color:#ff9b9b}
+.erow{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;align-items:center;padding:9px 12px;
+  padding-bottom:max(9px,env(safe-area-inset-bottom))}
+.ebtn{padding:9px 14px;border:1px solid var(--uiLine);border-radius:9px;font-size:10.5px;font-weight:600;
+  letter-spacing:.13em;text-transform:uppercase;background:rgba(16,26,38,.7);
+  transition:border-color .15s,background .15s,color .15s}
+.ebtn:hover{border-color:var(--cyanDim);background:rgba(31,107,102,.16);color:#fff}
+.ebtn.go{border-color:var(--cyanDim);color:var(--cyan)}
+.ebtn.go:hover{background:rgba(31,107,102,.3)}
+.step{display:flex;align-items:center;gap:3px;border:1px solid var(--uiLine);border-radius:9px;padding:3px 6px;background:rgba(16,26,38,.7)}
+.step button{width:21px;height:21px;border-radius:6px;color:var(--mute);font-size:15px;line-height:1}
+.step button:hover{color:var(--cyan)}
+.step .sv{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);min-width:42px;text-align:center}
+.step button.sv{width:auto;height:auto;padding:2px 5px;border-radius:5px}
+.step button.sv:hover{color:var(--cyan);background:rgba(31,107,102,.18)}
+/* ---------- modal ---------- */
+.modal{position:fixed;inset:0;display:grid;place-items:center;background:rgba(4,8,13,.82);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity .22s;z-index:25;padding:18px}
+.modal.on{opacity:1;pointer-events:auto}
+.mcard{width:min(430px,94vw);max-height:84vh;overflow-y:auto;background:linear-gradient(180deg,#101b27,#0a121b);
+  border:1px solid var(--uiLine);border-radius:16px;padding:20px;box-shadow:0 30px 90px rgba(0,0,0,.7)}
+.mh{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--cyan);margin:0 0 11px}
+.mh.sub{color:var(--mute2);margin-top:20px}
+.slot{display:flex;align-items:center;gap:10px;border:1px solid var(--uiLine);border-radius:9px;padding:9px 11px;margin-bottom:7px}
+.slot .sn{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot canvas.thumb{width:40px;height:40px;border-radius:6px;background:#0a121b;flex:0 0 auto;
+  border:1px solid rgba(34,52,74,.8)}
+.slot .sz{font-size:9px;color:var(--mute2);letter-spacing:.12em;flex:0 0 auto}
+.slot button{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);flex:0 0 auto}
+.slot button:hover{color:var(--cyan)}
+.slot button.del:hover{color:var(--red)}
+.inp{width:100%;background:rgba(6,11,17,.85);border:1px solid var(--uiLine);border-radius:9px;padding:9px 11px;
+  color:var(--ink);font:inherit;font-size:12px}
+.inp.mono{font-size:10.5px}
+.inp:focus{outline:none;border-color:var(--cyanDim)}
+.mrow{display:flex;gap:7px;margin-top:8px}
+.mrow .ebtn{flex:1;text-align:center}
+.empty{color:var(--mute2);font-size:11.5px;padding:4px 2px 8px;line-height:1.5}
+
+/* ---------- misc ---------- */
+.fin{text-align:center;padding:40px 24px}
+.fin h2{font-size:26px;letter-spacing:.06em;margin-bottom:12px}
+.fin p{color:var(--mute);font-size:13px;line-height:1.7;max-width:400px;margin:0 auto}
+@media (max-width:420px){ .counts{gap:10px} .ctv{font-size:15px} }
+</style>
+</head>
+<body>
+
+<!-- ================= TITLE ================= -->
+<div class="screen on" id="title">
+  <div class="logo">GLIDE</div>
+  <div class="tag">Frictionless decks &middot; 260 puzzles &middot; daily, endless &amp; your own</div>
+  <div class="menu">
+    <button class="btn primary" id="bPlay">Continue</button>
+    <button class="btn" id="bSelect">Select deck</button>
+    <button class="btn" id="bDaily">Daily deck</button>
+    <button class="btn" id="bEndless">Endless</button>
+    <button class="btn" id="bSand">Sandbox</button>
+    <button class="btn" id="bStats">Stats</button>
+    <button class="btn" id="bSound">Sound: on</button>
+  </div>
+  <div class="credit" id="cTotal"></div>
+</div>
+
+<!-- ================= LEVEL SELECT ================= -->
+<div class="screen" id="select">
+  <div class="bar">
+    <button class="ico" id="sBack" title="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="barmid"><div class="lvname">Select deck</div><div class="lvsub" id="sProg"></div></div>
+    <div style="width:36px"></div>
+  </div>
+  <div class="grid" id="sGrid"></div>
+</div>
+
+<!-- ================= PLAY ================= -->
+<div class="screen" id="play">
+  <div class="bar">
+    <button class="ico" id="pBack" title="Decks (Esc)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button class="ico" id="pUndo" title="Undo (Z)"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 016 6v1"/></svg></button>
+    <button class="ico" id="pReset" title="Restart (R)"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 6"/><path d="M20 4v7h-7"/></svg></button>
+    <button class="ico" id="pHint" title="Show the best next move (H)"><svg viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 00-3.6 10.8c.5.4.8 1 .9 1.6l.1.6h5.2l.1-.6c.1-.6.4-1.2.9-1.6A6 6 0 0012 3z"/></svg></button>
+    <div class="barmid"><div class="lvname" id="pName"></div><div class="lvsub" id="pSub"></div></div>
+    <div class="counts">
+      <div class="ct" id="ctKeys" style="display:none"><div class="ctv mono" id="pKeys" style="color:#7ef2a5">0</div><div class="ctl">Keys</div></div>
+      <div class="ct"><div class="ctv mono" id="pMoves">0</div><div class="ctl">Moves</div></div>
+      <div class="ct"><div class="ctv mono" id="pPar" style="color:var(--mute)">0</div><div class="ctl">Par</div></div>
+    </div>
+  </div>
+  <div id="stage"><canvas id="cv"></canvas></div>
+</div>
+
+<!-- ================= WIN ================= -->
+<div id="win"><div class="card">
+  <div class="wtitle" id="wTitle">Deck cleared</div>
+  <div class="wname" id="wName"></div>
+  <div class="wstat">
+    <div class="ws"><div class="wsv mono" id="wMoves"></div><div class="wsl">Moves</div></div>
+    <div class="ws"><div class="wsv mono" id="wPar" style="color:var(--mute)"></div><div class="wsl">Par</div></div>
+    <div class="ws"><div class="wsv mono" id="wBest" style="color:var(--gold)"></div><div class="wsl" id="wBestL">Best</div></div>
+  </div>
+  <div class="stars" id="wStars"></div>
+  <div class="badge" id="wBadge"></div>
+  <div class="wbtns">
+    <button class="btn primary" id="wNext">Next deck</button>
+    <button class="btn" id="wReplay">Replay route</button>
+    <button class="btn" id="wRetry">Retry</button>
+    <button class="btn" id="wMenu">All decks</button>
+  </div>
+</div></div>
+
+<!-- ================= STATS ================= -->
+<div class="modal" id="mStats"><div class="mcard">
+  <div class="mh">Flight record</div>
+  <div id="statBody"></div>
+  <div class="mrow"><button class="ebtn go" id="mStatsX">Close</button></div>
+</div></div>
+
+<!-- ================= SANDBOX ================= -->
+<div class="screen" id="sandbox">
+  <div class="bar">
+    <button class="ico" id="eBack" title="Title (Esc)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button class="ico" id="eUndo" title="Undo edit (Z)"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 016 6v1"/></svg></button>
+    <button class="ico" id="eNew" title="New deck"><svg viewBox="0 0 24 24"><path d="M5 4h9l5 5v11H5z"/><path d="M12 10v6"/><path d="M9 13h6"/></svg></button>
+    <div class="barmid"><div class="lvname" id="eName">Untitled deck</div><div class="lvsub" id="eSub">Sandbox &middot; draw a deck</div></div>
+    <div style="width:36px"></div>
+  </div>
+  <div class="palbar"><select id="ePalGroup" class="inp"></select></div>
+  <div class="pal" id="ePal"></div>
+  <div id="estage"><canvas id="ecv"></canvas></div>
+  <div class="emsg" id="eMsg"></div>
+  <div class="erow">
+    <div class="step"><button id="eWm">&minus;</button><span class="sv mono" id="eWv">9 W</span><button id="eWp">+</button></div>
+    <div class="step"><button id="eHm">&minus;</button><span class="sv mono" id="eHv">8 H</span><button id="eHp">+</button></div>
+    <div class="step"><button id="eZm">&minus;</button><button class="sv mono" id="eZv" title="Fit the deck to the view">100%</button><button id="eZp">+</button></div>
+    <button class="ebtn" id="eRot">Rotate</button>
+    <button class="ebtn" id="eFlip">Mirror</button>
+    <button class="ebtn" id="eOpen">Open</button>
+    <button class="ebtn" id="eSave">Save</button>
+    <button class="ebtn" id="eCheck">Verify</button>
+    <button class="ebtn go" id="eTest">Test deck</button>
+  </div>
+</div>
+
+<!-- ================= SANDBOX MODALS ================= -->
+<div class="modal" id="mSave"><div class="mcard">
+  <div class="mh">Save deck</div>
+  <input class="inp" id="mName" placeholder="Deck name" maxlength="28" autocomplete="off">
+  <div class="mh sub">Share code</div>
+  <input class="inp mono" id="mCode" readonly onclick="this.select()">
+  <div class="mh sub">Share link</div>
+  <input class="inp mono" id="mLink" readonly onclick="this.select()">
+  <div class="mrow">
+    <button class="ebtn" id="mSaveX">Cancel</button>
+    <button class="ebtn go" id="mSaveOk">Save</button>
+  </div>
+</div></div>
+
+<div class="modal" id="mOpen"><div class="mcard">
+  <div class="mh">Saved decks</div>
+  <div id="mList"></div>
+  <div class="mh sub">Import a share code</div>
+  <input class="inp mono" id="mPaste" placeholder="GLIDE1:9:8:####..." autocomplete="off">
+  <div class="mrow">
+    <button class="ebtn" id="mOpenX">Close</button>
+    <button class="ebtn go" id="mImport">Import</button>
+  </div>
+</div></div>
+
+<script>
+/* ===================================================================
+   GLIDE — rule engine (generated: identical text to the file the
+   solver used to prove all 260 decks solvable)
+   =================================================================== */
+/* GLIDE rule engine — single source of truth.
+   Embedded verbatim into glide.html AND required by the solver/generator,
+   so a level that the solver proves solvable is solvable in the shipped page. */
+var GLIDE = (function () {
+  'use strict';
+
+  // 0=up 1=right 2=down 3=left
+  var DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
+  var ARROW = { '^': 0, '>': 1, 'v': 2, '<': 3 };
+
+  // --- terrain glyphs -------------------------------------------------
+  // '#' wall      '.' floor     '0' void (blocks; a crate can plug it)
+  // '~' crack     'm' mud       '^>v<' redirector
+  // 't' teleport pad (paired in reading order)
+  // '!' button (toggles every gate)   'G' gate closed at rest  'g' gate open at rest
+  // 'Y'/'B'/'R' spring, 'y'/'b'/'r' its landing pad. A spring throws you onto a
+  //   pad of its own colour and you STOP there:
+  //     yellow — always its own one pad (springs pair to pads in reading order)
+  //     blue   — a random blue pad
+  //     red    — whichever red pad you pick
+  // 'o' bumper — you do not enter it, you bounce off and slide back
+  // '+' rotor — a vane that turns a quarter clockwise every time you use it
+  // '/' '\' mirrors — deflect a quarter turn, which way depends on your heading
+  // '%' key   '=' lock — a lock is solid until you spend a key on it, and then
+  //                      it is open for good
+  var MIRROR = { '/': [1, 0, 3, 2], '\\': [3, 2, 1, 0] };   // indexed by heading
+
+  /* ================= extended tiles =================
+     The originals above are hand-written because each is its own idea. Past a
+     couple of dozen that stops scaling, so everything added later is DATA: a
+     spec per tile, read by one generic code path in move(). Glyphs are handed
+     out from U+0100 upwards — ASCII ran out, and the editor draws art anyway,
+     so the actual character never has to be readable.
+
+     A spec may set any of:
+       solid(c)    entering is refused outright
+       enter(c)    runs as you step on; return false to refuse the step
+       redirect    heading map [fromDir] -> newDir, or a function
+       stop        the slide ends here
+       bounce      you never enter; your heading reverses
+       wear        {max, on:'enter'|'leave'|'block', then:'floor'|'void'|'wall'}
+       carry       direction you are nudged after the slide settles
+       force       heading your NEXT move is locked into                       */
+  var EXT_BASE = 0x0100, EXT = [], EXTBY = {};
+  function ext(spec) {
+    spec.g = String.fromCharCode(EXT_BASE + EXT.length);
+    spec.i = EXT.length;
+    EXT.push(spec); EXTBY[spec.g] = spec;
+    return spec;
+  }
+  var DIRNAME = ['up', 'right', 'down', 'left'];
+  var TURN_CW = [1, 2, 3, 0], TURN_CCW = [3, 0, 1, 2], TURN_180 = [2, 3, 0, 1];
+
+  // --- family: one-way plates (4) — only passable along their own heading ---
+  for (var f1 = 0; f1 < 4; f1++) (function (d) {
+    ext({ family: 'One-way', name: 'One-way ' + DIRNAME[d], dir: d,
+          tip: 'One-way plate — you may only cross it heading ' + DIRNAME[d] + '.',
+          solid: function (c) { return c.d !== d; },
+          draw: { base: 'floor', icon: 'oneway', col: '#8fb3d9', rot: d } });
+  })(f1);
+
+  // --- family: conveyors (4) — nudge you one cell on after you settle ---
+  for (var f2 = 0; f2 < 4; f2++) (function (d) {
+    ext({ family: 'Conveyor', name: 'Conveyor ' + DIRNAME[d], dir: d,
+          tip: 'Conveyor — when your slide stops here it carries you one more cell ' + DIRNAME[d] + '.',
+          carry: d,
+          draw: { base: 'floor', icon: 'belt', col: '#e0a54a', rot: d } });
+  })(f2);
+
+  // --- family: corner brakes (8) — turn a quarter, then stop dead ---
+  for (var f3 = 0; f3 < 4; f3++) (function (d) {
+    ext({ family: 'Corner brake', name: 'Brake CW ' + DIRNAME[d],
+          tip: 'Corner brake — turns you a quarter clockwise, then stops you dead.',
+          redirect: TURN_CW, stop: true,
+          draw: { base: 'floor', icon: 'corner', col: '#9ad1c0', rot: d } });
+    ext({ family: 'Corner brake', name: 'Brake CCW ' + DIRNAME[d],
+          tip: 'Corner brake — turns you a quarter anticlockwise, then stops you dead.',
+          redirect: TURN_CCW, stop: true,
+          draw: { base: 'floor', icon: 'corner', col: '#c09ad1', rot: (d + 3) & 3 } });
+  })(f3);
+
+  // --- family: one-shot vanes (4) — steer once, then burn out to floor ---
+  for (var f4 = 0; f4 < 4; f4++) (function (d) {
+    ext({ family: 'Burnout vane', name: 'Burnout vane ' + DIRNAME[d],
+          tip: 'Burnout vane — steers you ' + DIRNAME[d] + ' once, then it is spent.',
+          redirect: [d, d, d, d], wear: { max: 1, on: 'enter', then: 'floor' },
+          draw: { base: 'floor', icon: 'vane', col: '#ffb066', rot: d } });
+  })(f4);
+
+  // --- family: crumbling walls (3) — block N times, then give way ---
+  for (var f5 = 1; f5 <= 3; f5++) (function (n) {
+    ext({ family: 'Crumbling wall', name: 'Crumbling wall ×' + n,
+          tip: 'Crumbling wall — stops you ' + n + ' time' + (n > 1 ? 's' : '') + ', then it is rubble you can cross.',
+          wear: { max: n, on: 'block', then: 'floor' },
+          solid: function (c) { return c.worn < n; },
+          draw: { base: 'wall', icon: 'cracks', col: '#7d93a8', pips: n } });
+  })(f5);
+
+  // --- family: wearing floors (3) — collapse into void after N crossings ---
+  for (var f6 = 2; f6 <= 4; f6++) (function (n) {
+    ext({ family: 'Wearing floor', name: 'Wearing floor ×' + n,
+          tip: 'Wearing plate — it takes ' + n + ' crossings before it gives way.',
+          wear: { max: n, on: 'leave', then: 'void' },
+          draw: { base: 'floor', icon: 'wear', col: '#c8794a', pips: n } });
+  })(f6);
+
+  // --- family: spent brakes (3) — stop you, then stop working ---
+  for (var f7 = 1; f7 <= 3; f7++) (function (n) {
+    ext({ family: 'Spent brake', name: 'Spent brake ×' + n,
+          tip: 'Fading brake — stops your slide ' + n + ' time' + (n > 1 ? 's' : '') + ', then it is bare floor.',
+          stop: function (c) { return c.worn < n; },
+          wear: { max: n, on: 'enter', then: 'floor' },
+          draw: { base: 'floor', icon: 'brake', col: '#a8b8c8', pips: n } });
+  })(f7);
+
+  // --- family: rotor variants (3) — a different quarter each time ---
+  [['CCW', TURN_CCW], ['half', TURN_180], ['CW', TURN_CW]].forEach(function (v, vi) {
+    ext({ family: 'Stepped rotor', name: 'Rotor ' + v[0],
+          tip: 'Stepped rotor — steers you, then advances its facing ' +
+               (vi === 0 ? 'anticlockwise' : vi === 1 ? 'a half turn' : 'clockwise') + '.',
+          rotor: true, step: vi === 0 ? 3 : vi === 1 ? 2 : 1,
+          draw: { base: 'floor', icon: 'rotor', col: '#a97bff', pips: vi + 1 } });
+  });
+
+  // --- family: coloured keys and locks (3 pairs, 6 tiles) ---
+  var KEYCOL = [['#7ef2a5', 'green'], ['#ffc65c', 'amber'], ['#9fd4ff', 'ice']];
+  for (var f8 = 0; f8 < 3; f8++) (function (ci) {
+    ext({ family: 'Coloured key', name: KEYCOL[ci][1] + ' key', keyColour: ci,
+          tip: 'A ' + KEYCOL[ci][1] + ' key — it only opens ' + KEYCOL[ci][1] + ' locks.',
+          draw: { base: 'floor', icon: 'key', col: KEYCOL[ci][0] } });
+    ext({ family: 'Coloured lock', name: KEYCOL[ci][1] + ' lock', lockColour: ci,
+          tip: 'A ' + KEYCOL[ci][1] + ' lock — spend a ' + KEYCOL[ci][1] + ' key on it and it stays open.',
+          draw: { base: 'wall', icon: 'lock', col: KEYCOL[ci][0] } });
+  })(f8);
+
+  // --- family: counted gates (4) — open once the button has been hit N times ---
+  for (var f9 = 2; f9 <= 5; f9++) (function (n) {
+    ext({ family: 'Counted gate', name: 'Gate after ' + n, counts: true,
+          tip: 'Counted gate — stays shut until a button has been pressed ' + n + ' times.',
+          solid: function (c) { return c.press < n; },
+          draw: { base: 'wall', icon: 'count', col: '#ff8f6b', pips: n } });
+  })(f9);
+
+  // --- family: gravity plates (4) — your NEXT move is locked to one heading ---
+  for (var f10 = 0; f10 < 4; f10++) (function (d) {
+    ext({ family: 'Gravity plate', name: 'Gravity ' + DIRNAME[d], dir: d,
+          tip: 'Gravity plate — stops you, and your next move can only be ' + DIRNAME[d] + '.',
+          stop: true, force: d,
+          draw: { base: 'floor', icon: 'grav', col: '#ff6bd6', rot: d } });
+  })(f10);
+
+  // --- family: heading-sensitive mud (4) — only bites from one side ---
+  for (var f11 = 0; f11 < 4; f11++) (function (d) {
+    ext({ family: 'Facing sludge', name: 'Sludge vs ' + DIRNAME[d], dir: d,
+          tip: 'Facing sludge — it only catches you when you arrive heading ' + DIRNAME[d] + '.',
+          stop: function (c) { return c.d === d; },
+          draw: { base: 'floor', icon: 'fmud', col: '#8a6b3a', rot: d } });
+  })(f11);
+
+  // --- family: wearing mirrors (2) — one deflection each, then bare floor ---
+  [['/', [1, 0, 3, 2]], ['\\', [3, 2, 1, 0]]].forEach(function (mv, mi) {
+    ext({ family: 'Cracked mirror', name: 'Cracked mirror ' + mv[0],
+          tip: 'Cracked mirror — deflects you once the way a mirror would, then shatters.',
+          redirect: mv[1], wear: { max: 1, on: 'enter', then: 'floor' },
+          draw: { base: 'floor', icon: 'mirror', col: '#dff2ff', rot: mi } });
+  });
+
+  // --- family: reverse plates (2) — turn you back the way you came ---
+  ext({ family: 'Reverser', name: 'Reverser',
+        tip: 'Reverser — you cross it and come straight back the way you came.',
+        redirect: TURN_180,
+        draw: { base: 'floor', icon: 'rev', col: '#e8f2f6' } });
+  ext({ family: 'Reverser', name: 'Reverser, one shot',
+        tip: 'Reverser — turns you back once, then it is spent.',
+        redirect: TURN_180, wear: { max: 1, on: 'enter', then: 'floor' },
+        draw: { base: 'floor', icon: 'rev', col: '#98a8b8', pips: 1 } });
+
+  // --- family: extra fixed spring channels (4 pairs, 8 tiles) ---
+  var EXTRA_CH = [['#4ae0b8', 5], ['#e0e04a', 6], ['#b84ae0', 7], ['#4a8ae0', 8]];
+  for (var f12 = 0; f12 < 4; f12++) (function (ci) {
+    var padSpec = ext({ family: 'Spring channel', name: 'Pad ' + EXTRA_CH[ci][1], extPad: ci,
+      tip: 'Landing pad ' + EXTRA_CH[ci][1] + ' — where fixed spring ' + EXTRA_CH[ci][1] + ' puts you down.',
+      draw: { base: 'floor', icon: 'pad', col: EXTRA_CH[ci][0], pips: EXTRA_CH[ci][1] } });
+    ext({ family: 'Spring channel', name: 'Fixed spring ' + EXTRA_CH[ci][1], extSpring: ci,
+      tip: 'Fixed spring ' + EXTRA_CH[ci][1] + ' — always throws you to pad ' + EXTRA_CH[ci][1] + '.',
+      draw: { base: 'floor', icon: 'spring', col: EXTRA_CH[ci][0], pips: EXTRA_CH[ci][1] } });
+  })(f12);
+
+  // --- family: extra relay colours (3) — independent teleport pairs ---
+  var RELAYC = [['#a97bff', 'violet'], ['#4fe3d2', 'cyan'], ['#ff9f43', 'amber']];
+  for (var f13 = 0; f13 < 3; f13++) (function (ci) {
+    ext({ family: 'Relay colour', name: RELAYC[ci][1] + ' relay', relay: ci,
+          tip: 'A ' + RELAYC[ci][1] + ' relay — pairs only with the other ' + RELAYC[ci][1] + ' pad, keeping your heading and speed.',
+          draw: { base: 'floor', icon: 'relay', col: RELAYC[ci][0] } });
+  })(f13);
+
+  // --- family: toggling floors (2) — solid on alternate moves ---
+  for (var f14 = 0; f14 < 2; f14++) (function (phase) {
+    ext({ family: 'Blinking floor', name: 'Blinker ' + (phase ? 'B' : 'A'), timed: true,
+          tip: 'Blinking plate — solid on ' + (phase ? 'even' : 'odd') + ' moves, open on the others.',
+          solid: function (c) { return (c.moves & 1) === phase; },
+          draw: { base: 'floor', icon: 'blink', col: '#6bd6ff', pips: phase + 1 } });
+  })(f14);
+
+  // --- family: multi-key locks (3) — cost more than one key ---
+  for (var f15 = 2; f15 <= 4; f15++) (function (n) {
+    ext({ family: 'Heavy lock', name: 'Lock ×' + n, cost: n,
+          tip: 'Heavy lock — it swallows ' + n + ' keys at once.',
+          draw: { base: 'wall', icon: 'lock', col: '#7ef2a5', pips: n } });
+  })(f15);
+
+  // --- family: valuable keys (3) — worth more than one ---
+  for (var f16 = 2; f16 <= 4; f16++) (function (n) {
+    ext({ family: 'Key cluster', name: 'Keys ×' + n, keyWorth: n,
+          tip: 'A ring of ' + n + ' keys.',
+          draw: { base: 'floor', icon: 'key', col: '#7ef2a5', pips: n } });
+  })(f16);
+
+  /* --- family: angled bumpers (4) — bounce you off at a right angle ---
+     Every map here is deflection RELATIVE to your heading. An absolute one
+     ("always throw them left") sends you straight back into the bumper when
+     you arrive already heading that way, and the slide spins until the loop
+     guard kills the move outright. Relative maps can never do that. */
+  [['clockwise', TURN_CW], ['anticlockwise', TURN_CCW],
+   ['off the / face', [1, 0, 3, 2]], ['off the \\ face', [3, 2, 1, 0]]
+  ].forEach(function (v, vi) {
+    ext({ family: 'Angled bumper', name: 'Angled bumper ' + v[0],
+          tip: 'Angled bumper — you never enter it; it kicks you away ' + v[0] + '.',
+          bounce: v[1],
+          draw: { base: 'wall', icon: 'abump', col: '#cfe0e8', rot: vi } });
+  });
+
+  // --- family: worn bumpers (2) — bounce a set number of times ---
+  for (var f18 = 1; f18 <= 2; f18++) (function (n) {
+    ext({ family: 'Tired bumper', name: 'Tired bumper ×' + n,
+          tip: 'Tired bumper — good for ' + n + ' bounce' + (n > 1 ? 's' : '') + ', then it is just floor.',
+          bounce: TURN_180, wear: { max: n, on: 'block', then: 'floor' },
+          draw: { base: 'wall', icon: 'bump', col: '#9fb6cc', pips: n } });
+  })(f18);
+
+  // --- family: one-shot springs (3 pairs, reuse channels 1..3 pads) ---
+  for (var f19 = 0; f19 < 3; f19++) (function (ci) {
+    ext({ family: 'Spent spring', name: 'One-shot spring ' + (ci + 1), extSpring: ci, once: true,
+          tip: 'One-shot spring — throws you to pad ' + EXTRA_CH[ci][1] + ' once, then it is dead.',
+          wear: { max: 1, on: 'enter', then: 'floor' },
+          draw: { base: 'floor', icon: 'spring', col: EXTRA_CH[ci][0], pips: 0 } });
+  })(f19);
+
+  // --- family: numbered cores (4) — must be taken in order ---
+  for (var f20 = 1; f20 <= 4; f20++) (function (n) {
+    ext({ family: 'Ordered core', name: 'Core ' + n, order: n,
+          tip: 'Numbered core — it will not come loose until core ' + (n - 1) + ' has been taken.',
+          draw: { base: 'floor', icon: 'ocore', col: '#ffc65c', pips: n } });
+  })(f20);
+
+  // --- family: fast conveyors (4) — carry you two cells, not one ---
+  for (var f21 = 0; f21 < 4; f21++) (function (d) {
+    ext({ family: 'Fast conveyor', name: 'Fast conveyor ' + DIRNAME[d], dir: d,
+          tip: 'Fast conveyor — when you settle here it carries you two cells ' + DIRNAME[d] + '.',
+          carry: d, carryN: 2,
+          draw: { base: 'floor', icon: 'belt', col: '#e07a4a', rot: d, pips: 2 } });
+  })(f21);
+
+  // --- family: aimed relays (4) — you come out on a fixed heading ---
+  for (var f22 = 0; f22 < 4; f22++) (function (d) {
+    ext({ family: 'Aimed relay', name: 'Aimed relay ' + DIRNAME[d], relay: 3 + d, relayDir: d,
+          tip: 'Aimed relay — pairs with its twin, and you always come out heading ' + DIRNAME[d] + '.',
+          draw: { base: 'floor', icon: 'relay', col: '#ff7ab8', rot: d, pips: 1 } });
+  })(f22);
+
+  // --- family: pre-turned rotors (3) — same rotor, started facing elsewhere ---
+  for (var f23 = 1; f23 <= 3; f23++) (function (d) {
+    ext({ family: 'Set rotor', name: 'Rotor facing ' + DIRNAME[d],
+          tip: 'Rotor — same quarter-turn ratchet, but it starts facing ' + DIRNAME[d] + '.',
+          rotor: true, step: 1, initRot: d,
+          draw: { base: 'floor', icon: 'rotor', col: '#8f5fe0', rot: d } });
+  })(f23);
+
+  // --- family: three-phase blinkers (2) — solid one move in three ---
+  for (var f24 = 1; f24 <= 2; f24++) (function (phase) {
+    ext({ family: 'Blinking floor', name: 'Blinker ×3 ' + phase, timed: true,
+          tip: 'Slow blinker — solid on one move in every three.',
+          solid: function (c) { return (c.moves % 3) === phase; },
+          draw: { base: 'floor', icon: 'blink', col: '#4f9fe3', pips: phase + 2 } });
+  })(f24);
+
+  // --- family: slick plate (1) — nothing can come to rest here ---
+  ext({ family: 'Slick plate', name: 'Slick plate',
+        tip: 'Slick plate — too smooth to stop on; if your slide would end here you are nudged on one more cell.',
+        carry: -1,
+        draw: { base: 'floor', icon: 'slick', col: '#bfe9ff' } });
+
+  /* --- family: a hundred more fixed channels (200 tiles) ---
+     Channels 9 to 108, each a spring wired to its own pad and nothing else.
+     Hues are spaced by the golden angle so neighbouring channels never end up
+     the same colour, and every tile carries its channel number as well.
+     These MUST stay at the end of the table: glyphs are handed out by
+     position, so inserting anything above here would silently repoint every
+     tile in the shipped decks. */
+  function hsl(hDeg, s, l) {
+    var h = hDeg / 360;
+    function hue2(p, q, t) {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    }
+    var q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    function h2(v) { var x = Math.round(v * 255).toString(16); return x.length < 2 ? '0' + x : x; }
+    return '#' + h2(hue2(p, q, h + 1 / 3)) + h2(hue2(p, q, h)) + h2(hue2(p, q, h - 1 / 3));
+  }
+  for (var f25 = 0; f25 < 100; f25++) (function (k) {
+    var chNo = 9 + k, slot = 4 + k;            // slots 0-3 belong to channels 5-8
+    var col = hsl((k * 137.508) % 360, .62, .62);
+    var lo = 9 + Math.floor(k / 20) * 20;
+    var group = 'Fixed ' + lo + '-' + (lo + 19);
+    ext({ family: group, name: 'Pad ' + chNo, extPad: slot,
+          tip: 'Landing pad ' + chNo + ' — where fixed spring ' + chNo + ' sets you down.',
+          draw: { base: 'floor', icon: 'pad', col: col, pips: chNo } });
+    ext({ family: group, name: 'Fixed spring ' + chNo, extSpring: slot,
+          tip: 'Fixed spring ' + chNo + ' — always throws you to pad ' + chNo + ', and nowhere else.',
+          draw: { base: 'floor', icon: 'spring', col: col, pips: chNo } });
+  })(f25);
+  // 'E' exit
+  // entity glyphs, stripped out at parse: '@' start  'x' crate  '*' core
+  // Four independent fixed channels, so a deck can wire several yellow springs
+  // to several pads and you can see which goes where.
+  var SPRING = { 'Y': 'y', 'J': 'j', 'K': 'k', 'L': 'l', 'B': 'b', 'R': 'r' };
+  var PAD = { 'y': 1, 'j': 1, 'k': 1, 'l': 1, 'b': 1, 'r': 1 };
+  var KIND = { 'y': 'fixed', 'j': 'fixed', 'k': 'fixed', 'l': 'fixed',
+               'b': 'blue', 'r': 'red' };
+  var FIXED = ['y', 'j', 'k', 'l'];                // channel 1..4, in this order
+  var CHANNEL = { 'y': 1, 'j': 2, 'k': 3, 'l': 4 };
+
+  function parse(L) {
+    var w = L.w, h = L.h, g = L.grid.split('');
+    var terrain = new Array(w * h), start = -1, crates = [], cores = [], teles = [];
+    var pads = { y: [], j: [], k: [], l: [], b: [], r: [] };
+    var springs = { y: [], j: [], k: [], l: [], b: [], r: [] };
+    var rotors = [], rotorIndex = {}, keys = [], locks = [], lockIndex = {};
+    var wearList = [], wearIndex = {}, rot0 = [], ordCores = [];
+    var extSpring = [], extPad = [], extRelay = {};
+    for (var i = 0; i < w * h; i++) {
+      var c = g[i];
+      if (c === '@') { start = i; c = '.'; }
+      else if (c === 'x') { crates.push(i); c = '.'; }
+      else if (c === '*') { cores.push(i); c = '.'; }
+      if (c === 't') teles.push(i);
+      if (c === '+') { rotorIndex[i] = rotors.length; rotors.push(i); }
+      if (c === '%') keys.push(i);
+      if (c === '=') { lockIndex[i] = locks.length; locks.push(i); }
+      var xs = EXTBY[c];
+      if (xs) {
+        if (xs.wear) { wearIndex[i] = wearList.length; wearList.push(i); }
+        if (xs.rotor) { rotorIndex[i] = rotors.length; rotors.push(i); rot0.push(xs.initRot || 0); }
+        if (xs.extSpring !== undefined)
+          (extSpring[xs.extSpring] = extSpring[xs.extSpring] || []).push(i);
+        if (xs.extPad !== undefined)
+          (extPad[xs.extPad] = extPad[xs.extPad] || []).push(i);
+        if (xs.relay !== undefined) (extRelay[xs.relay] = extRelay[xs.relay] || []).push(i);
+        if (xs.order) ordCores.push({ at: i, n: xs.order });
+        if (xs.keyColour !== undefined || xs.keyWorth) keys.push(i);
+        if (xs.lockColour !== undefined || xs.cost) { lockIndex[i] = locks.length; locks.push(i); }
+      }
+      if (PAD[c]) pads[c].push(i);
+      if (SPRING[c]) springs[SPRING[c]].push(i);
+      terrain[i] = c;
+    }
+    var partner = {};
+    for (var k = 0; k + 1 < teles.length; k += 2) {
+      partner[teles[k]] = teles[k + 1];
+      partner[teles[k + 1]] = teles[k];
+    }
+    // a fixed spring always throws you to the same pad: springs and pads pair
+    // off within their own channel, so channel 2 never feeds channel 3
+    var fixed = {};
+    for (var ch = 0; ch < FIXED.length; ch++) {
+      var col = FIXED[ch];
+      for (var s = 0; s < springs[col].length; s++)
+        if (pads[col].length) fixed[springs[col][s]] = pads[col][s % pads[col].length];
+    }
+    cores.sort(function (a, b) { return a - b; });
+    crates.sort(function (a, b) { return a - b; });
+    return {
+      id: L.id, name: L.name, hint: L.hint, par: L.par, tier: L.tier,
+      w: w, h: h, terrain: terrain, start: start, cores: cores,
+      crates0: crates, partner: partner, pads: pads, springs: springs, fixed: fixed,
+      pairNo: pairLabels(L.grid), rotors: rotors, rotorIndex: rotorIndex,
+      keys: keys, locks: locks, lockIndex: lockIndex,
+      wearList: wearList, wearIndex: wearIndex, rot0: rot0, ordCores: ordCores,
+      maxOrder: ordCores.reduce(function (a, o) { return Math.max(a, o.n); }, 0),
+      // only decks with blinking plates need the move count in the state key,
+      // and paying that cost everywhere would blow up every other deck
+      timed: g.some(function (c) { var s = EXTBY[c]; return !!(s && s.timed); }),
+      // likewise, counting button presses only matters where a counted gate
+      // reads them — otherwise every press would fork the search forever
+      counted: g.some(function (c) { var s = EXTBY[c]; return !!(s && s.counts); }),
+      extSpring: extSpring, extPad: extPad, extRelay: extRelay,
+      extPartner: relayPartners(extRelay)
+    };
+  }
+
+  /* Extra relay colours pair off within their own colour, in reading order. */
+  function relayPartners(byColour) {
+    var out = {};
+    for (var c in byColour) {
+      var list = byColour[c];
+      for (var k = 0; k + 1 < list.length; k += 2) {
+        out[list[k]] = list[k + 1];
+        out[list[k + 1]] = list[k];
+      }
+    }
+    return out;
+  }
+
+  /* Which yellow spring goes with which yellow pad, as a number to paint on
+     both. Yellow is fixed, so the player must be able to SEE the pairing —
+     otherwise it just looks like blue's coin toss. Empty when there is only
+     one pair, because then there is nothing to disambiguate. */
+  function pairLabels(grid) {
+    var no = {}, used = 0, i, c;
+    for (i = 0; i < grid.length; i++) {
+      c = grid.charAt(i);
+      var col = SPRING[c] || (PAD[c] ? c : null);
+      if (col && CHANNEL[col]) { no[i] = CHANNEL[col]; used |= 1 << CHANNEL[col]; }
+    }
+    // one channel needs no number — there is nothing it could be confused with
+    var n = 0;
+    for (i = 1; i <= 4; i++) if (used & (1 << i)) n++;
+    return n > 1 ? no : {};
+  }
+
+  function packRot(list) {
+    var r = 0;
+    for (var i = 0; i < list.length && i < 16; i++) r |= (list[i] & 3) << (i * 2);
+    return r;
+  }
+  function initial(L) {
+    var worn = [];
+    for (var i = 0; i < L.wearList.length; i++) worn.push(0);
+    return {
+      worn: worn,   // how used-up each wearable tile is
+      press: 0,     // how many times any button has been hit
+      ck: [0, 0, 0],// coloured keys in hand
+      force: 0,     // 0, or heading+1 your next move is locked into
+      ord: 0,       // highest numbered core taken so far
+      mv: L.timed ? 0 : null,   // move count, tracked only where it matters
+      p: L.start,
+      crates: L.crates0.slice(),
+      broken: [],   // crack indices that have collapsed into voids
+      filled: [],   // void indices plugged by a crate
+      cores: 0,     // bitmask over L.cores
+      gates: 0,     // 0 = rest state, 1 = toggled
+      rot: packRot(L.rot0),   // two bits of facing per rotor, in reading order
+      keysGot: 0,   // bitmask over L.keys
+      keys: 0,      // how many you are still carrying
+      opened: 0,    // bitmask over L.locks
+      won: false
+    };
+  }
+
+  function key(st) {
+    return st.p + '|' + st.crates.join(',') + '|' + st.broken.join(',') +
+           '|' + st.filled.join(',') + '|' + st.cores + '|' + st.gates + '|' + st.rot +
+           '|' + st.keysGot + '.' + st.keys + '.' + st.opened +
+           '|' + st.worn.join('') + '.' + st.press + '.' + st.ck.join('') +
+           '.' + st.force + '.' + st.ord + (st.mv === null ? '' : '.' + st.mv) +
+           (st.await ? '|@' + st.await.kind + st.await.pads.join('.') : '');
+  }
+
+  function allCores(L) { return (1 << L.cores.length) - 1; }
+
+  /* Attempt a slide. Returns a NEW state, or null if the move is illegal
+     (no displacement, or a redirector loop that never settles).
+     A slide that ends on a spring with more than one candidate pad returns a
+     state carrying `await` — the launch is decided by resolve() below.
+     `trace`, if given, is filled with per-step ops for the renderer. It is
+     write-only — nothing here reads it, so tracing cannot change the result. */
+  function move(L, st, dir, trace) {
+    var w = L.w, h = L.h, T = L.terrain;
+    var p = st.p, d = dir;
+    var crates = st.crates.slice();
+    var broken = st.broken.slice();
+    var filled = st.filled.slice();
+    var cores = st.cores, gates = st.gates, rot = st.rot;
+    var keysGot = st.keysGot, held = st.keys, opened = st.opened;
+    var worn = st.worn.slice(), press = st.press, ck = st.ck.slice();
+    var ord = st.ord, mv = st.mv;
+    var moved = 0, won = false, tp = false, pending = null, forceNext = 0;
+
+    // a gravity plate locks your next heading
+    if (st.force && dir !== st.force - 1) return null;
+
+    function wornOf(i) {
+      var wi = L.wearIndex[i];
+      return wi === undefined ? 0 : worn[wi];
+    }
+    /* The EFFECTIVE glyph: a worn-out tile has already become whatever its
+       spec says it turns into, so every check below can just read this. */
+    function TE(i) {
+      var t = T[i], sp = EXTBY[t];
+      if (sp && sp.wear && wornOf(i) >= sp.wear.max)
+        return sp.wear.then === 'void' ? '0' : sp.wear.then === 'wall' ? '#' : '.';
+      return t;
+    }
+    function wearAt(i, when) {
+      var sp = EXTBY[T[i]];
+      if (!sp || !sp.wear || sp.wear.on !== when) return false;
+      var wi = L.wearIndex[i];
+      if (wi === undefined || worn[wi] >= sp.wear.max) return false;
+      worn[wi]++;
+      return true;
+    }
+    function ctx(i, dd) {
+      return { d: dd, worn: wornOf(i), press: press, moves: mv || 0,
+               keys: held, ck: ck, ord: ord };
+    }
+    function isVoid(i) {
+      if (filled.indexOf(i) >= 0) return false;
+      return TE(i) === '0' || broken.indexOf(i) >= 0;
+    }
+    function isSolid(i, dd) {
+      var t = TE(i);
+      if (t === '#') return true;
+      if (t === 'G') return gates === 0;   // closed at rest
+      if (t === 'g') return gates === 1;   // open at rest
+      if (t === '=') return !(opened & (1 << L.lockIndex[i]));
+      var sp = EXTBY[t];
+      if (sp) {
+        if (sp.lockColour !== undefined || sp.cost)
+          return !(opened & (1 << L.lockIndex[i]));
+        if (sp.solid) return !!sp.solid(ctx(i, dd));
+      }
+      return false;
+    }
+    function blocks(i, dd) { return isSolid(i, dd) || isVoid(i); }
+    // a crate cannot bounce, ride a rotor, or spend a key for you
+    function stopsCrate(i, dd) {
+      if (isSolid(i, dd)) return true;
+      var t = TE(i), sp = EXTBY[t];
+      return t === 'o' || t === '+' || !!(sp && (sp.bounce || sp.rotor || sp.redirect));
+    }
+    function facing(r) { return (rot >> (r * 2)) & 3; }
+    function turn(r) {
+      var f = (facing(r) + 1) & 3;
+      rot = (rot & ~(3 << (r * 2))) | (f << (r * 2));
+    }
+
+    var guard = w * h * 8;
+    while (guard-- > 0) {
+      var x = p % w, y = (p / w) | 0;
+      var nx = x + DX[d], ny = y + DY[d];
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) break;
+      var n = ny * w + nx;
+      // a bumper is never entered — it throws you straight back the way you came
+      var nsp = EXTBY[TE(n)];
+      if (TE(n) === 'o' || (nsp && nsp.bounce)) {
+        if (nsp && nsp.wear && nsp.wear.on === 'block' && !wearAt(n, 'block')) {
+          // spent: it is ordinary floor now, fall through and walk onto it
+        } else {
+          if (trace) trace.push({ t: 'bump', at: n, from: p });
+          d = nsp && nsp.bounce ? nsp.bounce[d] : (d + 2) & 3;
+          continue;
+        }
+      }
+      // a lock costs keys, and once open it stays open
+      var unlocked = -1;
+      var lockSpec = nsp && (nsp.lockColour !== undefined || nsp.cost) ? nsp : null;
+      if ((TE(n) === '=' || lockSpec) && !(opened & (1 << L.lockIndex[n]))) {
+        if (lockSpec && lockSpec.lockColour !== undefined) {
+          if (ck[lockSpec.lockColour] <= 0) break;
+          ck[lockSpec.lockColour]--;
+        } else {
+          var cost = lockSpec ? (lockSpec.cost || 1) : 1;
+          if (held < cost) break;
+          held -= cost;
+        }
+        opened |= (1 << L.lockIndex[n]); unlocked = n;
+      }
+      // a crumbling wall counts the times it turns you away
+      if (isSolid(n, d)) {
+        wearAt(n, 'block');
+        break;
+      }
+
+      var op = trace ? { t: 'm', from: p, to: n } : null;
+      if (op && unlocked >= 0) op.unlock = unlocked;
+
+      var ci = crates.indexOf(n);
+      if (ci >= 0) {
+        // lockstep push: the crate advances one cell, then we take its place
+        var cx = nx + DX[d], cy = ny + DY[d];
+        if (cx < 0 || cy < 0 || cx >= w || cy >= h) break;
+        var cn = cy * w + cx;
+        if (stopsCrate(cn, d) || crates.indexOf(cn) >= 0) break;
+        if (op) { op.cf = n; op.ct = cn; }
+        if (isVoid(cn)) {
+          crates.splice(ci, 1); filled.push(cn); filled.sort(num);
+          if (op) op.fill = cn;
+        } else { crates[ci] = cn; crates.sort(num); }
+      } else if (isVoid(n)) break;   // stop at the lip of a hole
+
+      // --- commit the step ---
+      if (T[p] === '~' && filled.indexOf(p) < 0 && broken.indexOf(p) < 0) {
+        broken.push(p); broken.sort(num);       // the crack gives way behind us
+        if (op) op.brk = p;
+      }
+      if (wearAt(p, 'leave') && op) op.wear = p;  // wearing plate, one crossing older
+      p = n; moved++;
+
+      var ct = L.cores.indexOf(p);
+      if (ct >= 0 && !(cores & (1 << ct))) { cores |= (1 << ct); if (op) op.core = p; }
+      var kt = L.keys.indexOf(p);
+      if (kt >= 0 && !(keysGot & (1 << kt))) {
+        keysGot |= (1 << kt);
+        var ksp = EXTBY[T[p]];
+        if (ksp && ksp.keyColour !== undefined) ck[ksp.keyColour]++;
+        else held += (ksp && ksp.keyWorth) ? ksp.keyWorth : 1;
+        if (op) op.gotkey = p;
+      }
+      for (var oc = 0; oc < L.ordCores.length; oc++)      // numbered cores, in order
+        if (L.ordCores[oc].at === p && L.ordCores[oc].n === ord + 1) {
+          ord++; if (op) op.core = p;
+        }
+
+      var t = TE(p), esp = EXTBY[t];
+      if (t === 'E' && cores === allCores(L) && ord >= L.maxOrder) {
+        won = true;
+        if (op) { op.win = 1; op.crates = crates.slice(); trace.push(op); }
+        break;
+      }
+      if (t === '!') { gates ^= 1; if (L.counted) press++; if (op) op.btn = p; }
+      if (op) { op.crates = crates.slice(); trace.push(op); }
+      if (t === 't' && !tp && L.partner[p] !== undefined) {
+        if (trace) trace.push({ t: 'tp', from: p, to: L.partner[p] });
+        p = L.partner[p]; tp = true; continue;
+      }
+      if (esp && esp.relay !== undefined && !tp && L.extPartner[p] !== undefined) {
+        if (trace) trace.push({ t: 'tp', from: p, to: L.extPartner[p] });
+        p = L.extPartner[p]; tp = true;
+        if (esp.relayDir !== undefined) d = esp.relayDir;   // an aimed relay
+        continue;
+      }
+      tp = false;
+      if (esp) {
+        // --- one generic path for every tile added after the originals ---
+        if (esp.extSpring !== undefined) {                 // fixed channels 5-8
+          var chList = L.extSpring[esp.extSpring] || [], chPads = L.extPad[esp.extSpring] || [];
+          var at = chList.indexOf(p), dest = -1;
+          if (chPads.length && at >= 0) {
+            var cand = chPads[at % chPads.length];
+            if (crates.indexOf(cand) < 0) dest = cand;
+          }
+          wearAt(p, 'enter');
+          if (dest >= 0) {
+            if (trace) trace.push({ t: 'sp', from: p, to: dest, kind: 'fixed' });
+            p = dest;
+          }
+          break;                                           // a spring always ends the slide
+        }
+        if (esp.redirect) d = esp.redirect[d];
+        if (esp.rotor) {
+          var rr2 = L.rotorIndex[p];
+          d = facing(rr2);
+          rot = (rot & ~(3 << (rr2 * 2))) | (((facing(rr2) + (esp.step || 1)) & 3) << (rr2 * 2));
+          if (op) op.rot = rr2;
+        }
+        var halts = esp.stop && (typeof esp.stop === 'function' ? esp.stop(ctx(p, d)) : true);
+        if (wearAt(p, 'enter') && op) op.wear = p;
+        if (esp.force !== undefined) forceNext = esp.force + 1;
+        if (halts) break;
+        if (esp.redirect || esp.rotor) continue;
+      }
+      if (SPRING[t] !== undefined) {
+        // a spring always ends the slide — you are thrown, and you land stopped
+        var col = SPRING[t], open = [];
+        if (KIND[col] === 'fixed') {
+          var f = L.fixed[p];
+          if (f !== undefined && crates.indexOf(f) < 0) open = [f];
+        } else {
+          for (var q = 0; q < L.pads[col].length; q++)
+            if (crates.indexOf(L.pads[col][q]) < 0) open.push(L.pads[col][q]);
+        }
+        if (open.length > 1) pending = { kind: KIND[col], from: p, pads: open };
+        else if (open.length === 1) {
+          if (trace) trace.push({ t: 'sp', from: p, to: open[0], kind: KIND[col] });
+          p = open[0];
+        }
+        break;                       // no pad free? the spring simply fizzles
+      }
+      if (t === 'm') { if (op) op.mud = 1; break; }   // mud kills the momentum
+      if (t === '+') {                               // rotor: steer, then advance it
+        var ri = L.rotorIndex[p];
+        d = facing(ri); turn(ri);
+        if (op) op.rot = ri;
+        continue;
+      }
+      if (MIRROR[t] !== undefined) { d = MIRROR[t][d]; continue; }
+      if (ARROW[t] !== undefined) { d = ARROW[t]; continue; }
+    }
+    if (guard <= 0) return null;
+
+    /* Conveyors and slick plates keep working after the slide settles: they
+       nudge you on until you come to rest somewhere that will hold you. */
+    var carryGuard = 12;
+    while (!won && !pending && carryGuard-- > 0) {
+      var csp = EXTBY[TE(p)];
+      if (!csp || csp.carry === undefined) break;
+      var cd = csp.carry === -1 ? d : csp.carry;
+      var steps = csp.carryN || 1, wentAny = false;
+      for (var s2 = 0; s2 < steps; s2++) {
+        var qx = (p % w) + DX[cd], qy = ((p / w) | 0) + DY[cd];
+        if (qx < 0 || qy < 0 || qx >= w || qy >= h) break;
+        var qn = qy * w + qx;
+        if (isSolid(qn, cd) || isVoid(qn) || crates.indexOf(qn) >= 0) break;
+        if (trace) trace.push({ t: 'm', from: p, to: qn, crates: crates.slice() });
+        if (wearAt(p, 'leave')) { /* carried off a wearing plate */ }
+        p = qn; wentAny = true; moved++;
+        var ct3 = L.cores.indexOf(p);
+        if (ct3 >= 0 && !(cores & (1 << ct3))) cores |= (1 << ct3);
+        if (TE(p) === 'E' && cores === allCores(L) && ord >= L.maxOrder) { won = true; break; }
+      }
+      if (!wentAny) break;
+      d = cd;
+    }
+
+    if (moved === 0) return null;
+    // The blink phase is periodic, so the counter has to wrap — left to climb
+    // it would make the state space infinite and no deck with a blinker could
+    // ever be solved. 6 is the common period of the ×2 and ×3 blinkers.
+    if (mv !== null) mv = (mv + 1) % 6;
+    var out = { p: p, crates: crates, broken: broken, filled: filled, cores: cores,
+                gates: gates, rot: rot, keysGot: keysGot, keys: held,
+                opened: opened, worn: worn, press: press, ck: ck,
+                force: forceNext, ord: ord, mv: mv, won: won };
+    if (pending) out.await = pending;
+    return out;
+  }
+
+  /* Finish a launch that move() left undecided: pick which pad you come down on. */
+  function resolve(L, st, k, trace) {
+    if (!st.await) return st;
+    var dest = st.await.pads[k];
+    if (trace) trace.push({ t: 'sp', from: st.await.from, to: dest, kind: st.await.kind });
+    return { p: dest, crates: st.crates.slice(), broken: st.broken.slice(),
+             filled: st.filled.slice(), cores: st.cores, gates: st.gates,
+             rot: st.rot, keysGot: st.keysGot, keys: st.keys, opened: st.opened,
+             worn: st.worn.slice(), press: st.press, ck: st.ck.slice(),
+             force: st.force, ord: st.ord, mv: st.mv, won: false };
+  }
+
+  /* Every action available from `st`, with its outcomes already resolved.
+     `kind` is 'det' (one outcome), 'red' (you choose which outcome) or
+     'blue' (the deck chooses — assume the worst). */
+  function actions(L, st) {
+    var out = [];
+    for (var d = 0; d < 4; d++) {
+      var ns = move(L, st, d);
+      if (!ns) continue;
+      if (!ns.await) { out.push({ dir: d, kind: 'det', states: [ns] }); continue; }
+      var branch = [];
+      for (var k = 0; k < ns.await.pads.length; k++) branch.push(resolve(L, ns, k));
+      out.push({ dir: d, kind: ns.await.kind, states: branch, pads: ns.await.pads });
+    }
+    return out;
+  }
+
+  function num(a, b) { return a - b; }
+
+  return { DX: DX, DY: DY, ARROW: ARROW, MIRROR: MIRROR, SPRING: SPRING, PAD: PAD,
+           KIND: KIND, FIXED: FIXED, CHANNEL: CHANNEL, EXT: EXT, EXTBY: EXTBY,
+           parse: parse, initial: initial, move: move, resolve: resolve,
+           actions: actions, key: key, allCores: allCores, pairLabels: pairLabels };
+})();
+
+
+
+/* ===================================================================
+   Level data. Every board below was proved winnable by exhaustive search
+   and `par` is the *optimal* move count, not an estimate. On decks with a
+   blue spring — which lands you somewhere random — par is the worst case:
+   the fewest moves you can guarantee no matter where it drops you, and the
+   deck is winnable from every pad it can pick.
+   =================================================================== */
+var LEVELS = [
+  {"id":1,"w":5,"h":5,"grid":"######@..##...##..E######","par":2,"name":"Cold Start","tierName":"Drift","hint":"Arrow keys, WASD or swipe. You never step — you slide until something stops you."},
+  {"id":2,"w":6,"h":5,"grid":"#######@...#####.##E...#######","par":3,"name":"Overshoot","tierName":"Drift","hint":"Walls are your only brakes. Ride one, then turn."},
+  {"id":3,"w":6,"h":5,"grid":"#######@..*##.#####E..########","par":3,"name":"First Core","tierName":"Drift","hint":"Collect every core. The exit stays inert until you do — you will slide straight over it."},
+  {"id":4,"w":7,"h":5,"grid":"########@..#.####.####E....########","par":3,"name":"Detour","tierName":"Drift","hint":"A single pillar is a brake in open floor."},
+  {"id":5,"w":6,"h":6,"grid":"#######....##..*@##...####.E.#######","par":4,"name":"Slipway","tierName":"Drift"},
+  {"id":6,"w":6,"h":7,"grid":"#######.*..##@...##.##.##..#.##.#.E#######","par":3,"name":"Bearing","tierName":"Drift"},
+  {"id":7,"w":6,"h":5,"grid":"#######E...###@.*##...########","par":3,"name":"Long Hall","tierName":"Drift"},
+  {"id":8,"w":6,"h":7,"grid":"#######@...##..#.##...###.E..###.*.#######","par":5,"name":"Pivot","tierName":"Drift"},
+  {"id":9,"w":7,"h":6,"grid":"########...E.##@#...##.....##.*#..########","par":5,"name":"Shunt","tierName":"Drift"},
+  {"id":10,"w":7,"h":7,"grid":"########..#..##.*...##E....##.....##.#.@#########","par":4,"name":"Threshold","tierName":"Drift"},
+  {"id":11,"w":7,"h":5,"grid":"########@~~~.######.##E..*.########","par":3,"name":"Hairline","tierName":"Fracture","hint":"Cracked plating gives way the moment you leave it."},
+  {"id":12,"w":8,"h":7,"grid":"#########.~..#.###..~~.##..E~.*##@.~#..##.#.##~#########","par":7,"name":"Give Way","tierName":"Fracture"},
+  {"id":13,"w":8,"h":6,"grid":"#########.##..###~##.*~##~~*.#@##E#.~..#########","par":7,"name":"Crumble","tierName":"Fracture"},
+  {"id":14,"w":7,"h":8,"grid":"########.#.#.##~..~.###E@.~##~.#.~###.~..##..*..########","par":7,"name":"Sublevel","tierName":"Fracture"},
+  {"id":15,"w":6,"h":8,"grid":"#######....##.@~~###~*.##..#.##E~#~##...########","par":7,"name":"Thin Ice","tierName":"Fracture"},
+  {"id":16,"w":7,"h":8,"grid":"########.~~..###~#~@##.#..E##.#..###.~...##*..*~########","par":7,"name":"Stress Test","tierName":"Fracture"},
+  {"id":17,"w":8,"h":7,"grid":"###########..#@##~.~~~.##......##~.E#~.##~*....#########","par":8,"name":"Fault Line","tierName":"Fracture"},
+  {"id":18,"w":8,"h":8,"grid":"#########*.~..~##~.#..###.#.~@.##*..E..##.~#...##~..~..#########","par":6,"name":"Spall","tierName":"Fracture"},
+  {"id":19,"w":6,"h":6,"grid":"#######@.~~##.*.###...E##~...#######","par":7,"name":"Shatterdeck","tierName":"Fracture"},
+  {"id":20,"w":7,"h":7,"grid":"########...E.##~.~~.##..#.~##.#~*.##.~..@########","par":9,"name":"Last Plank","tierName":"Fracture"},
+  {"id":21,"w":7,"h":8,"grid":"#########*~~.##~...###.#.~~####~#~##.#*#.##.@.#E########","par":8,"name":"Subsidence","tierName":"Fracture"},
+  {"id":22,"w":8,"h":6,"grid":"#########*~~~..##~..#.###~~@#.*##...E~##########","par":10,"name":"Collapse","tierName":"Fracture"},
+  {"id":23,"w":7,"h":5,"grid":"########@..m.#####.###E....########","par":3,"name":"Tar Pit","tierName":"Sludge","hint":"Sludge kills your momentum. Sometimes it is the only way to stop where you need to."},
+  {"id":24,"w":7,"h":8,"grid":"########.#*..##...m.##.#.@.###E...##.....##*m.m.########","par":7,"name":"Drag","tierName":"Sludge"},
+  {"id":25,"w":6,"h":8,"grid":"########m..##m#.*##.##.##.E..##m.m###*.@m#######","par":8,"name":"Bogged","tierName":"Sludge"},
+  {"id":26,"w":7,"h":7,"grid":"##########.*.##Em#..##.m...##.m.m###..*@m########","par":6,"name":"Residue","tierName":"Sludge"},
+  {"id":27,"w":6,"h":8,"grid":"#######..#.###*#.###.E.##.m..##m..@##m#..#######","par":9,"name":"Slack Water","tierName":"Sludge"},
+  {"id":28,"w":6,"h":7,"grid":"#######.m.m##.mm.###.*####@#m##*..E#######","par":7,"name":"Anchor","tierName":"Sludge"},
+  {"id":29,"w":7,"h":6,"grid":"########.*.mE##..#@###m#...##*.m.m########","par":7,"name":"Silt","tierName":"Sludge"},
+  {"id":30,"w":8,"h":7,"grid":"#########*..m.###..mm.m###.....##.E.@######....#########","par":8,"name":"Viscous","tierName":"Sludge"},
+  {"id":31,"w":6,"h":6,"grid":"#######.m.*##*@#m##.m..###.Em#######","par":7,"name":"Settling","tierName":"Sludge"},
+  {"id":32,"w":6,"h":6,"grid":"#######*@..##E#m.##m.#.##.m*########","par":9,"name":"Molasses","tierName":"Sludge"},
+  {"id":33,"w":6,"h":8,"grid":"########Em.##.@m###...###m#..##.*mm##.#..#######","par":7,"name":"Deadfall","tierName":"Sludge"},
+  {"id":34,"w":8,"h":7,"grid":"#########E.@.*.##m....###..mm..##...m.*##..m#.##########","par":9,"name":"Quagmire","tierName":"Sludge"},
+  {"id":35,"w":7,"h":5,"grid":"########@...v####.#.##*...E########","par":3,"name":"Deflection","tierName":"Vector","hint":"Vanes turn your slide without slowing it down."},
+  {"id":36,"w":8,"h":8,"grid":"#########..##..##.....###<.E.@.##...#..###*#...###..<..#########","par":6,"name":"Chicane","tierName":"Vector"},
+  {"id":37,"w":8,"h":7,"grid":"#########.##E..###*..>.###.....##v..@.<##...#>.#########","par":7,"name":"Vane","tierName":"Vector"},
+  {"id":38,"w":7,"h":9,"grid":"#########>.*.##.....##..#####.....##...@.##v....##E....########","par":8,"name":"Slipstream","tierName":"Vector"},
+  {"id":39,"w":9,"h":9,"grid":"##########.E.....##.....*.###....#.###<....###..#...###...v...##.*.@...##########","par":10,"name":"Ricochet","tierName":"Vector"},
+  {"id":40,"w":8,"h":8,"grid":"#########......##.E.*^.##....#.##.@#...##....^.###.....#########","par":8,"name":"Switchback","tierName":"Vector"},
+  {"id":41,"w":8,"h":9,"grid":"#########<v..#>##...#..##..@.#.##Ev..#*##....#.##...^.*##.#....#########","par":9,"name":"Cascade","tierName":"Vector"},
+  {"id":42,"w":9,"h":8,"grid":"###########....####..#..^.##.#..*.*##...E^.@###.#....##..#.v..##########","par":9,"name":"Guide Rail","tierName":"Vector"},
+  {"id":43,"w":8,"h":9,"grid":"#########E..#..##.....###..##.@###...#.##<....>##...#..###.>...#########","par":8,"name":"Whiplash","tierName":"Vector"},
+  {"id":44,"w":9,"h":8,"grid":"###########..>...##...E...##.^#^.*>##....#v###@......##.#..*..##########","par":8,"name":"Carom","tierName":"Vector"},
+  {"id":45,"w":9,"h":8,"grid":"###########......##..#>@####E....#.##..#.#..##..^....###..*v..##########","par":8,"name":"Spiral Arm","tierName":"Vector"},
+  {"id":46,"w":7,"h":7,"grid":"#########E@.^##..#..###...###<.*..##...v.########","par":9,"name":"Redirect","tierName":"Vector"},
+  {"id":47,"w":7,"h":7,"grid":"########.v..@###.E.###.#.<>##.v...##.*.>.########","par":9,"name":"Turbine","tierName":"Vector"},
+  {"id":48,"w":9,"h":9,"grid":"##########^#...#.##.#.....####..*..##.v..#E.##.#v.<.###......@##......###########","par":10,"name":"Windlass","tierName":"Vector"},
+  {"id":49,"w":7,"h":5,"grid":"########@x.0E######.##*....########","par":5,"name":"Dead Weight","tierName":"Ballast","hint":"Shove a crate into a pit to fill it in. The crate is spent — the floor is yours."},
+  {"id":50,"w":9,"h":8,"grid":"##########.##0#..###..@..x##....0..##00..*E.##....*0.###.#....##########","par":7,"name":"Plug","tierName":"Ballast"},
+  {"id":51,"w":8,"h":9,"grid":"#########..0..E##..xx#.##....####.....0##...@..##...0.###.00...#########","par":7,"name":"Counterload","tierName":"Ballast"},
+  {"id":52,"w":8,"h":8,"grid":"#########Ex#...##......##......##...#@.##...##*##.x.0.0#########","par":7,"name":"Sinkhole","tierName":"Ballast"},
+  {"id":53,"w":8,"h":9,"grid":"#########...00###......###E@.####x.*...##...#0*##.#....##....0.#########","par":7,"name":"Freight","tierName":"Ballast"},
+  {"id":54,"w":7,"h":8,"grid":"########@E...###....##..#..##.#.0.##0x.*.##..0..########","par":7,"name":"Shove","tierName":"Ballast"},
+  {"id":55,"w":8,"h":8,"grid":"#########......##..*.0.##0E..#.###....###.#.#..##.0x..@#########","par":11,"name":"Backfill","tierName":"Ballast"},
+  {"id":56,"w":9,"h":7,"grid":"##########.E..#..##00...#.###x.0...##@......##.0#.#..##########","par":9,"name":"Cargo Hold","tierName":"Ballast"},
+  {"id":57,"w":9,"h":7,"grid":"##########..@0E.0##0#.x...##..0....##.#...#.##.....**##########","par":8,"name":"Ballast Tank","tierName":"Ballast"},
+  {"id":58,"w":8,"h":8,"grid":"#########.0...@##.#E.0.##......###....x##*.#..###000...#########","par":11,"name":"Displacement","tierName":"Ballast"},
+  {"id":59,"w":9,"h":9,"grid":"###########.*..#.##...#.0###@#...*0##.......##...#E..##.##..x.##..#...0##########","par":9,"name":"Keel","tierName":"Ballast"},
+  {"id":60,"w":9,"h":8,"grid":"##########...0...##......0###x*....##.....@###.x0...0##.E#..#.##########","par":10,"name":"Overboard","tierName":"Ballast"},
+  {"id":61,"w":8,"h":7,"grid":"#########..@0*.##......##.E.*0.##.#00..##...x.##########","par":12,"name":"Stowage","tierName":"Ballast"},
+  {"id":62,"w":8,"h":8,"grid":"#########.0...###.##...##..E..*##.*..0@##..#...##..xx..#########","par":10,"name":"Trim","tierName":"Ballast"},
+  {"id":63,"w":7,"h":5,"grid":"########@..t.######*##.t..E########","par":3,"name":"Uplink","tierName":"Relay","hint":"A relay pad throws you across the deck. You keep your heading and your speed."},
+  {"id":64,"w":7,"h":7,"grid":"########.##t*##...E.##..t.*##.#..@##...#.########","par":6,"name":"Jump Cut","tierName":"Relay"},
+  {"id":65,"w":7,"h":7,"grid":"########*.tE###.#...##..*#.##@.#..##..t..########","par":7,"name":"Shunt Line","tierName":"Relay"},
+  {"id":66,"w":9,"h":8,"grid":"##########....##.##.....#.##t@....###..*..t.##..#*...###.#..E###########","par":7,"name":"Wormhole","tierName":"Relay"},
+  {"id":67,"w":7,"h":7,"grid":"########.#.@t###E..*##...t.##.....##..#.*########","par":8,"name":"Crossfeed","tierName":"Relay"},
+  {"id":68,"w":9,"h":7,"grid":"##########....#..##E......##.@.....###...#.t##*..t..###########","par":8,"name":"Blink","tierName":"Relay"},
+  {"id":69,"w":7,"h":7,"grid":"########*#.*.##.@.E.##.t.####.....##....t########","par":8,"name":"Junction","tierName":"Relay"},
+  {"id":70,"w":7,"h":8,"grid":"#########..t*##.*...###.@..##E...###.....##.t...########","par":9,"name":"Loopback","tierName":"Relay"},
+  {"id":71,"w":9,"h":9,"grid":"##########.....#.####.#t*.##.....t.##......####.E@...##.......###......##########","par":8,"name":"Transit","tierName":"Relay"},
+  {"id":72,"w":9,"h":7,"grid":"##########.#*.#.###...#E..##tt..#..##....#.@##...*...##########","par":9,"name":"Rendezvous","tierName":"Relay"},
+  {"id":73,"w":8,"h":9,"grid":"#########..@t..##.*...###.....####.....##...E..##......##t#.#..#########","par":9,"name":"Echo Chamber","tierName":"Relay"},
+  {"id":74,"w":8,"h":8,"grid":"#########.#.#*.##.t@##.##.....t##.....####...E.##......#########","par":11,"name":"Slipgate","tierName":"Relay"},
+  {"id":75,"w":9,"h":7,"grid":"##########.....t###...@...##..E...###..#..#t###*..#*.##########","par":10,"name":"Handoff","tierName":"Relay"},
+  {"id":76,"w":9,"h":7,"grid":"##########.#..E#@##..#....##......###...##.t##.*.*t..##########","par":11,"name":"Terminus","tierName":"Relay"},
+  {"id":77,"w":8,"h":5,"grid":"#########@..!#.#####.####EG....#########","par":3,"name":"Cold Bus","tierName":"Circuit","hint":"A button flips every gate on the deck at once — open ones shut."},
+  {"id":78,"w":9,"h":8,"grid":"##########.G.G...##.!..######.!..E.##.*@G...###....#.##.*....###########","par":11,"name":"Breaker","tierName":"Circuit"},
+  {"id":79,"w":8,"h":9,"grid":"#########.G..####G..@.###...E..##......####..!.##**g...##...!#.#########","par":7,"name":"Interlock","tierName":"Circuit"},
+  {"id":80,"w":9,"h":8,"grid":"##########..#.#..##@...G*####....G.##!..#...##...E...##..#...###########","par":11,"name":"Latch","tierName":"Circuit"},
+  {"id":81,"w":8,"h":8,"grid":"#########...*#E##....*@##.#G!..##..g...##.....####.g..G#########","par":9,"name":"Bypass","tierName":"Circuit"},
+  {"id":82,"w":9,"h":8,"grid":"##########.@.....##g......##!.#...!##.#...#.##..*G..###E.G..g.##########","par":10,"name":"Sequencer","tierName":"Circuit"},
+  {"id":83,"w":8,"h":8,"grid":"#########....#.##!.#...##..*..g##....*E##.g.G..##@#.#..#########","par":9,"name":"Toggle Room","tierName":"Circuit"},
+  {"id":84,"w":9,"h":8,"grid":"##########g#.*#..##...g...##.#..#..###G#..@.###.!..E.##..!..G.##########","par":9,"name":"Relay Logic","tierName":"Circuit"},
+  {"id":85,"w":8,"h":9,"grid":"#########..G.#.##..E...###..#..##.*....##....g.##...@####!#....#########","par":11,"name":"Dead Man","tierName":"Circuit"},
+  {"id":86,"w":9,"h":8,"grid":"##########@E.##..##g....!.###*..#..##!......###.*.G..##..g....##########","par":11,"name":"Lockout","tierName":"Circuit"},
+  {"id":87,"w":8,"h":9,"grid":"#########....#.##!.....##...#..##G.....##@...E.###.....##..G.*##########","par":12,"name":"Feedback","tierName":"Circuit"},
+  {"id":88,"w":9,"h":8,"grid":"##########..##.#*##...@...##....!..##g....####.....gg##.E#...*##########","par":11,"name":"Substation","tierName":"Circuit"},
+  {"id":89,"w":9,"h":9,"grid":"##########..#*0m.##...G.t.##<.E.0..##.#.0.*@##.^gx...##~.g##.t##x.!~.m.##########","par":9,"name":"Descent","tierName":"Deep Deck"},
+  {"id":90,"w":8,"h":9,"grid":"#########.^..@###.0m~#x##.~*.0t##E.^..0##m.#...##!..xgG##.m...t#########","par":10,"name":"Silent Running","tierName":"Deep Deck"},
+  {"id":91,"w":9,"h":8,"grid":"##########t@Gx#E.###!.*0.*##..~..*.##~.0m.####m.^~>t.##vx#.#.###########","par":12,"name":"Black Box","tierName":"Deep Deck"},
+  {"id":92,"w":10,"h":8,"grid":"###########.#~.g..@##.t.#0..E##>.m...#.##.#x.>#~####..#..*.##!m..G.*t###########","par":12,"name":"Cross Section","tierName":"Deep Deck"},
+  {"id":93,"w":8,"h":10,"grid":"#########..m0g.###.^..###.m.<.t##..0.*t##x!.~..###<.*E.##..m..@##..~.#.#########","par":11,"name":"Deep Deck","tierName":"Deep Deck"},
+  {"id":94,"w":8,"h":8,"grid":"###########..#E##x##.t*##t~....##!G.~0###0#*@..##*mG>m.#########","par":16,"name":"Salvage","tierName":"Deep Deck"},
+  {"id":95,"w":10,"h":8,"grid":"###########.tx#..~###~..~.*E0##m.#gt..^###.~m..@.##>..#.gx0##...!<##*###########","par":17,"name":"The Reactor","tierName":"Deep Deck"},
+  {"id":96,"w":9,"h":10,"grid":"##########xg.~...##..m.^.###...@G#.##.t*.t0.##.##....##*..!>####0.E.m~.###0..*..##########","par":12,"name":"Fault Cascade","tierName":"Deep Deck"},
+  {"id":97,"w":8,"h":10,"grid":"#########v@G0..##.t*.~###.0..#E##~..m..##.#xt..##.0..m.##...~*.##..#!G.#########","par":12,"name":"Last Light","tierName":"Deep Deck"},
+  {"id":98,"w":9,"h":8,"grid":"##########.t!~0G.##~.g##G~##.0x@E..###m>m##~##..xm*0<##*#*.t.###########","par":14,"name":"Undertow","tierName":"Deep Deck"},
+  {"id":99,"w":9,"h":8,"grid":"##########~#*#.~.##.xtm.#.##.!.@.t>##.#.m#..##.E.vg#0##...##.G##########","par":14,"name":"Event Horizon","tierName":"Deep Deck"},
+  {"id":100,"w":9,"h":9,"grid":"###########*0~g#~##m..E..~##x......##....v.###..m!..###~.t..#.##*.x@.~t##########","par":14,"name":"Homecoming","tierName":"Deep Deck"},
+﻿  {"id":101,"w":7,"h":5,"grid":"########@..Y.#########y..E.########","par":2,"name":"Liftoff","tierName":"Ascent","hint":"A spring throws you clear across the deck — and you land stopped. A yellow spring always drops you on its own yellow pad."},
+  {"id":102,"w":8,"h":8,"grid":"#########.y.#.###.....@##.#....##......###....Y##.....E#########","par":4,"name":"Trajectory","tierName":"Ascent"},
+  {"id":103,"w":7,"h":8,"grid":"##########...##...y.##.##..##..E.y##.@#Y.##.#.Y*########","par":5,"name":"Apogee","tierName":"Ascent"},
+  {"id":104,"w":7,"h":9,"grid":"########..E.###.....##....###...@.##Y...*##..Y.###yy...########","par":6,"name":"Counterweight","tierName":"Ascent"},
+  {"id":105,"w":9,"h":5,"grid":"##########@...B..###########b..E..b##########","par":2,"name":"Scatter","tierName":"Ascent","hint":"A blue spring is a gamble — it drops you on a random blue pad. Every blue deck can still be cleared whichever one you get."},
+  {"id":106,"w":9,"h":7,"grid":"##########@......##.#....###.*E.b..##....~~b##B...#.b##########","par":4,"name":"Coin Toss","tierName":"Ascent"},
+  {"id":107,"w":8,"h":8,"grid":"#########..E.#.##b...#.##.##~.*##Bb....##..@...##...~.b#########","par":8,"name":"Loose Change","tierName":"Ascent"},
+  {"id":108,"w":9,"h":7,"grid":"###########b~...###*..E..B###.b...@##.#...b.###...#.###########","par":7,"name":"Wildcard","tierName":"Ascent"},
+  {"id":109,"w":9,"h":5,"grid":"##########@...R..###########r.*.E.r##########","par":2,"name":"Called Shot","tierName":"Ascent","hint":"A red spring lets you choose. Pick the red pad you actually want — the deck will ask."},
+  {"id":110,"w":8,"h":10,"grid":"#########..*.#.##..#...##m..E.r###@#...##.^.m.r##r.###~##....R*##......#########","par":8,"name":"Dispatch","tierName":"Ascent"},
+  {"id":111,"w":10,"h":8,"grid":"###########^.#.....##.r#...^.##..R...@.##.E.r.#..##~#..*m..##*....rm############","par":7,"name":"Free Fall","tierName":"Ascent"},
+  {"id":112,"w":9,"h":8,"grid":"##########......###.R...@.##*.....E##m#.##..###..r.~.##.*..r..##########","par":9,"name":"Terminal Velocity","tierName":"Ascent"},
+﻿  {"id":113,"w":7,"h":5,"grid":"########@~~.o#####.######E#########","par":2,"name":"Rebound","tierName":"Rebound","hint":"A bumper hands your momentum straight back. Ride out over the cracked plating, bounce, and the collapsed floor stops you exactly where you need to be."},
+  {"id":114,"w":7,"h":8,"grid":"########..E..##....###.....###..~.##.o...##~o..@########","par":4,"name":"Carom Deck","tierName":"Rebound"},
+  {"id":115,"w":7,"h":7,"grid":"########..#.###@....##.#*o.##o~...##oE.~~########","par":6,"name":"Kickback","tierName":"Rebound"},
+  {"id":116,"w":8,"h":8,"grid":"##########..#~@###.E...##o.#..*##.##...##oo....##.o*...#########","par":7,"name":"Ricochet Bay","tierName":"Rebound"},
+  {"id":117,"w":7,"h":7,"grid":"########E.~#o###.*..##.@*..##..o#o##..#..########","par":6,"name":"Backstop","tierName":"Rebound"},
+  {"id":118,"w":7,"h":8,"grid":"########~...o##..o*o##*.o..##..#.~##...E###.#..@########","par":9,"name":"Elastic","tierName":"Rebound"},
+  {"id":119,"w":7,"h":7,"grid":"########..~####....###.@.E.##ooo~~##...*.########","par":8,"name":"Deadcat","tierName":"Rebound"},
+  {"id":120,"w":7,"h":9,"grid":"########...~.##....~####...##.....##*.#E.##....o##@o...########","par":7,"name":"Return Fire","tierName":"Rebound"},
+  {"id":121,"w":9,"h":8,"grid":"##########.....####.......##....~.E##@.....o##.o.....##o~##...##########","par":10,"name":"Overrun","tierName":"Rebound"},
+  {"id":122,"w":7,"h":8,"grid":"########~o...####.#~##.....##.@.o###..*.E##~o.*.########","par":8,"name":"Snapback","tierName":"Rebound"},
+  {"id":123,"w":8,"h":8,"grid":"#########.o~E@.##......##.o..o###...~..##.....#####.**.#########","par":9,"name":"Counterpunch","tierName":"Rebound"},
+  {"id":124,"w":8,"h":8,"grid":"#########.o.#..##.~.#..###*o*..##.@.#.###o.~...##....E~#########","par":11,"name":"Last Bounce","tierName":"Rebound"},
+  {"id":125,"w":7,"h":5,"grid":"########..*..##.....##@.+.E########","par":2,"name":"Clockwork","tierName":"Clockwork","hint":"A rotor steers you like a vane — then turns a quarter clockwise. Use it twice and it sends you somewhere new the second time."},
+  {"id":126,"w":8,"h":8,"grid":"#########....#@##.+....##.m....##...+.+##.#E...##.#..#.#########","par":7,"name":"Quarter Turn","tierName":"Clockwork"},
+  {"id":127,"w":7,"h":7,"grid":"########.E..*###...+###.+@.##.#*#+##.....########","par":6,"name":"Escapement","tierName":"Clockwork"},
+  {"id":128,"w":9,"h":9,"grid":"##########..m.#..##..#....##.+.+...##...E#..##.....@.##..###..###.....m##########","par":6,"name":"Ratchet","tierName":"Clockwork"},
+  {"id":129,"w":7,"h":8,"grid":"########...@.##.....##...*+##....E##...####*.+.m########","par":8,"name":"Mainspring","tierName":"Clockwork"},
+  {"id":130,"w":7,"h":8,"grid":"########.E...##.+#+.##@....##...#.##.....##.+*#.########","par":8,"name":"Detent","tierName":"Clockwork"},
+  {"id":131,"w":8,"h":7,"grid":"#########.m....##.#.@#*##*+.+..###m..#.##...E.##########","par":8,"name":"Winding","tierName":"Clockwork"},
+  {"id":132,"w":7,"h":9,"grid":"#########*#.@##*.E..##.m...##+m...##.#...##.#...##.....########","par":10,"name":"Gear Train","tierName":"Clockwork"},
+  {"id":133,"w":8,"h":8,"grid":"#########..@...##*.#...###+#..+##..E...###.....###.m...#########","par":8,"name":"Half Past","tierName":"Clockwork"},
+  {"id":134,"w":7,"h":9,"grid":"########m....##+.E#.##.....##....@##...#.###.m####.#+*.########","par":9,"name":"Tourbillon","tierName":"Clockwork"},
+  {"id":135,"w":8,"h":8,"grid":"#########.*...###+.....##m##.++##.#.*..##...#.E##.@...##########","par":10,"name":"Full Circle","tierName":"Clockwork"},
+  {"id":136,"w":9,"h":7,"grid":"##########......###*..E+#.##*......##....++.##.#..@.###########","par":11,"name":"Striking Twelve","tierName":"Clockwork"},
+﻿  {"id":137,"w":7,"h":5,"grid":"########@..\\.####...##*..E.########","par":3,"name":"Refraction","tierName":"Refraction","hint":"A mirror bends you a quarter turn — but which way depends on the heading you arrive with. Unlike a vane, it remembers where you came from."},
+  {"id":138,"w":7,"h":8,"grid":"########.....##.....##..//.##\\.#@/###...*##..E~.########","par":7,"name":"Angle of Incidence","tierName":"Refraction"},
+  {"id":139,"w":7,"h":9,"grid":"########../..##E....##.#./.##*#.#.##.*/./##.....####.@.########","par":4,"name":"Prism","tierName":"Refraction"},
+  {"id":140,"w":8,"h":8,"grid":"#########..@*..##\\#.~..##.#./..##...#E.##.....###*.....#########","par":7,"name":"Bevel","tierName":"Refraction"},
+  {"id":141,"w":9,"h":8,"grid":"##########.E./.~###.\\.....##.......##\\.#..#.##.......##.*..~#@##########","par":8,"name":"Splitter","tierName":"Refraction"},
+  {"id":142,"w":9,"h":9,"grid":"##########..#....##@#..#..##/..#...##..*../.##.#.....##.*E...\\##.......##########","par":6,"name":"Caustic","tierName":"Refraction"},
+  {"id":143,"w":8,"h":9,"grid":"#########...*.~##\\##...##..E...##~..@..##..*...##.##/..##......#########","par":9,"name":"Lens Deck","tierName":"Refraction"},
+  {"id":144,"w":7,"h":7,"grid":"########E*/..##.....##.#...##.....###/@..########","par":6,"name":"Total Internal","tierName":"Refraction"},
+  {"id":145,"w":7,"h":7,"grid":"########.*..###\\E../##.#..*##.~...###@./.########","par":6,"name":"Snell","tierName":"Refraction"},
+  {"id":146,"w":7,"h":9,"grid":"########.E/..##.....##.*.@###...*.##~....##.#...##/#..#########","par":9,"name":"Kaleidoscope","tierName":"Refraction"},
+  {"id":147,"w":9,"h":7,"grid":"##########.......##E.....*###.//.\\.##..@...###.#.*./.##########","par":7,"name":"Facet","tierName":"Refraction"},
+  {"id":148,"w":7,"h":7,"grid":"########.....##.#@.\\##.\\..####.E#.##*/...########","par":9,"name":"Broken Light","tierName":"Refraction"},
+  {"id":149,"w":7,"h":5,"grid":"########@.%..######=######E########","par":2,"name":"Lockdown","tierName":"Lockdown","hint":"Pick up a key and it opens one lock, for good. Count your keys before you spend them."},
+  {"id":150,"w":8,"h":8,"grid":"#########.m%#E.###..m.###....#.##...=.=##.....%##.#.@#.#########","par":7,"name":"Keyring","tierName":"Lockdown"},
+  {"id":151,"w":8,"h":9,"grid":"#########....E%##...##.##*....=##m.%...##.#.=####...#..##.=..@##########","par":6,"name":"Tumbler","tierName":"Lockdown"},
+  {"id":152,"w":8,"h":7,"grid":"#########.@....##....E.##..#...###=....##....%##########","par":6,"name":"Deadbolt","tierName":"Lockdown"},
+  {"id":153,"w":8,"h":8,"grid":"##########=...###......##.....m##.E#.#%##%.....##..@.#.#########","par":7,"name":"Warded","tierName":"Lockdown"},
+  {"id":154,"w":7,"h":7,"grid":"########.E.#%###.#..##..==@##.....##..#..########","par":7,"name":"Skeleton","tierName":"Lockdown"},
+  {"id":155,"w":7,"h":8,"grid":"########...#@##=..%.##....*##..m.###=..mE##..##=########","par":7,"name":"Strongroom","tierName":"Lockdown"},
+  {"id":156,"w":9,"h":7,"grid":"###########.#....##...mm.%##E...=####.@=*...##...#...##########","par":7,"name":"Master Key","tierName":"Lockdown"},
+  {"id":157,"w":8,"h":9,"grid":"##########.E#..##.=..@%##.m....##.%..=.##*..=..##.m.#.###......#########","par":11,"name":"Bolt Hole","tierName":"Lockdown"},
+  {"id":158,"w":8,"h":9,"grid":"#########..m.#@##..%#..##..#..=##...*..###..#.E##.=#=..##.%....#########","par":8,"name":"Locksmith","tierName":"Lockdown"},
+  {"id":159,"w":8,"h":8,"grid":"#########=..@==##..m#..##.%E..###......##...#.###m*....#########","par":9,"name":"Last Door","tierName":"Lockdown"},
+  {"id":160,"w":7,"h":8,"grid":"########.@.#E##..=.%##..*m.##...%.##=.#..##..#.#########","par":9,"name":"Quarantine","tierName":"Lockdown"},
+﻿  {"id":161,"w":9,"h":7,"grid":"###########ă...#Ă##.E*āĂ..##.#...@.##.ă.....##.......##########","par":4,"name":"Contraflow","tierName":"Traffic"},
+  {"id":162,"w":9,"h":8,"grid":"###########.Ă..Ā.##.......##...#...##.#.....##.*E....##ă.@..Ā###########","par":4,"name":"One Way Out","tierName":"Traffic"},
+  {"id":163,"w":8,"h":8,"grid":"#########..ă...###ă..E###.ă##..##.#.#..##Ă@.ă..##......#########","par":5,"name":"Ratchet Lane","tierName":"Traffic"},
+  {"id":164,"w":9,"h":7,"grid":"##########...ă.#.##...#@āE##..#....##....#.ā###.Ā..*.##########","par":8,"name":"Turnstile","tierName":"Traffic"},
+  {"id":165,"w":9,"h":7,"grid":"##########...āĂ.*##..E....##..#..#.##..Ā..ā.##@....#.##########","par":7,"name":"Filter Lane","tierName":"Traffic"},
+  {"id":166,"w":9,"h":7,"grid":"###########..ā##.##.E.Ā.@.##Ā.....###..Ă....##.*..Ā..##########","par":7,"name":"No Return","tierName":"Traffic"},
+  {"id":167,"w":7,"h":8,"grid":"########...Ăă##.@.Ā.##.**#.##.....##..ā.E###....########","par":6,"name":"Slip Road","tierName":"Traffic"},
+  {"id":168,"w":9,"h":9,"grid":"##########....#####.#ă@...##...Ā..Ă##...#...##...#...##..*...E##.ă...Ă.##########","par":6,"name":"Merge","tierName":"Traffic"},
+  {"id":169,"w":9,"h":8,"grid":"###########E..@..###.Ă...ā##.#.....##..*...ā###...ā*.###..#.#.##########","par":8,"name":"Gyratory","tierName":"Traffic"},
+  {"id":170,"w":7,"h":8,"grid":"########.ăE.Ă###ā...##...@.###...*##...#.##.*#..########","par":8,"name":"Last Exit","tierName":"Traffic"},
+  {"id":171,"w":7,"h":8,"grid":"########...ţ@##....*##...řţ##E..####...*.##Ą..Ř.########","par":6,"name":"Feed Line","tierName":"Belt Drive"},
+  {"id":172,"w":9,"h":9,"grid":"##########.Ć.....##.E.....##.Ą#ŘţĄ.###..#...##...#..ţ##..#..#.##....@..##########","par":4,"name":"Idler","tierName":"Belt Drive"},
+  {"id":173,"w":8,"h":7,"grid":"#########......##@..#..##..#..*##.E..Ć.##Ŗ..*..#########","par":6,"name":"Tailstock","tierName":"Belt Drive"},
+  {"id":174,"w":8,"h":7,"grid":"##########.@.Ř.##.....E###.#ąĆ*##......##..*..##########","par":6,"name":"Live Roller","tierName":"Belt Drive"},
+  {"id":175,"w":9,"h":8,"grid":"###########.....Ř##.ţ.E..ŗ##ć.ţ.*..##@.##...##....#*.###.....Ą##########","par":9,"name":"Runout","tierName":"Belt Drive"},
+  {"id":176,"w":8,"h":8,"grid":"#########.....###Ŗ@Ŗ..ř##......##...*..##...E.#####.ą*##########","par":6,"name":"Snub Roller","tierName":"Belt Drive"},
+  {"id":177,"w":7,"h":7,"grid":"########....###.*E.ř##.ĆŖ@ţ##*..Ř.##.ţ#..########","par":8,"name":"Take-up","tierName":"Belt Drive"},
+  {"id":178,"w":8,"h":8,"grid":"#########....@ą##**....##...#..###ţE.Ą.##...#..##ąŖ...##########","par":7,"name":"Drive Chain","tierName":"Belt Drive"},
+  {"id":179,"w":8,"h":9,"grid":"#########..#ţ#.##..#..*##......##.ř.#.ć##..E..@##......##.ą....#########","par":7,"name":"Conveyed","tierName":"Belt Drive"},
+  {"id":180,"w":7,"h":8,"grid":"########@....##Eŗą.Ř###....##.*...##.....##..Ć#.########","par":7,"name":"End of Line","tierName":"Belt Drive"},
+  {"id":181,"w":7,"h":9,"grid":"########ĔE.ė###.....##@Ė.*.##Ę..Ĝ.##....*##..ě.Ę##.#Ė..########","par":7,"name":"Fatigue","tierName":"Attrition"},
+  {"id":182,"w":9,"h":9,"grid":"##########.......##..ĕ...@##..ė....##..Ě#..###..Ęĕ..E##ė#.....##.Ĝ..#.###########","par":8,"name":"Wear Pattern","tierName":"Attrition"},
+  {"id":183,"w":8,"h":7,"grid":"##########ě..#Ĕ##.Ę#.*.##ĘE.ė..##..@.Ĕ*##ĕ...#.#########","par":7,"name":"Spalling","tierName":"Attrition"},
+  {"id":184,"w":8,"h":7,"grid":"#########...#..##Ě.....###@Ĕ#E.##.....ę##...Ĕ.Ě#########","par":6,"name":"Third Strike","tierName":"Attrition"},
+  {"id":185,"w":9,"h":7,"grid":"##########...ęĖ..##E..#..ě###...ě.*##.....*.##@#.#...##########","par":9,"name":"Metal Tired","tierName":"Attrition"},
+  {"id":186,"w":9,"h":8,"grid":"##########.#...*Ĝ##EĘ..#..##ėĕ..ę..##.......##..@..Ĕ.##.ě.##Ė.##########","par":7,"name":"Creep","tierName":"Attrition"},
+  {"id":187,"w":7,"h":9,"grid":"#########.@.Ĝ###.Ė.ė##.E..Ĕ##....ĕ##.#...##Ę..#.##Ę#*..########","par":8,"name":"Yield Point","tierName":"Attrition"},
+  {"id":188,"w":9,"h":9,"grid":"##########.Ė#....##..Ĕ..Ę.##Ĝ..@.####Ĝ##.#..##.......##....#E###......Ę##########","par":9,"name":"Worn Through","tierName":"Attrition"},
+  {"id":189,"w":8,"h":7,"grid":"#########Ę...Eĕ##ĖĘ#..###.....@##.Ė...###ě##...#########","par":9,"name":"Last Pass","tierName":"Attrition"},
+  {"id":190,"w":8,"h":7,"grid":"#########ęě....##.*E#..##...*..##.#.Ě..##..Ė.@.#########","par":9,"name":"Failure Mode","tierName":"Attrition"},
+  {"id":191,"w":9,"h":7,"grid":"###########.Ş....##.*.@...###......###..*...##..E...Ş##########","par":7,"name":"Escape Wheel","tierName":"Escapement"},
+  {"id":192,"w":8,"h":8,"grid":"#########@...Ş.###...#.##...*E.##ğ..#..##.....*##Ş.##..#########","par":6,"name":"Balance Wheel","tierName":"Escapement"},
+  {"id":193,"w":8,"h":8,"grid":"#########*.....##...@#.##.....*###Eğ...##...#.###.ĝ...##########","par":8,"name":"Verge","tierName":"Escapement"},
+  {"id":194,"w":8,"h":9,"grid":"#########...#.###..*...##......##E..ş..##.....###..#.@.##..*.Š##########","par":6,"name":"Pallet Fork","tierName":"Escapement"},
+  {"id":195,"w":8,"h":9,"grid":"##########.E#..##......##*....###....#.##Ğğ..@.##.....###.ğ##..#########","par":7,"name":"Beat Error","tierName":"Escapement"},
+  {"id":196,"w":8,"h":8,"grid":"#########şE....##.##..####...#.##..Š.*ş##..#...##@.....#########","par":7,"name":"Wound Tight","tierName":"Escapement"},
+  {"id":197,"w":7,"h":9,"grid":"########.Š...##...*.###....##*.@..##...Ş###.....###..E.########","par":10,"name":"Half Wind","tierName":"Escapement"},
+  {"id":198,"w":7,"h":7,"grid":"########.*ĝE.###..#.##....*##.Ş...##@#...########","par":8,"name":"Deadbeat","tierName":"Escapement"},
+  {"id":199,"w":9,"h":9,"grid":"##########....#..##...*..E##...##*.##...#...##..##..Š##...@ĝ..###.....ş##########","par":10,"name":"Remontoire","tierName":"Escapement"},
+  {"id":200,"w":7,"h":7,"grid":"########.ĝŞ.@##...E###.*#..##.....##.....########","par":8,"name":"Full Wind","tierName":"Escapement"},
+  {"id":201,"w":8,"h":9,"grid":"#########..Đ.@.##.#....###....*##Eŉ#..ō##......##.#....##......#########","par":5,"name":"Angle Off","tierName":"Deflection"},
+  {"id":202,"w":8,"h":8,"grid":"#########......##..ŋE..##.#@.Ŏ###...đ*.##...#..##Ŏ.Ĳ...#########","par":8,"name":"Kick Plate","tierName":"Deflection"},
+  {"id":203,"w":9,"h":8,"grid":"##########.....E*##.#.....##..#.#..##..Ŏ....##..Đ..ŉ@##..*Ō...##########","par":7,"name":"Glancing","tierName":"Deflection"},
+  {"id":204,"w":7,"h":9,"grid":"########@....##...####..#..###....##E....##.Ŏ...##..Ĳ..########","par":7,"name":"Deflected","tierName":"Deflection"},
+  {"id":205,"w":7,"h":9,"grid":"########.....##.@...##.....##.#E#.##..ĳ#.##....###.Đŋ#.########","par":8,"name":"Bank Shot","tierName":"Deflection"},
+  {"id":206,"w":8,"h":8,"grid":"#########.#....##@.Ŏ...##ŎE..#.##ĳ...#.##......##.*#...#########","par":7,"name":"Off the Cushion","tierName":"Deflection"},
+  {"id":207,"w":7,"h":9,"grid":"########Ĳ.#.###.....##đ..#@##.ŋ.Ŏ####E...##.ĵ...##...*.########","par":7,"name":"Spent Force","tierName":"Deflection"},
+  {"id":208,"w":9,"h":8,"grid":"##########.ŉĐ..#*##E......##.......##..@.đ.###.....*.##..#.ēŉ.##########","par":9,"name":"Backspin","tierName":"Deflection"},
+  {"id":209,"w":9,"h":8,"grid":"##########....##.##.@Ĳ....##......*##.ŉ*...###..Ŋ.ĒŌ.##...E.#.##########","par":8,"name":"Double Kiss","tierName":"Deflection"},
+  {"id":210,"w":8,"h":8,"grid":"#########ŉ.##..##....ĳ.##...E#ē###@....##ĳ#....##......#########","par":8,"name":"Last Angle","tierName":"Deflection"},
+  {"id":211,"w":8,"h":9,"grid":"#########....ġ.##.....E##..ĥ.Ġ###ģ....@###...Ĥ###.#Ģ...###.....#########","par":6,"name":"Green Door","tierName":"Keyring"},
+  {"id":212,"w":8,"h":8,"grid":"##########.*..@##.ģ.Ġ..##....#ġ##......##ĢE..#.##..#...#########","par":5,"name":"Amber Door","tierName":"Keyring"},
+  {"id":213,"w":7,"h":7,"grid":"#########.#..##.....##.ģ..@##EĢ...###*.ģ.########","par":7,"name":"Ice Door","tierName":"Keyring"},
+  {"id":214,"w":7,"h":9,"grid":"########.ĥ...##ĥ..#*##ģE..###....###ġ..#.##Ġ.@.Ĥ##..Ģ.#########","par":9,"name":"Wrong Key","tierName":"Keyring"},
+  {"id":215,"w":9,"h":9,"grid":"##########E..Ģ#..##....ġ..##@.#...Ġ##ĥ.Ĥ..ģ.##.......##..#.*..##......###########","par":9,"name":"Colour Coded","tierName":"Keyring"},
+  {"id":216,"w":7,"h":7,"grid":"########...Ĥġ##.#ģĠĢ##...E.###ĥġ*.##.@...########","par":8,"name":"Three Doors","tierName":"Keyring"},
+  {"id":217,"w":8,"h":9,"grid":"#########..ġ..@##.ģ....##ĥ..#..##...#..##..Ġ#*###E.#...##Ĥ#ġ#.Ģ#########","par":10,"name":"Sorting","tierName":"Keyring"},
+  {"id":218,"w":7,"h":8,"grid":"########.ĥ.Ġ.##.....##..EĤ###..ġ#Ģ##@...###ĥ...ģ########","par":8,"name":"Mismatch","tierName":"Keyring"},
+  {"id":219,"w":8,"h":7,"grid":"#########..ĥ...##@#....##.E.ġ..##......###ĤĠĥ..#########","par":9,"name":"Keychain","tierName":"Keyring"},
+  {"id":220,"w":8,"h":9,"grid":"#########..##ġĢ##.....Ġ##*ĥ.#..##ģ....Ĥ##.E..#.##......##@....ģ#########","par":10,"name":"Right Key","tierName":"Keyring"},
+  {"id":221,"w":9,"h":7,"grid":"##########@..*.#.##Ń.....ņ##%E##..###.......##...#...##########","par":7,"name":"Strongbox","tierName":"Vault"},
+  {"id":222,"w":9,"h":7,"grid":"##########..Ń.#..##@E.....##......*##.#....###.Ň.....##########","par":6,"name":"Two Turns","tierName":"Vault"},
+  {"id":223,"w":9,"h":9,"grid":"##########....##.##.#ņ..ņ.##.......##..#..#E##@...ń%.##.#....###.....#.##########","par":7,"name":"Bank Job","tierName":"Vault"},
+  {"id":224,"w":8,"h":8,"grid":"#########..Ň..###%.EŃ.@##......###.....##..*...##..#.#.#########","par":9,"name":"Heavy Bolt","tierName":"Vault"},
+  {"id":225,"w":9,"h":7,"grid":"##########..#.Ň.Ń##.@.#*..##....#..##..#....##...E...##########","par":7,"name":"Combination","tierName":"Vault"},
+  {"id":226,"w":7,"h":9,"grid":"########.Ň.#.####.E.##.....##....Ņ###....##.#ņ..##.@...########","par":8,"name":"Safe Deposit","tierName":"Vault"},
+  {"id":227,"w":9,"h":8,"grid":"##########.%..Ň..##.....#@##.......##Ń.*....##...#..E##......###########","par":9,"name":"Time Lock","tierName":"Vault"},
+  {"id":228,"w":9,"h":8,"grid":"##########..##...##.......##ń..*..@##.#...%###E#.....##...#..Ň##########","par":10,"name":"Bullion","tierName":"Vault"},
+  {"id":229,"w":8,"h":9,"grid":"#########@.#...##.#....##.E....##..#Ň..##.Ń.#..##....#*###....%#########","par":11,"name":"The Manager","tierName":"Vault"},
+  {"id":230,"w":9,"h":8,"grid":"##########....*.####%.....##......@###..##..##E...ň..##.ń.....##########","par":10,"name":"Cracked","tierName":"Vault"},
+  {"id":231,"w":7,"h":7,"grid":"########š.#..##...@.##.#...##łE...##ł.#..########","par":5,"name":"On the Beat","tierName":"Metronome"},
+  {"id":232,"w":8,"h":7,"grid":"#########E...ł.####....##...*.@##..#..Ţ##......#########","par":5,"name":"Off Beat","tierName":"Metronome"},
+  {"id":233,"w":7,"h":7,"grid":"########...E.##.#...###.Ţ.###....@##...Ł.########","par":5,"name":"Syncopation","tierName":"Metronome"},
+  {"id":234,"w":8,"h":8,"grid":"#########....łš##....#.##.....###.#E..@##..#...###*.Ţ..#########","par":6,"name":"Downbeat","tierName":"Metronome"},
+  {"id":235,"w":8,"h":8,"grid":"#########š....Ţ###.....##.....*##...E..##@.#.Ł.##......#########","par":8,"name":"Rest Bar","tierName":"Metronome"},
+  {"id":236,"w":7,"h":7,"grid":"#########E.@.##...Ł###.šł.###*....##.....########","par":8,"name":"Triplet","tierName":"Metronome"},
+  {"id":237,"w":8,"h":7,"grid":"#########...š..##....E.##.##*..##......##...@..#########","par":6,"name":"Tempo","tierName":"Metronome"},
+  {"id":238,"w":8,"h":7,"grid":"#########..*#E.##.#...@##...š.###....#.##Ł..ł.##########","par":8,"name":"Backbeat","tierName":"Metronome"},
+  {"id":239,"w":8,"h":7,"grid":"#########.#E#.š##......##.....###......##.ł..Ł@#########","par":7,"name":"Cut Time","tierName":"Metronome"},
+  {"id":240,"w":8,"h":8,"grid":"#########@..Ţ.*##.....ł##....E.##.#.##.##..#..ł###...#.#########","par":7,"name":"Final Bar","tierName":"Metronome"},
+  {"id":241,"w":9,"h":7,"grid":"##########....ı.###...īE#.##....Į.Ī##.@....ī##..*....##########","par":7,"name":"Ground Effect","tierName":"Downforce"},
+  {"id":242,"w":9,"h":7,"grid":"##########.E..ı..###ī...į.##.......##.......##@.##Ī.Ī##########","par":5,"name":"Pinned","tierName":"Downforce"},
+  {"id":243,"w":7,"h":7,"grid":"########....Ĭ###...İ##@....##ĭ..#*###E.Ĭ.########","par":6,"name":"Held Down","tierName":"Downforce"},
+  {"id":244,"w":7,"h":7,"grid":"########İ@..###...**##..İ.İ###..Ī.##E...ĭ########","par":9,"name":"Drag Line","tierName":"Downforce"},
+  {"id":245,"w":9,"h":9,"grid":"##########ı#.....##.#...#.##..#..Ī.##...*.Ĭ.##E.@....##.į.....##.#..#..##########","par":8,"name":"Sink Line","tierName":"Downforce"},
+  {"id":246,"w":8,"h":9,"grid":"#########.Ĭ....###.....##....#.##..E.Ī.##.##*..##....į.##@.ĭ#*.#########","par":10,"name":"Heavy Air","tierName":"Downforce"},
+  {"id":247,"w":9,"h":9,"grid":"##########.......##..#...E##....*Į.##.......##...#...##Ī@...####.....*.##########","par":9,"name":"Sink Rate","tierName":"Downforce"},
+  {"id":248,"w":8,"h":9,"grid":"#########.Į.#..##....Ī*##.#...İ##Ī.....##..#E..##..#.*###.@##Į.#########","par":10,"name":"Mired","tierName":"Downforce"},
+  {"id":249,"w":9,"h":7,"grid":"##########..@E.*###Į...*..##į#ĭ...###.....#.##.......##########","par":8,"name":"Terminal","tierName":"Downforce"},
+  {"id":250,"w":9,"h":8,"grid":"##########İ......##..#....##E.#.#..##.Ĭ.**#.##@.....###..ĭ#..###########","par":8,"name":"Touchdown","tierName":"Downforce"},
+  {"id":251,"w":8,"h":8,"grid":"#########....#.##E..Ŀ.###Ŀ..Ŀ.*##Ŀ#.*#.##.#...@##...#..#########","par":6,"name":"Interchange","tierName":"Junction"},
+  {"id":252,"w":8,"h":8,"grid":"#########...Ś..##...#..##.*Ś@.###.....###...E..###....*#########","par":7,"name":"Crossover","tierName":"Junction"},
+  {"id":253,"w":8,"h":9,"grid":"#########.E..Ľ@##....Ļ###ĺ.#.####.##...##....ļ.###.....##.*....#########","par":8,"name":"Points","tierName":"Junction"},
+  {"id":254,"w":8,"h":8,"grid":"#########.....###....*ľ##..*..###...#.@###...Eľ##......#########","par":7,"name":"Marshalling","tierName":"Junction"},
+  {"id":255,"w":8,"h":8,"grid":"#########.ś*#.###.ś....##..ŚEŚ.##@.....##....#.##..#...#########","par":7,"name":"Sidings","tierName":"Junction"},
+  {"id":256,"w":9,"h":7,"grid":"##########.*#E..###.......##...@...##......ľ##.....ľ###########","par":9,"name":"Through Line","tierName":"Junction"},
+  {"id":257,"w":7,"h":7,"grid":"#########.E..##.ŝ.**##@....##ŝŜ...##Ŝ...#########","par":7,"name":"Branch","tierName":"Junction"},
+  {"id":258,"w":7,"h":9,"grid":"########...ś.##...ś.###...###.#*..##..#*@##..#..##ś.#Eś########","par":8,"name":"Shunt Yard","tierName":"Junction"},
+  {"id":259,"w":7,"h":9,"grid":"########..Ŀ..##...#####.E#.##..@Ŀ###*....##.....##.#ŀŀ.########","par":8,"name":"Turntable","tierName":"Junction"},
+  {"id":260,"w":7,"h":7,"grid":"########*#@.ľ##...E.##....ľ##.....###...#########","par":10,"name":"End of Track","tierName":"Junction"}
+];
+
+/* =================================================================== */
+(function () {
+'use strict';
+var $ = function (id) { return document.getElementById(id); };
+/* Stamped on the title and sandbox screens so it is never a guess which build
+   the browser actually loaded. */
+var BUILD = 'b12 · 108 fixed channels';
+var DIRS = { u: 0, r: 1, d: 2, l: 3 };
+
+// ------------------------------------------------------------------ save
+var SAVE_KEY = 'glide.save.v1';
+var save = { best: {}, route: {}, unlocked: 1, sound: true,
+             daily: {}, endless: 0, played: 0 };
+try {
+  var raw = localStorage.getItem(SAVE_KEY);
+  if (raw) { var p = JSON.parse(raw); if (p && typeof p === 'object') {
+    save.best = p.best || {}; save.unlocked = p.unlocked || 1;
+    save.sound = p.sound !== false;
+    save.route = p.route || {}; save.daily = p.daily || {};
+    save.endless = p.endless || 0; save.played = p.played || 0;
+  } }
+} catch (e) {}
+function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
+
+// ------------------------------------------------------------------ audio
+var actx = null;
+function blip(freq, dur, type, gain, slide) {
+  if (!save.sound) return;
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    var o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, slide), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain || .07, t + .012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + dur + .02);
+  } catch (e) {}
+}
+var SFX = {
+  slide:  function(){ blip(300, .13, 'triangle', .05, 190); },
+  stop:   function(){ blip(150, .07, 'sine', .05); },
+  core:   function(){ blip(880, .13, 'triangle', .07, 1320); },
+  tele:   function(){ blip(560, .16, 'sawtooth', .045, 1200); },
+  bump:   function(){ blip(520, .07, 'square', .05, 240); },
+  key:    function(){ blip(990, .12, 'triangle', .06, 1480); },
+  unlock: function(){ blip(180, .16, 'square', .05, 320);
+                      setTimeout(function(){ blip(660, .1, 'triangle', .05); }, 110); },
+  spring: function(){ blip(300, .26, 'triangle', .06, 1400);
+                      setTimeout(function(){ blip(180, .09, 'sine', .05); }, 250); },
+  crate:  function(){ blip(110, .12, 'square', .045, 78); },
+  fill:   function(){ blip(90, .2, 'sine', .07, 55); },
+  crack:  function(){ blip(220, .17, 'sawtooth', .035, 70); },
+  gate:   function(){ blip(400, .1, 'square', .05, 620); },
+  bad:    function(){ blip(120, .1, 'square', .04, 90); },
+  win:    function(){ blip(523,.1,'triangle',.07); setTimeout(function(){blip(659,.1,'triangle',.07);},95);
+                      setTimeout(function(){blip(784,.1,'triangle',.07);},190);
+                      setTimeout(function(){blip(1047,.26,'triangle',.08);},285); }
+};
+
+// ------------------------------------------------------------------ state
+var cv = $('cv'), ctx = cv.getContext('2d');
+var view = 'title';
+var idx = 0, L = null, st = null, hist = [], moves = 0;
+var CUR = null, sandPlay = false;   // level definition in play, and whether it came from the editor
+var playMode = 'campaign';          // campaign | sandbox | daily | endless
+var route = [], replay = null;      // the moves you made, and any playback of them
+var endless = { n: 0, seed: 0, streak: 0 };
+var anim = null, shake = 0, parts = [], trail = [], won = false;
+var hintEl = null, stuckEl = null, flash = 0, nudgeDir = -1, nudgeT = 0;
+var awaitPick = null, pickHot = -1, nudgePad = -1;   // red-spring chooser
+
+function show(v) {
+  view = v;
+  ['title', 'select', 'play', 'sandbox'].forEach(function (s) { $(s).classList.toggle('on', s === v); });
+}
+
+// ------------------------------------------------------------------ level control
+/* Boot any level definition into the play screen. Campaign decks come from
+   LEVELS; sandbox decks are built by the editor and never touch the save. */
+var SUBTITLE = {
+  sandbox: 'Sandbox · test run',
+  daily:   'Daily deck',
+  endless: 'Endless'
+};
+function loadObj(lv, mode) {
+  CUR = lv; playMode = mode || 'campaign'; sandPlay = playMode === 'sandbox';
+  L = GLIDE.parse(lv);
+  st = GLIDE.initial(L);
+  hist = []; moves = 0; anim = null; parts = []; trail = []; won = false;
+  shake = 0; nudgeDir = -1; nudgePad = -1; awaitPick = null; pickHot = -1;
+  route = []; replay = null;
+  clearHint(); clearStuck();
+  $('pName').textContent = lv.name;
+  $('pSub').textContent = playMode === 'endless'
+    ? 'Endless · run ' + (endless.n + 1) + (endless.streak ? ' · streak ' + endless.streak : '')
+    : (SUBTITLE[playMode] || lv.tierName + ' · Deck ' + (idx + 1));
+  $('pBack').title = sandPlay ? 'Editor (Esc)' : playMode === 'campaign' ? 'Decks (Esc)' : 'Title (Esc)';
+  $('pPar').textContent = lv.par;
+  updHud();
+  if (lv.hint) showHint(lv.hint);
+  resize();
+}
+function load(i) { idx = i; loadObj(LEVELS[i], 'campaign'); }
+function updHud() {
+  $('pMoves').textContent = moves;
+  $('ctKeys').style.display = L && L.keys.length ? '' : 'none';
+  if (L && L.keys.length) $('pKeys').textContent = st.keys;
+  $('pUndo').disabled = !hist.length;
+  var m = $('pMoves');
+  m.style.color = moves > CUR.par ? 'var(--mute)' : 'var(--cyan)';
+}
+function showHint(text) {
+  clearHint();
+  hintEl = document.createElement('div');
+  hintEl.className = 'hint'; hintEl.textContent = text;
+  $('stage').appendChild(hintEl);
+}
+function clearHint() { if (hintEl) { hintEl.remove(); hintEl = null; } }
+function clearStuck() { if (stuckEl) { stuckEl.remove(); stuckEl = null; } }
+function showStuck() {
+  if (stuckEl) return;
+  stuckEl = document.createElement('div');
+  stuckEl.className = 'stuck';
+  stuckEl.innerHTML = '<b>Stranded.</b> No route to the exit from here.';
+  var b = document.createElement('button');
+  b.textContent = 'Undo'; b.onclick = function () { undo(); };
+  stuckEl.appendChild(b);
+  $('stage').appendChild(stuckEl);
+}
+
+// ------------------------------------------------------------------ solving
+/* One solver serves the whole game — hints, the stranded warning, the sandbox
+   and the generators. It plays for the worst case: you choose your slide and,
+   on a red spring, your pad, but a BLUE spring chooses for you, so its value is
+   the worst pad it could pick. That is what makes par a guarantee rather than
+   an average. Returns the moves you can always finish in from `st`, and the
+   first move to make; `big` means the deck was too tangled to judge cheaply.
+   Pass `hopeful` to ask the easier question instead — is there ANY route, if
+   the blue springs happen to fall your way. */
+function solveFrom(L, st, cap, hopeful) {
+  var index = {}, states = [st], acts = [], i, a, s, o;
+  index[GLIDE.key(st)] = 0;
+  for (i = 0; i < states.length; i++) {
+    if (states.length > cap) return { big: true };
+    var A = GLIDE.actions(L, states[i]), list = [];
+    for (a = 0; a < A.length; a++) {
+      var outs = [];
+      for (s = 0; s < A[a].states.length; s++) {
+        var ns = A[a].states[s];
+        if (ns.won) { outs.push(-1); continue; }
+        var k = GLIDE.key(ns), j = index[k];
+        if (j === undefined) { j = states.length; index[k] = j; states.push(ns); }
+        outs.push(j);
+      }
+      list.push({ dir: A[a].dir, kind: A[a].kind, outs: outs, pads: A[a].pads });
+    }
+    acts.push(list);
+  }
+  var V = new Array(states.length);
+  for (i = 0; i < V.length; i++) V[i] = Infinity;
+  for (var pass = 0; pass <= states.length; pass++) {
+    var changed = false;
+    for (i = 0; i < states.length; i++) {
+      var best = Infinity;
+      for (a = 0; a < acts[i].length; a++) {
+        var v = value(acts[i][a], V, hopeful).v;
+        if (v + 1 < best) best = v + 1;
+      }
+      if (best < V[i]) { V[i] = best; changed = true; }
+    }
+    if (!changed) break;
+  }
+  if (V[0] === Infinity) return { par: null };
+  for (a = 0; a < acts[0].length; a++) {              // read the first move back out
+    var r = value(acts[0][a], V, hopeful);
+    if (r.v + 1 === V[0])
+      return { par: V[0], dir: acts[0][a].dir,
+               pad: acts[0][a].kind === 'red' && acts[0][a].pads ? acts[0][a].pads[r.at] : -1 };
+  }
+  return { par: V[0], dir: -1, pad: -1 };
+}
+/* What one action is worth: the worst outcome if the deck picks, the best if
+   you do. `at` is which outcome that was, so a red spring can name its pad. */
+function value(act, V, hopeful) {
+  var worst = act.kind === 'blue' && !hopeful, v = worst ? -Infinity : Infinity, at = 0;
+  for (var o = 0; o < act.outs.length; o++) {
+    var ov = act.outs[o] < 0 ? 0 : V[act.outs[o]];
+    if (worst ? ov > v : ov < v) { v = ov; at = o; }
+  }
+  return { v: v, at: at };
+}
+
+// ------------------------------------------------------------------ moving
+function tryMove(d) {
+  if (view !== 'play' || anim || won || awaitPick) return;
+  var tr = [];
+  var ns = GLIDE.move(L, st, d, tr);
+  if (!ns) { shake = 7; SFX.bad(); return; }
+  clearHint(); clearStuck();
+  hist.push({ st: st, moves: moves });
+  route.push({ d: d, k: -1 });          // kept so a cleared deck can be replayed
+  var from = st;
+  st = ns; moves++; nudgeDir = -1; nudgePad = -1;
+  updHud();
+  // `from` lets the renderer show the world as it was, advancing it step by
+  // step as the drone actually reaches each tile
+  anim = { ops: tr, i: 0, t: 0, from: from, step: tr.length > 14 ? 34 : 52 };
+  SFX.slide();
+}
+
+/* The slide ended on a spring that still needs a decision. Yellow springs and
+   any spring with only one free pad already resolved inside the engine. */
+function beginLaunch() {
+  if (st.await.kind === 'red') {
+    awaitPick = st.await; pickHot = -1;
+    showHint('Red spring — pick where to come down. Click a pad, or press 1–' +
+             awaitPick.pads.length + '.');
+    blip(520, .1, 'triangle', .05);
+    return;
+  }
+  // Blue really is a coin toss — a fresh roll every launch, including after an
+  // undo. A replay is the one exception: it lands where the recorded run did.
+  var k = -1;
+  if (replay) { var tk = replay.t[replay.i - 1]; if (tk && tk.k >= 0) k = tk.k; }
+  if (k < 0 || k >= st.await.pads.length) k = Math.floor(Math.random() * st.await.pads.length);
+  land(k);
+}
+function land(k) {
+  if (!st.await || k < 0 || k >= st.await.pads.length) return;
+  if (route.length) route[route.length - 1].k = k;   // recorded so a replay matches
+  var tr = [], before = st;
+  st = GLIDE.resolve(L, st, k, tr);
+  awaitPick = null; pickHot = -1; clearHint();
+  anim = { ops: tr, i: 0, t: 0, from: before, step: 52 };
+}
+
+function undo() {
+  if (!hist.length || anim || won || replay) return;
+  var h = hist.pop();
+  route.pop();
+  st = h.st; moves = h.moves; trail = []; nudgeDir = -1; nudgePad = -1;
+  awaitPick = null; pickHot = -1; clearHint();
+  clearStuck(); updHud(); blip(240, .07, 'sine', .04);
+}
+function restart() {
+  if (won || replay) return;
+  st = GLIDE.initial(L); hist = []; moves = 0; trail = []; anim = null; nudgeDir = -1;
+  route = [];
+  nudgePad = -1; awaitPick = null; pickHot = -1; clearHint();
+  clearStuck(); updHud(); blip(200, .08, 'sine', .04);
+}
+
+/* After the slide settles, check whether the exit is still reachable — for a
+   deck with a blue spring, reachable no matter which pad it picks next time. */
+function checkStranded() {
+  if (won || awaitPick) return;
+  // "Stranded" must mean there is no route at all — not merely that a blue
+  // spring could yet betray you, which is a risk, not a dead end.
+  var r = solveFrom(L, st, 9000, true);
+  if (r.big) return;                     // too large to judge cheaply; stay quiet
+  if (r.par === null) { showStuck(); SFX.bad(); }
+}
+
+// ------------------------------------------------------------------ replay
+/* A route is stored as one character per move — u/r/d/l — with a digit after
+   it when a red spring asked you to choose. Blue springs need no digit: they
+   are a hash of position and move count, so they land the same way every time
+   and a replay retraces your run exactly. */
+function encRoute(r) {
+  var s = '';
+  for (var i = 0; i < r.length; i++) s += 'urdl'.charAt(r[i].d) + (r[i].k >= 0 ? (r[i].k + 1) : '');
+  return s;
+}
+function decRoute(s) {
+  var out = [], i = 0;
+  while (i < s.length) {
+    var d = 'urdl'.indexOf(s.charAt(i++));
+    if (d < 0) break;
+    var k = -1, c = s.charAt(i);
+    if (c >= '1' && c <= '9') { k = +c - 1; i++; }
+    out.push({ d: d, k: k });
+  }
+  return out;
+}
+var lastRoute = [];
+function startReplay(tokens) {
+  if (!tokens || !tokens.length) return;
+  replay = null;
+  st = GLIDE.initial(L); hist = []; moves = 0; route = []; trail = []; anim = null;
+  parts = []; won = false; awaitPick = null; pickHot = -1; nudgeDir = -1; nudgePad = -1;
+  clearStuck(); clearHint(); updHud();
+  $('win').classList.remove('on');
+  replay = { t: tokens, i: 0, wait: 460, was: playMode };
+  showHint('Replaying your best route…');
+}
+function replayStep(dt) {
+  if (anim) return;
+  replay.wait -= dt;
+  if (replay.wait > 0) return;
+  if (awaitPick) {
+    var tk = replay.t[replay.i - 1];
+    land(tk && tk.k >= 0 ? tk.k : 0);
+  } else if (replay.i < replay.t.length) {
+    tryMove(replay.t[replay.i++].d);
+  } else { replay = null; clearHint(); return; }
+  replay.wait = 280;
+}
+
+// ------------------------------------------------------------------ generated decks
+/* The page carries the generator the campaign was built with, so a deck handed
+   to you here clears the same bar: proved winnable, with an exact par. */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+var GEN_MIX = [
+  { n: 'Drift',     feat: {} },
+  { n: 'Fracture',  feat: { '~': [3, 6] } },
+  { n: 'Sludge',    feat: { 'm': [2, 5] } },
+  { n: 'Vector',    feat: { 'A': [2, 5] } },
+  { n: 'Ballast',   feat: { '0': [2, 4], 'x': [1, 2] } },
+  { n: 'Relay',     feat: { 't': [2, 2] } },
+  { n: 'Circuit',   feat: { '!': [1, 2], 'G': [2, 4] } },
+  { n: 'Ascent',    feat: { 'S': [1, 1] } },
+  { n: 'Rebound',   feat: { 'o': [2, 4] } },
+  { n: 'Clockwork', feat: { '+': [1, 3] } },
+  { n: 'Refraction', feat: { 'D': [2, 4] } },
+  { n: 'Lockdown',  feat: { '%': [1, 2], '=': [1, 3] } },
+  { n: 'Deep Deck', feat: { '~': [1, 3], 'm': [1, 2], 'A': [1, 3], 't': [2, 2],
+                            '0': [1, 2], 'x': [1, 1], 'S': [1, 1], 'o': [1, 2],
+                            '+': [1, 2], 'D': [1, 2] } }
+];
+var ARROWS4 = ['^', '>', 'v', '<'];
+function gri(rnd, a, b) { return a + Math.floor(rnd() * (b - a + 1)); }
+function gpick(rnd, a) { return a[Math.floor(rnd() * a.length)]; }
+
+function genBoard(rnd, mix, lo, hi) {
+  var w = gri(rnd, lo, hi), h = gri(rnd, lo, hi), i, x, y;
+  var g = new Array(w * h);
+  for (y = 0; y < h; y++) for (x = 0; x < w; x++)
+    g[y * w + x] = (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? '#' : '.';
+  var inner = [];
+  for (y = 1; y < h - 1; y++) for (x = 1; x < w - 1; x++) inner.push(y * w + x);
+  if (inner.length < 12) return null;
+  for (i = inner.length - 1; i > 0; i--) {
+    var j = Math.floor(rnd() * (i + 1)), tmp = inner[i]; inner[i] = inner[j]; inner[j] = tmp;
+  }
+  var cur = 0, nw = Math.floor(inner.length * .15 * (.6 + rnd() * .8));
+  for (i = 0; i < nw && cur < inner.length; i++) g[inner[cur++]] = '#';
+
+  for (var f in mix.feat) {
+    if (f === 'S') {                                   // a spring and its pads
+      var col = gpick(rnd, ['y', 'j', 'k', 'b', 'r']);
+      var np = GLIDE.KIND[col] === 'fixed' ? 1 : gri(rnd, 2, 3);
+      if (inner.length - cur < np + 4) return null;
+      g[inner[cur++]] = col.toUpperCase();
+      for (var q = 0; q < np; q++) g[inner[cur++]] = col;
+      continue;
+    }
+    var n = gri(rnd, mix.feat[f][0], mix.feat[f][1]);
+    for (var k = 0; k < n && cur < inner.length; k++)
+      g[inner[cur++]] = f === 'A' ? gpick(rnd, ARROWS4)
+                      : f === 'D' ? gpick(rnd, ['/', '\\'])
+                      : f === 'G' ? (rnd() < .5 ? 'G' : 'g') : f;
+  }
+  var free = [];
+  for (i = cur; i < inner.length; i++) if (g[inner[i]] === '.') free.push(inner[i]);
+  var nc = gri(rnd, 0, 2);
+  if (free.length < nc + 2) return null;
+  var fi = 0;
+  g[free[fi++]] = '@'; g[free[fi++]] = 'E';
+  for (var c = 0; c < nc; c++) g[free[fi++]] = '*';
+  return { w: w, h: h, grid: g.join('') };
+}
+
+/* Hand back a proved deck at roughly the difficulty asked for. The band is
+   relaxed on a second pass rather than ever shipping an unproved board. */
+function genDeck(seed, hard, name) {
+  var rnd = mulberry32(seed);
+  var mix = GEN_MIX[Math.max(0, Math.min(GEN_MIX.length - 1, Math.floor(hard)))];
+  var lo = 4 + Math.floor(hard * 1.2), hi = lo + 6;
+  var sz = hard < 3 ? [6, 8] : [7, 10];
+  for (var pass = 0; pass < 2; pass++) {
+    for (var tries = 0; tries < 500; tries++) {
+      var cand = genBoard(rnd, mix, sz[0], sz[1]);
+      if (!cand) continue;
+      var P = GLIDE.parse({ w: cand.w, h: cand.h, grid: cand.grid, par: 0 });
+      var r = solveFrom(P, GLIDE.initial(P), 20000);
+      if (r.big || r.par === null) continue;
+      if (pass === 0 ? (r.par < lo || r.par > hi) : r.par < 3) continue;
+      return { id: 0, w: cand.w, h: cand.h, grid: cand.grid, par: r.par,
+               name: name, tierName: mix.n };
+    }
+  }
+  return null;
+}
+
+function dailyKey() {
+  var d = new Date();
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+function dailyName() {
+  var d = new Date();
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' deck';
+}
+function startDaily() {
+  var key = dailyKey();
+  var lv = genDeck(key, 3 + (key % 5), dailyName());
+  if (!lv) { blip(120, .1, 'square', .04); return; }
+  lv.hint = 'One deck a day, the same for every run. Cleared in ' + lv.par + ' if you find the line.';
+  loadObj(lv, 'daily');
+  show('play');
+}
+function startEndless() {
+  endless = { n: 0, seed: (Date.now() ^ 0x9e3779b9) >>> 0, streak: 0 };
+  nextEndless();
+}
+function nextEndless() {
+  var hard = Math.min(GEN_MIX.length - 1, endless.n * 0.5);
+  var lv = genDeck((endless.seed + endless.n * 7919) >>> 0, hard, 'Run ' + (endless.n + 1));
+  if (!lv) { endless.n++; if (endless.n < 60) return nextEndless(); return; }
+  loadObj(lv, 'endless');
+  show('play');
+}
+
+// ------------------------------------------------------------------ finishing
+function starsFor(m, par) { return m <= par ? 3 : m <= par + 2 ? 2 : 1; }
+function starStr(n) { return '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n); }
+
+function finish() {
+  won = true;
+  var par = CUR.par;
+  SFX.win(); flash = 1;
+  for (var i = 0; i < 34; i++) burst(st.p, '#4fe3d2');
+  $('wName').textContent = CUR.name;
+  $('wMoves').textContent = moves;
+  $('wPar').textContent = par;
+  $('wStars').textContent = starStr(starsFor(moves, par));
+  $('wBestL').textContent = 'Best';
+  $('wNext').textContent = 'Next deck';
+  var wasReplay = !!replay;
+  replay = null;
+  if (!wasReplay) lastRoute = route.slice();
+  $('wReplay').style.display = lastRoute.length ? '' : 'none';
+
+  if (wasReplay) {
+    $('wTitle').textContent = 'Replay finished';
+    $('wBest').textContent = playMode === 'campaign' && save.best[CUR.id] !== undefined
+      ? save.best[CUR.id] : moves;
+    $('wBadge').textContent = '';
+    $('wNext').style.display = playMode === 'campaign' && idx + 1 < LEVELS.length ? '' : 'none';
+  } else if (playMode === 'sandbox') {
+    // a test run: report the route, leave campaign progress untouched
+    $('wBest').textContent = '—';
+    $('wTitle').textContent = 'Test cleared';
+    $('wBadge').textContent = moves <= par ? 'Optimal route' : 'Par is ' + par;
+    $('wBadge').style.color = moves <= par ? 'var(--gold)' : 'var(--mute)';
+    $('wNext').style.display = 'none';
+    $('wMenu').textContent = 'Back to editor';
+  } else if (playMode === 'endless') {
+    endless.streak++;
+    if (endless.streak > save.endless) save.endless = endless.streak;
+    save.played++; persist();
+    $('wBest').textContent = save.endless;
+    $('wBestL').textContent = 'Best run';
+    $('wTitle').textContent = 'Deck ' + (endless.n + 1) + ' cleared';
+    $('wBadge').textContent = 'Streak ' + endless.streak;
+    $('wBadge').style.color = 'var(--cyan)';
+    $('wNext').style.display = '';
+    $('wMenu').textContent = 'End run';
+  } else if (playMode === 'daily') {
+    var dk = String(dailyKey()), prevD = save.daily[dk];
+    if (prevD === undefined || moves < prevD) save.daily[dk] = moves;
+    save.played++; persist();
+    $('wBest').textContent = save.daily[dk];
+    $('wTitle').textContent = 'Daily cleared';
+    $('wBadge').textContent = moves <= par ? 'Optimal route' : 'Par is ' + par;
+    $('wBadge').style.color = moves <= par ? 'var(--gold)' : 'var(--mute)';
+    $('wNext').style.display = 'none';
+    $('wMenu').textContent = 'Title';
+  } else {
+    var id = CUR.id;
+    var prev = save.best[id];
+    var isBest = prev === undefined || moves < prev;
+    if (isBest) { save.best[id] = moves; save.route[id] = encRoute(route); }
+    save.played++;
+    if (save.unlocked < idx + 2) save.unlocked = Math.min(LEVELS.length, idx + 2);
+    persist();
+    $('wBest').textContent = save.best[id];
+    $('wTitle').textContent = idx + 1 === LEVELS.length ? 'Final deck cleared' : 'Deck cleared';
+    $('wBadge').textContent = moves <= par ? 'Optimal route' : (isBest ? 'New best' : '');
+    $('wBadge').style.color = moves <= par ? 'var(--gold)' : 'var(--cyan)';
+    $('wNext').style.display = idx + 1 < LEVELS.length ? '' : 'none';
+    $('wMenu').textContent = 'All decks';
+  }
+  setTimeout(function () { $('win').classList.add('on'); }, 480);
+}
+
+// ------------------------------------------------------------------ particles
+function burst(cell, color) {
+  var a = Math.random() * Math.PI * 2, sp = 0.6 + Math.random() * 2.6;
+  parts.push({ c: cell, x: (Math.random() - .5) * .3, y: (Math.random() - .5) * .3,
+    vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, col: color,
+    r: 1.4 + Math.random() * 2.4 });
+}
+
+// ------------------------------------------------------------------ layout
+var CS = 40, OX = 0, OY = 0, DPR = 1;
+function resize() {
+  if (!L) return;
+  var stage = $('stage');
+  var aw = stage.clientWidth - 26, ah = stage.clientHeight - 26;
+  if (aw <= 0 || ah <= 0) return;
+  CS = Math.max(18, Math.floor(Math.min(aw / L.w, ah / L.h)));
+  CS = Math.min(CS, 78);
+  var w = CS * L.w, h = CS * L.h;
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  cv.width = Math.round(w * DPR); cv.height = Math.round(h * DPR);
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  OX = 0; OY = 0;
+}
+window.addEventListener('resize', function () { resize(); edResize(); });
+
+function cx(i) { return (i % L.w) * CS + CS / 2; }
+function cy(i) { return ((i / L.w) | 0) * CS + CS / 2; }
+
+// ------------------------------------------------------------------ drawing helpers
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function glow(color, blur, fn) {
+  ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = blur; fn(); ctx.restore();
+}
+
+// ------------------------------------------------------------------ render
+var last = 0, T = 0;
+function frame(now) {
+  requestAnimationFrame(frame);
+  var dt = Math.min(50, now - last || 16); last = now; T += dt;
+  if (view === 'sandbox') { edDraw(); return; }
+  if (view !== 'play' || !L) return;
+  step(dt);
+  draw();
+}
+
+function step(dt) {
+  if (shake > 0) shake = Math.max(0, shake - dt * .045);
+  if (flash > 0) flash = Math.max(0, flash - dt * .0022);
+  if (nudgeT > 0) nudgeT = Math.max(0, nudgeT - dt);
+
+  for (var i = parts.length - 1; i >= 0; i--) {
+    var p = parts[i];
+    p.x += p.vx * dt * .016; p.y += p.vy * dt * .016;
+    p.vx *= .94; p.vy *= .94; p.life -= dt * .0022;
+    if (p.life <= 0) parts.splice(i, 1);
+  }
+  for (var t = trail.length - 1; t >= 0; t--) {
+    trail[t].life -= dt * .0035;
+    if (trail[t].life <= 0) trail.splice(t, 1);
+  }
+
+  if (anim) {
+    anim.t += dt;
+    while (anim.i < anim.ops.length && anim.t >= stepFor(anim.ops[anim.i])) {
+      var op = anim.ops[anim.i];
+      anim.t -= stepFor(op);
+      // fire the step's effects as it completes
+      if (op.t === 'm') {
+        trail.push({ c: op.from, life: 1 });
+        if (op.core) { for (var k = 0; k < 16; k++) burst(op.core, '#ffc65c'); SFX.core(); }
+        if (op.gotkey !== undefined) { for (var g2 = 0; g2 < 12; g2++) burst(op.gotkey, KEY_COL); SFX.key(); }
+        if (op.unlock !== undefined) {
+          for (var u2 = 0; u2 < 14; u2++) burst(op.unlock, KEY_COL);
+          SFX.unlock(); shake = Math.max(shake, 4);
+        }
+        if (op.brk !== undefined) SFX.crack();
+        if (op.fill !== undefined) { SFX.fill(); shake = 5; for (var q = 0; q < 12; q++) burst(op.fill, '#c8794a'); }
+        else if (op.ct !== undefined) SFX.crate();
+        if (op.btn !== undefined) SFX.gate();
+      } else if (op.t === 'tp') { SFX.tele(); for (var z = 0; z < 10; z++) burst(op.to, '#a97bff'); }
+      else if (op.t === 'bump') {
+        SFX.bump();
+        shake = Math.max(shake, 3.4);
+        for (var y3 = 0; y3 < 6; y3++) burst(op.from, '#cfe0e8');
+      }
+      else if (op.t === 'sp') {
+        SFX.spring();
+        var col = SPRING_COL[op.kind === 'blue' ? 'b' : op.kind === 'red' ? 'r' : 'y'];
+        for (var y2 = 0; y2 < 14; y2++) burst(op.to, col);
+        shake = Math.max(shake, 4);
+      }
+      anim.i++;
+    }
+    if (anim.i >= anim.ops.length) {
+      anim = null;
+      if (st.await) beginLaunch();
+      else if (st.won) { if (!won) finish(); }
+      else { SFX.stop(); shake = Math.max(shake, 2.2); checkStranded(); }
+    }
+  }
+  if (replay) replayStep(dt);
+}
+
+/* A launch gets its own, slower beat than a step of a slide. */
+function stepFor(op) {
+  if (!op) return anim.step;
+  return op.t === 'sp' ? 300 : op.t === 'bump' ? 95 : anim.step;
+}
+
+/* Where to draw the drone right now, in pixels. */
+function playerXY() {
+  if (!anim) return { x: cx(st.p), y: cy(st.p), scale: 1 };
+  var op = anim.ops[Math.min(anim.i, anim.ops.length - 1)];
+  if (!op) return { x: cx(st.p), y: cy(st.p), scale: 1 };
+  if (op.t === 'tp') return { x: cx(op.to), y: cy(op.to), scale: .6 };
+  if (op.t === 'bump') {                     // squashed against the bumper
+    var b = Math.sin(Math.min(1, anim.t / stepFor(op)) * Math.PI);
+    return { x: cx(op.from) + (cx(op.at) - cx(op.from)) * b * .22,
+             y: cy(op.from) + (cy(op.at) - cy(op.from)) * b * .22,
+             scale: 1 - b * .18 };
+  }
+  if (op.t === 'sp') {                       // thrown: an arc, not a slide
+    var q = Math.min(1, anim.t / stepFor(op));
+    var e = q < .5 ? 2 * q * q : 1 - Math.pow(2 - 2 * q, 2) / 2;
+    return { x: cx(op.from) + (cx(op.to) - cx(op.from)) * e,
+             y: cy(op.from) + (cy(op.to) - cy(op.from)) * e - Math.sin(q * Math.PI) * CS * .6,
+             scale: 1 + Math.sin(q * Math.PI) * .4 };
+  }
+  var f = Math.min(1, anim.t / stepFor(op));
+  return { x: cx(op.from) + (cx(op.to) - cx(op.from)) * f,
+           y: cy(op.from) + (cy(op.to) - cy(op.from)) * f, scale: 1 };
+}
+/* Crate positions right now. During a slide, crates sit where they were
+   *before* the in-flight step, and the one being shoved tweens forward. */
+function crateList() {
+  if (!anim) return st.crates.map(function (c) { return { c: c, x: cx(c), y: cy(c) }; });
+  var i = Math.min(anim.i, anim.ops.length - 1);
+  var op = anim.ops[i];
+  var prior = anim.from.crates;
+  for (var b = i - 1; b >= 0; b--) if (anim.ops[b].crates) { prior = anim.ops[b].crates; break; }
+  var f = Math.min(1, anim.t / anim.step);
+  return prior.map(function (c) {
+    if (op && op.t === 'm' && op.cf === c) {
+      var e = { c: c, x: cx(c) + (cx(op.ct) - cx(c)) * f, y: cy(c) + (cy(op.ct) - cy(c)) * f };
+      if (op.fill !== undefined) e.sink = f;    // dropping into the pit it plugs
+      return e;
+    }
+    return { c: c, x: cx(c), y: cy(c) };
+  });
+}
+
+/* The world as it should look *right now*: mid-slide the board is only as far
+   along as the steps the drone has actually completed, so plating collapses
+   behind it and cores wink out as it reaches them — not the instant you press. */
+function visual() {
+  if (!anim) return { cores: st.cores, broken: st.broken, filled: st.filled,
+                      gates: st.gates, rot: st.rot, keysGot: st.keysGot,
+                      keys: st.keys, opened: st.opened, worn: st.worn,
+                      press: st.press, mv: st.mv, ord: st.ord };
+  var f = anim.from;
+  var cores = f.cores, gates = f.gates, rot = f.rot;
+  var keysGot = f.keysGot, held = f.keys, opened = f.opened, worn = f.worn.slice();
+  var broken = f.broken.slice(), filled = f.filled.slice();
+  for (var i = 0; i < anim.i && i < anim.ops.length; i++) {
+    var op = anim.ops[i];
+    if (op.t !== 'm') continue;
+    if (op.core !== undefined) {
+      var ci = L.cores.indexOf(op.core);
+      if (ci >= 0) cores |= (1 << ci);
+    }
+    if (op.brk !== undefined) broken.push(op.brk);
+    if (op.fill !== undefined) filled.push(op.fill);
+    if (op.btn !== undefined) gates ^= 1;
+    if (op.rot !== undefined) {                    // the rotor turns as you leave it
+      var rf = ((rot >> (op.rot * 2)) & 3) + 1 & 3;
+      rot = (rot & ~(3 << (op.rot * 2))) | (rf << (op.rot * 2));
+    }
+    if (op.wear !== undefined) {
+      var wi2 = L.wearIndex[op.wear];
+      if (wi2 !== undefined) worn[wi2]++;
+    }
+    if (op.unlock !== undefined) { opened |= (1 << L.lockIndex[op.unlock]); held--; }
+    if (op.gotkey !== undefined) {
+      var ki = L.keys.indexOf(op.gotkey);
+      if (ki >= 0) { keysGot |= (1 << ki); held++; }
+    }
+  }
+  return { cores: cores, broken: broken, filled: filled, gates: gates, rot: rot,
+           keysGot: keysGot, keys: held, opened: opened, worn: worn,
+           press: f.press, mv: f.mv, ord: f.ord };
+}
+var V = null;   // set once per frame by draw()
+function isBroken(i) { return V.broken.indexOf(i) >= 0 && V.filled.indexOf(i) < 0; }
+function isFilled(i) { return V.filled.indexOf(i) >= 0; }
+function gateOpen(t) { return t === 'G' ? V.gates === 1 : V.gates === 0; }
+
+function draw() {
+  var w = cv.width, h = cv.height;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
+
+  V = visual();
+  if (L.keys.length) $('pKeys').textContent = V.keys;   // count what you hold right now
+  var pulse = .5 + .5 * Math.sin(T * .0032);
+  var coresLeft = V.cores !== GLIDE.allCores(L);
+
+  // ---- terrain ----
+  for (var i = 0; i < L.w * L.h; i++) {
+    var t = L.terrain[i], x = (i % L.w) * CS, y = ((i / L.w) | 0) * CS;
+    var open = !(t === '#');
+    var broken = isBroken(i), filled = isFilled(i);
+    var isPit = (t === '0' && !filled) || broken;
+
+    if (t === '#') { drawWall(x, y, i); continue; }
+    if (isPit) { drawPit(x, y); continue; }
+    drawFloor(x, y, i);
+
+    if (t === '~' && !broken) drawCrack(x, y, i);
+    else if (t === 'm') drawMud(x, y);
+    else if (t === '^' || t === '>' || t === 'v' || t === '<') drawVane(x, y, GLIDE.ARROW[t]);
+    else if (t === 't') drawPad(x, y, pulse);
+    else if (t === '!') drawButton(x, y);
+    else if (t === 'G' || t === 'g') drawGate(x, y, gateOpen(t), pulse);
+    else if (t === 'o') drawBumper(x, y, pulse);
+    else if (t === '+') drawRotor(x, y, (V.rot >> (L.rotorIndex[i] * 2)) & 3, pulse);
+    else if (GLIDE.EXTBY[t]) drawExtTile(x, y, i, GLIDE.EXTBY[t], pulse,
+                                         V.worn[L.wearIndex[i]] || 0);
+    else if (GLIDE.MIRROR[t]) drawMirror(x, y, t, pulse);
+    else if (t === '%') { if (!(V.keysGot & (1 << L.keys.indexOf(i)))) drawKey(x, y, pulse); }
+    else if (t === '=') drawLock(x, y, (V.opened >> L.lockIndex[i]) & 1, pulse);
+    else if (GLIDE.SPRING[t]) drawSpring(x, y, GLIDE.SPRING[t], pulse, L.pairNo[i]);
+    else if (GLIDE.PAD[t]) drawLandPad(x, y, t, pulse, L.pairNo[i]);
+    else if (t === 'E') drawExit(x, y, !coresLeft, pulse);
+  }
+
+  // ---- trail ----
+  for (var tr = 0; tr < trail.length; tr++) {
+    var e = trail[tr];
+    ctx.globalAlpha = e.life * .3;
+    ctx.fillStyle = '#4fe3d2';
+    rr(cx(e.c) - CS * .21, cy(e.c) - CS * .21, CS * .42, CS * .42, CS * .12);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ---- cores ----
+  for (var c = 0; c < L.cores.length; c++) {
+    if (V.cores & (1 << c)) continue;
+    drawCore(cx(L.cores[c]), cy(L.cores[c]), pulse);
+  }
+
+  // ---- crates ----
+  var cl = crateList();
+  for (var q = 0; q < cl.length; q++) drawCrate(cl[q].x, cl[q].y, cl[q].sink || 0);
+
+  // ---- drone ----
+  var pp = playerXY();
+  drawDrone(pp.x, pp.y, pp.scale, pulse);
+
+  // ---- red-spring chooser ----
+  if (awaitPick) drawChooser(pulse);
+
+  // ---- nudge arrow ----
+  if (nudgeT > 0 && nudgeDir >= 0) drawNudge(pp.x, pp.y, nudgeDir);
+  if (nudgeT > 0 && nudgePad >= 0) {
+    ctx.globalAlpha = Math.min(1, nudgeT / 300) * .85;
+    ctx.strokeStyle = '#ffc65c';
+    ctx.lineWidth = Math.max(2, CS * .07);
+    ctx.beginPath(); ctx.arc(cx(nudgePad), cy(nudgePad), CS * .38, 0, 6.2832); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- particles ----
+  for (var p = 0; p < parts.length; p++) {
+    var a = parts[p];
+    ctx.globalAlpha = Math.max(0, a.life);
+    ctx.fillStyle = a.col;
+    ctx.beginPath();
+    ctx.arc(cx(a.c) + a.x * CS * .5, cy(a.c) + a.y * CS * .5, a.r * (CS / 44) * a.life, 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  if (flash > 0) {
+    ctx.fillStyle = 'rgba(79,227,210,' + (flash * .3) + ')';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+}
+
+// ------------------------------------------------------------------ tile art
+function drawFloor(x, y, i) {
+  var alt = ((i % L.w) + ((i / L.w) | 0)) % 2;
+  ctx.fillStyle = alt ? '#16212e' : '#182430';
+  ctx.fillRect(x, y, CS, CS);
+  ctx.strokeStyle = 'rgba(9,15,22,.85)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, y + .5, CS - 1, CS - 1);
+  ctx.fillStyle = 'rgba(255,255,255,.028)';
+  ctx.fillRect(x + CS * .12, y + CS * .12, CS * .1, CS * .1);
+}
+function drawWall(x, y, i) {
+  var g = ctx.createLinearGradient(x, y, x, y + CS);
+  g.addColorStop(0, '#3a4d68'); g.addColorStop(.4, '#2b3a4f'); g.addColorStop(1, '#222f41');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, CS, CS);
+  ctx.fillStyle = 'rgba(255,255,255,.09)';
+  ctx.fillRect(x, y, CS, Math.max(1.5, CS * .055));
+  ctx.fillStyle = 'rgba(0,0,0,.34)';
+  ctx.fillRect(x, y + CS - Math.max(1.5, CS * .06), CS, Math.max(1.5, CS * .06));
+  ctx.strokeStyle = 'rgba(8,12,18,.7)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, y + .5, CS - 1, CS - 1);
+}
+function drawPit(x, y) {
+  ctx.fillStyle = '#04070c';
+  ctx.fillRect(x, y, CS, CS);
+  var g = ctx.createRadialGradient(x + CS / 2, y + CS / 2, CS * .1, x + CS / 2, y + CS / 2, CS * .7);
+  g.addColorStop(0, 'rgba(0,0,0,.9)'); g.addColorStop(1, 'rgba(28,40,56,.55)');
+  ctx.fillStyle = g; ctx.fillRect(x, y, CS, CS);
+  ctx.strokeStyle = 'rgba(60,80,105,.5)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, y + .5, CS - 1, CS - 1);
+}
+function drawCrack(x, y, i) {
+  ctx.strokeStyle = 'rgba(150,175,200,.34)';
+  ctx.lineWidth = Math.max(1, CS * .028);
+  var s = (i * 2654435761) >>> 0;
+  function rnd() { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }
+  for (var k = 0; k < 3; k++) {
+    ctx.beginPath();
+    var px = x + CS * (.15 + rnd() * .2), py = y + CS * (.12 + rnd() * .18);
+    ctx.moveTo(px, py);
+    for (var seg = 0; seg < 3; seg++) {
+      px += CS * (.1 + rnd() * .22); py += CS * (.12 + rnd() * .2);
+      ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(200,120,90,.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + CS * .1 + .5, y + CS * .1 + .5, CS * .8, CS * .8);
+}
+function drawMud(x, y) {
+  ctx.fillStyle = '#3a2e1d';
+  rr(x + CS * .06, y + CS * .06, CS * .88, CS * .88, CS * .16); ctx.fill();
+  ctx.fillStyle = 'rgba(120,95,55,.5)';
+  for (var k = 0; k < 3; k++) {
+    var ph = Math.sin(T * .0014 + k * 2.1) * .5 + .5;
+    ctx.beginPath();
+    ctx.ellipse(x + CS * (.3 + k * .2), y + CS * (.38 + k * .14),
+      CS * (.09 + ph * .035), CS * .045, 0, 0, 6.2832);
+    ctx.fill();
+  }
+}
+function drawVane(x, y, d) {
+  ctx.save();
+  ctx.translate(x + CS / 2, y + CS / 2);
+  ctx.rotate(d * Math.PI / 2);
+  var pulse = (T * .0018) % 1;
+  for (var k = 0; k < 2; k++) {
+    var off = (pulse + k * .5) % 1;
+    ctx.globalAlpha = .28 + .5 * (1 - Math.abs(off - .5) * 2);
+    ctx.strokeStyle = '#4fe3d2';
+    ctx.lineWidth = Math.max(1.6, CS * .07);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    var yy = -CS * .3 + off * CS * .42;
+    ctx.beginPath();
+    ctx.moveTo(-CS * .19, yy + CS * .12);
+    ctx.lineTo(0, yy - CS * .06);
+    ctx.lineTo(CS * .19, yy + CS * .12);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+function drawPad(x, y, pulse) {
+  var r = CS * .3;
+  ctx.strokeStyle = 'rgba(169,123,255,.85)';
+  ctx.lineWidth = Math.max(1.4, CS * .045);
+  ctx.beginPath(); ctx.arc(x + CS / 2, y + CS / 2, r, 0, 6.2832); ctx.stroke();
+  ctx.save();
+  ctx.translate(x + CS / 2, y + CS / 2); ctx.rotate(T * .0022);
+  ctx.strokeStyle = 'rgba(169,123,255,' + (.35 + pulse * .5) + ')';
+  ctx.lineWidth = Math.max(1.2, CS * .05);
+  for (var k = 0; k < 3; k++) {
+    ctx.beginPath();
+    ctx.arc(0, 0, r * .62, k * 2.094, k * 2.094 + .9);
+    ctx.stroke();
+  }
+  ctx.restore();
+  glow('#a97bff', CS * .3 * pulse, function () {
+    ctx.fillStyle = 'rgba(169,123,255,' + (.18 + pulse * .22) + ')';
+    ctx.beginPath(); ctx.arc(x + CS / 2, y + CS / 2, r * .35, 0, 6.2832); ctx.fill();
+  });
+}
+/* ---- springs and their landing pads ----
+   Colour says where you land: yellow always its own pad, blue a random one,
+   red the one you pick. Shape says which is which — a spring is a coil under
+   chevrons, a pad is an open target. */
+/* Each fixed channel gets its own hue as well as its own number, so a deck
+   with several of them stays readable at a glance. */
+var SPRING_COL = { y: '#ffd24a', j: '#ff9f43', k: '#c3e650', l: '#ff7ab8',
+                   b: '#58a6ff', r: '#ff6b6b' };
+
+/* ---- bumper and rotor ----
+   A bumper is a wall that gives the momentum back. A rotor is a vane that
+   moves on a quarter turn every time you ride it, so its state is part of the
+   puzzle — the pips around the rim count how far round it has come. */
+function drawBumper(x, y, pulse) {
+  var mx = x + CS / 2, my = y + CS / 2, r = CS * .33;
+  var g = ctx.createRadialGradient(mx - r * .3, my - r * .3, r * .1, mx, my, r);
+  g.addColorStop(0, '#f3f7fa'); g.addColorStop(.45, '#9fb6cc'); g.addColorStop(1, '#4a6076');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(mx, my, r, 0, 6.2832); ctx.fill();
+  ctx.strokeStyle = 'rgba(12,18,26,.75)'; ctx.lineWidth = Math.max(1, CS * .035);
+  ctx.beginPath(); ctx.arc(mx, my, r, 0, 6.2832); ctx.stroke();
+  glow('#e8f2f6', CS * (.1 + pulse * .18), function () {
+    ctx.strokeStyle = 'rgba(232,242,246,' + (.5 + pulse * .4) + ')';
+    ctx.lineWidth = Math.max(1.2, CS * .045);
+    ctx.beginPath(); ctx.arc(mx, my, r * (.55 + pulse * .12), 0, 6.2832); ctx.stroke();
+  });
+}
+function drawRotor(x, y, face, pulse) {
+  var mx = x + CS / 2, my = y + CS / 2, r = CS * .33;
+  ctx.strokeStyle = 'rgba(169,123,255,.4)';
+  ctx.lineWidth = Math.max(1, CS * .03);
+  ctx.beginPath(); ctx.arc(mx, my, r, 0, 6.2832); ctx.stroke();
+  for (var k = 0; k < 4; k++) {                    // a pip per quarter, the live one lit
+    var a = k * 1.5708 - 1.5708;
+    ctx.fillStyle = k === face ? '#a97bff' : 'rgba(169,123,255,.28)';
+    ctx.beginPath();
+    ctx.arc(mx + Math.cos(a) * r, my + Math.sin(a) * r, CS * (k === face ? .045 : .028), 0, 6.2832);
+    ctx.fill();
+  }
+  ctx.save();
+  ctx.translate(mx, my);
+  ctx.rotate(face * Math.PI / 2);
+  glow('#a97bff', CS * (.14 + pulse * .18), function () {
+    ctx.strokeStyle = '#c4a4ff';
+    ctx.lineWidth = Math.max(1.6, CS * .065);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, CS * .16);
+    ctx.lineTo(0, -CS * .16);
+    ctx.moveTo(-CS * .12, -CS * .04);
+    ctx.lineTo(0, -CS * .18);
+    ctx.lineTo(CS * .12, -CS * .04);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+/* ---- mirrors, keys and locks ----
+   A mirror deflects a quarter turn, but which way depends on how you arrive,
+   so unlike a vane it preserves where you came from. Locks are green like the
+   keys that open them, and stay open once spent. */
+var KEY_COL = '#7ef2a5';
+function drawMirror(x, y, ch, pulse) {
+  var back = ch === '/';
+  var x1 = x + CS * (back ? .18 : .18), y1 = y + CS * (back ? .82 : .18);
+  var x2 = x + CS * .82, y2 = y + CS * (back ? .18 : .82);
+  ctx.strokeStyle = 'rgba(200,225,240,.22)';
+  ctx.lineWidth = Math.max(3, CS * .17);
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  glow('#dff2ff', CS * (.12 + pulse * .16), function () {
+    ctx.strokeStyle = 'rgba(223,242,255,' + (.7 + pulse * .25) + ')';
+    ctx.lineWidth = Math.max(1.4, CS * .055);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  });
+  ctx.strokeStyle = 'rgba(120,160,190,.5)';
+  ctx.lineWidth = Math.max(1, CS * .025);
+  ctx.beginPath();
+  ctx.moveTo(x1 + (back ? 0 : 0), y1); ctx.lineTo(x2, y2);
+  ctx.stroke();
+}
+function drawKey(x, y, pulse) {
+  var mx = x + CS / 2, my = y + CS / 2;
+  glow(KEY_COL, CS * (.2 + pulse * .24), function () {
+    ctx.strokeStyle = KEY_COL;
+    ctx.lineWidth = Math.max(1.5, CS * .06);
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(mx - CS * .08, my - CS * .06, CS * .11, 0, 6.2832); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(mx + CS * .01, my + CS * .02);
+    ctx.lineTo(mx + CS * .18, my + CS * .19);
+    ctx.moveTo(mx + CS * .11, my + CS * .12);
+    ctx.lineTo(mx + CS * .18, my + CS * .05);
+    ctx.stroke();
+  });
+}
+function drawLock(x, y, open, pulse) {
+  if (open) {                                  // spent — a doorway, not a door
+    ctx.strokeStyle = 'rgba(126,242,165,.28)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([CS * .1, CS * .08]);
+    ctx.strokeRect(x + CS * .16 + .5, y + CS * .16 + .5, CS * .68, CS * .68);
+    ctx.setLineDash([]);
+    return;
+  }
+  var g = ctx.createLinearGradient(x, y, x, y + CS);
+  g.addColorStop(0, 'rgba(58,120,84,.85)'); g.addColorStop(1, 'rgba(28,72,50,.85)');
+  ctx.fillStyle = g;
+  rr(x + CS * .07, y + CS * .07, CS * .86, CS * .86, CS * .1); ctx.fill();
+  ctx.strokeStyle = 'rgba(126,242,165,' + (.55 + pulse * .3) + ')';
+  ctx.lineWidth = Math.max(1.3, CS * .05);
+  rr(x + CS * .07, y + CS * .07, CS * .86, CS * .86, CS * .1); ctx.stroke();
+  var mx = x + CS / 2, my = y + CS / 2;
+  ctx.strokeStyle = KEY_COL; ctx.lineWidth = Math.max(1.3, CS * .05);
+  ctx.beginPath(); ctx.arc(mx, my - CS * .1, CS * .11, Math.PI, 0); ctx.stroke();
+  ctx.fillStyle = KEY_COL;
+  rr(mx - CS * .15, my - CS * .02, CS * .3, CS * .22, CS * .05); ctx.fill();
+  ctx.fillStyle = 'rgba(10,20,14,.9)';
+  ctx.beginPath(); ctx.arc(mx, my + CS * .09, CS * .04, 0, 6.2832); ctx.fill();
+}
+
+/* ---- the 100 extended tiles ----
+   One drawer, driven by each tile's `draw` spec, rather than a hundred bespoke
+   painters. A spent tile is drawn as whatever it turned into. */
+function drawExtTile(x, y, i, sp, pulse, worn) {
+  var dw = sp.draw, col = dw.col || '#9fb6cc', rot = dw.rot || 0;
+  if (sp.wear && worn >= sp.wear.max) {          // used up — show what it became
+    if (sp.wear.then === 'void') { drawPit(x, y); return; }
+    drawFloor(x, y, i);
+    if (sp.wear.then === 'wall') drawWall(x, y, i);
+    return;
+  }
+  if (dw.base === 'wall') {
+    drawWall(x, y, i);
+    ctx.fillStyle = 'rgba(6,11,17,.45)';
+    rr(x + CS * .1, y + CS * .1, CS * .8, CS * .8, CS * .12); ctx.fill();
+  } else drawFloor(x, y, i);
+
+  ctx.save();
+  ctx.translate(x + CS / 2, y + CS / 2);
+  ctx.rotate(rot * Math.PI / 2);
+  ctx.strokeStyle = col; ctx.fillStyle = col;
+  ctx.lineWidth = Math.max(1.3, CS * .055);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  var ic = dw.icon;
+  ctx.beginPath();
+  if (ic === 'oneway') {                          // a gate you may pass one way
+    ctx.moveTo(-CS * .2, CS * .1); ctx.lineTo(0, -CS * .12); ctx.lineTo(CS * .2, CS * .1);
+    ctx.moveTo(-CS * .26, CS * .24); ctx.lineTo(CS * .26, CS * .24);
+    ctx.stroke();
+  } else if (ic === 'belt') {
+    for (var b = -1; b <= 1; b++) {
+      ctx.moveTo(-CS * .18, b * CS * .15 + CS * .06);
+      ctx.lineTo(0, b * CS * .15 - CS * .06);
+      ctx.lineTo(CS * .18, b * CS * .15 + CS * .06);
+    }
+    ctx.stroke();
+  } else if (ic === 'corner') {
+    ctx.moveTo(-CS * .2, CS * .2); ctx.lineTo(-CS * .2, -CS * .05);
+    ctx.lineTo(CS * .18, -CS * .05);
+    ctx.moveTo(CS * .04, -CS * .19); ctx.lineTo(CS * .2, -CS * .05); ctx.lineTo(CS * .04, CS * .09);
+    ctx.stroke();
+  } else if (ic === 'vane') {
+    ctx.moveTo(-CS * .2, CS * .12); ctx.lineTo(0, -CS * .14); ctx.lineTo(CS * .2, CS * .12);
+    ctx.stroke();
+  } else if (ic === 'cracks') {
+    for (var k = -1; k <= 1; k++) {
+      ctx.moveTo(k * CS * .16 - CS * .06, -CS * .24);
+      ctx.lineTo(k * CS * .16 + CS * .06, 0);
+      ctx.lineTo(k * CS * .16 - CS * .04, CS * .24);
+    }
+    ctx.stroke();
+  } else if (ic === 'wear') {
+    ctx.moveTo(-CS * .22, -CS * .1); ctx.lineTo(CS * .22, -CS * .1);
+    ctx.moveTo(-CS * .22, CS * .06); ctx.lineTo(CS * .1, CS * .06);
+    ctx.stroke();
+  } else if (ic === 'brake') {
+    ctx.arc(0, 0, CS * .2, 0, 6.2832); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-CS * .1, 0); ctx.lineTo(CS * .1, 0); ctx.stroke();
+  } else if (ic === 'rotor') {
+    ctx.arc(0, 0, CS * .22, -1.2, 2.6); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -CS * .3); ctx.lineTo(0, -CS * .1);
+    ctx.moveTo(-CS * .09, -CS * .19); ctx.lineTo(0, -CS * .31); ctx.lineTo(CS * .09, -CS * .19);
+    ctx.stroke();
+  } else if (ic === 'key') {
+    ctx.arc(-CS * .08, -CS * .05, CS * .1, 0, 6.2832); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, CS * .02); ctx.lineTo(CS * .18, CS * .2);
+    ctx.moveTo(CS * .1, CS * .12); ctx.lineTo(CS * .18, CS * .04);
+    ctx.stroke();
+  } else if (ic === 'lock') {
+    ctx.arc(0, -CS * .1, CS * .11, Math.PI, 0); ctx.stroke();
+    ctx.beginPath(); rr(-CS * .16, -CS * .02, CS * .32, CS * .22, CS * .05); ctx.fill();
+  } else if (ic === 'count') {
+    ctx.arc(0, 0, CS * .21, 0, 6.2832); ctx.stroke();
+  } else if (ic === 'grav') {
+    ctx.moveTo(0, -CS * .22); ctx.lineTo(0, CS * .14);
+    ctx.moveTo(-CS * .12, CS * .02); ctx.lineTo(0, CS * .16); ctx.lineTo(CS * .12, CS * .02);
+    ctx.moveTo(-CS * .2, CS * .26); ctx.lineTo(CS * .2, CS * .26);
+    ctx.stroke();
+  } else if (ic === 'fmud') {
+    ctx.moveTo(-CS * .22, CS * .12);
+    ctx.bezierCurveTo(-CS * .1, -CS * .06, CS * .1, CS * .24, CS * .22, CS * .06);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-CS * .14, -CS * .14); ctx.lineTo(0, -CS * .26); ctx.lineTo(CS * .14, -CS * .14);
+    ctx.stroke();
+  } else if (ic === 'mirror') {
+    ctx.moveTo(-CS * .24, CS * .24); ctx.lineTo(CS * .24, -CS * .24); ctx.stroke();
+  } else if (ic === 'rev') {
+    ctx.moveTo(-CS * .18, -CS * .08); ctx.lineTo(CS * .18, -CS * .08);
+    ctx.moveTo(CS * .06, -CS * .2); ctx.lineTo(CS * .2, -CS * .08); ctx.lineTo(CS * .06, CS * .04);
+    ctx.moveTo(CS * .18, CS * .14); ctx.lineTo(-CS * .18, CS * .14);
+    ctx.moveTo(-CS * .06, CS * .02); ctx.lineTo(-CS * .2, CS * .14); ctx.lineTo(-CS * .06, CS * .26);
+    ctx.stroke();
+  } else if (ic === 'pad' || ic === 'relay') {
+    ctx.arc(0, 0, CS * .26, 0, 6.2832); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, CS * .1, 0, 6.2832); ctx.fill();
+  } else if (ic === 'spring') {
+    for (var s3 = 0; s3 < 3; s3++) {
+      ctx.moveTo(-CS * .16, CS * (.02 + s3 * .08));
+      ctx.lineTo(CS * .16, CS * (.06 + s3 * .08));
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-CS * .16, -CS * .1); ctx.lineTo(0, -CS * .24); ctx.lineTo(CS * .16, -CS * .1);
+    ctx.stroke();
+  } else if (ic === 'blink') {
+    ctx.arc(0, 0, CS * .22, 0, 6.2832 * (.3 + pulse * .7)); ctx.stroke();
+  } else if (ic === 'abump' || ic === 'bump') {
+    ctx.arc(0, 0, CS * .22, 0, 6.2832); ctx.stroke();
+    if (ic === 'abump') {
+      ctx.beginPath();
+      ctx.moveTo(-CS * .3, CS * .3); ctx.lineTo(CS * .04, -CS * .04);
+      ctx.moveTo(CS * .04, -CS * .04); ctx.lineTo(CS * .3, -CS * .06);
+      ctx.stroke();
+    }
+  } else if (ic === 'ocore') {
+    ctx.moveTo(0, -CS * .2); ctx.lineTo(CS * .2, 0); ctx.lineTo(0, CS * .2);
+    ctx.lineTo(-CS * .2, 0); ctx.closePath(); ctx.stroke();
+  } else if (ic === 'slick') {
+    for (var w2 = -1; w2 <= 1; w2++) {
+      ctx.moveTo(-CS * .22, w2 * CS * .12);
+      ctx.bezierCurveTo(-CS * .07, w2 * CS * .12 - CS * .08,
+                        CS * .07, w2 * CS * .12 + CS * .08, CS * .22, w2 * CS * .12);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+  if (dw.pips) {                                  // the family's number
+    ctx.fillStyle = 'rgba(6,11,17,.8)';
+    ctx.beginPath(); ctx.arc(x + CS * .8, y + CS * .8, CS * .13, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = col;
+    ctx.font = '700 ' + Math.round(CS * .18) + 'px ui-sans-serif,system-ui,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(dw.pips), x + CS * .8, y + CS * .81);
+    ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  }
+}
+
+/* A number painted on a yellow spring and on the pad it is tied to. */
+function drawTag(mx, my, col, n) {
+  if (!n) return;
+  ctx.fillStyle = 'rgba(6,11,17,.85)';
+  ctx.beginPath(); ctx.arc(mx, my, CS * .145, 0, 6.2832); ctx.fill();
+  ctx.strokeStyle = SPRING_COL[col]; ctx.lineWidth = Math.max(1, CS * .022);
+  ctx.beginPath(); ctx.arc(mx, my, CS * .145, 0, 6.2832); ctx.stroke();
+  ctx.fillStyle = SPRING_COL[col];
+  ctx.font = '700 ' + Math.round(CS * .19) + 'px ui-sans-serif,system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(n), mx, my + CS * .008);
+  ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+}
+function drawSpring(x, y, col, pulse, tag) {
+  var c = SPRING_COL[col], mx = x + CS / 2, my = y + CS / 2;
+  ctx.fillStyle = 'rgba(10,16,24,.55)';
+  rr(x + CS * .12, y + CS * .12, CS * .76, CS * .76, CS * .16); ctx.fill();
+  ctx.strokeStyle = c; ctx.globalAlpha = .5;
+  ctx.lineWidth = Math.max(1.2, CS * .04);
+  rr(x + CS * .12, y + CS * .12, CS * .76, CS * .76, CS * .16); ctx.stroke();
+  ctx.globalAlpha = 1;
+  // the coil, compressing and releasing
+  var squash = .5 + .5 * Math.sin(T * .005);
+  ctx.strokeStyle = c;
+  ctx.lineWidth = Math.max(1.3, CS * .05);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  var top = my + CS * (.02 - squash * .1), gap = CS * .085;
+  for (var k = 0; k < 3; k++) {
+    ctx.moveTo(mx - CS * .17, top + k * gap);
+    ctx.lineTo(mx + CS * .17, top + k * gap + gap * .55);
+  }
+  ctx.stroke();
+  // chevrons showing the throw
+  glow(c, CS * (.16 + pulse * .2), function () {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = Math.max(1.5, CS * .06);
+    ctx.lineJoin = 'round';
+    for (var k2 = 0; k2 < 2; k2++) {
+      ctx.globalAlpha = k2 ? .45 : .9;
+      var yy = my - CS * (.16 + k2 * .13) - squash * CS * .05;
+      ctx.beginPath();
+      ctx.moveTo(mx - CS * .16, yy + CS * .08);
+      ctx.lineTo(mx, yy - CS * .05);
+      ctx.lineTo(mx + CS * .16, yy + CS * .08);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  });
+  drawTag(x + CS * .77, y + CS * .77, col, tag);
+}
+function drawLandPad(x, y, col, pulse, tag) {
+  var c = SPRING_COL[col], mx = x + CS / 2, my = y + CS / 2, r = CS * .32;
+  ctx.strokeStyle = c; ctx.globalAlpha = .3;
+  ctx.lineWidth = Math.max(1.1, CS * .035);
+  ctx.setLineDash([CS * .1, CS * .07]);
+  ctx.beginPath(); ctx.arc(mx, my, r, 0, 6.2832); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = .75;
+  ctx.beginPath(); ctx.arc(mx, my, r * (.42 + pulse * .12), 0, 6.2832); ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = c; ctx.lineWidth = Math.max(1, CS * .03);
+  for (var k = 0; k < 4; k++) {                       // crosshair ticks
+    var a = k * 1.5708;
+    ctx.beginPath();
+    ctx.moveTo(mx + Math.cos(a) * r * .72, my + Math.sin(a) * r * .72);
+    ctx.lineTo(mx + Math.cos(a) * r, my + Math.sin(a) * r);
+    ctx.stroke();
+  }
+  ctx.fillStyle = c; ctx.globalAlpha = .35 + pulse * .3;
+  ctx.beginPath(); ctx.arc(mx, my, CS * .07, 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 1;
+  drawTag(mx, my, col, tag);
+}
+/* The red-spring prompt: number every pad you could come down on. */
+function drawChooser(pulse) {
+  var pads = awaitPick.pads;
+  for (var i = 0; i < pads.length; i++) {
+    var mx = cx(pads[i]), my = cy(pads[i]);
+    var hot = i === pickHot;
+    glow('#ff6b6b', CS * (.2 + pulse * .3), function () {
+      ctx.strokeStyle = hot ? '#fff' : '#ff6b6b';
+      ctx.lineWidth = Math.max(1.8, CS * .07);
+      ctx.beginPath(); ctx.arc(mx, my, CS * (.36 + pulse * .04), 0, 6.2832); ctx.stroke();
+    });
+    ctx.fillStyle = 'rgba(46,14,14,.9)';
+    ctx.beginPath(); ctx.arc(mx, my, CS * .2, 0, 6.2832); ctx.fill();
+    ctx.fillStyle = hot ? '#fff' : '#ffd7d7';
+    ctx.font = '600 ' + Math.round(CS * .3) + 'px ui-sans-serif,system-ui,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(i + 1), mx, my + CS * .01);
+  }
+  ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+}
+
+function drawButton(x, y) {
+  ctx.fillStyle = '#243447';
+  ctx.beginPath(); ctx.arc(x + CS / 2, y + CS / 2, CS * .3, 0, 6.2832); ctx.fill();
+  ctx.strokeStyle = V.gates ? '#ffc65c' : '#5d7691';
+  ctx.lineWidth = Math.max(1.4, CS * .05);
+  ctx.beginPath(); ctx.arc(x + CS / 2, y + CS / 2, CS * .3, 0, 6.2832); ctx.stroke();
+  ctx.fillStyle = V.gates ? 'rgba(255,198,92,.9)' : 'rgba(93,118,145,.75)';
+  ctx.beginPath(); ctx.arc(x + CS / 2, y + CS / 2, CS * .13, 0, 6.2832); ctx.fill();
+}
+function drawGate(x, y, open, pulse) {
+  if (open) {
+    ctx.strokeStyle = 'rgba(79,227,210,.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([CS * .1, CS * .08]);
+    ctx.strokeRect(x + CS * .16 + .5, y + CS * .16 + .5, CS * .68, CS * .68);
+    ctx.setLineDash([]);
+    return;
+  }
+  var g = ctx.createLinearGradient(x, y, x, y + CS);
+  g.addColorStop(0, 'rgba(255,107,107,.5)'); g.addColorStop(1, 'rgba(180,50,60,.4)');
+  ctx.fillStyle = g;
+  rr(x + CS * .07, y + CS * .07, CS * .86, CS * .86, CS * .1); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,140,140,' + (.6 + pulse * .3) + ')';
+  ctx.lineWidth = Math.max(1.3, CS * .05);
+  rr(x + CS * .07, y + CS * .07, CS * .86, CS * .86, CS * .1); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,160,160,.4)';
+  ctx.lineWidth = Math.max(1, CS * .03);
+  for (var k = 1; k < 4; k++) {
+    ctx.beginPath();
+    ctx.moveTo(x + CS * .07, y + CS * (.07 + k * .215));
+    ctx.lineTo(x + CS * .93, y + CS * (.07 + k * .215));
+    ctx.stroke();
+  }
+}
+function drawExit(x, y, open, pulse) {
+  var mx = x + CS / 2, my = y + CS / 2;
+  if (open) {
+    glow('#4fe3d2', CS * (.28 + pulse * .3), function () {
+      ctx.strokeStyle = '#4fe3d2';
+      ctx.lineWidth = Math.max(1.8, CS * .07);
+      ctx.beginPath(); ctx.arc(mx, my, CS * .3, 0, 6.2832); ctx.stroke();
+    });
+    ctx.save(); ctx.translate(mx, my); ctx.rotate(-T * .0016);
+    ctx.strokeStyle = 'rgba(79,227,210,.8)'; ctx.lineWidth = Math.max(1.3, CS * .05);
+    for (var k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(0, 0, CS * (.16 + pulse * .04), k * 1.5708, k * 1.5708 + .8); ctx.stroke(); }
+    ctx.restore();
+  } else {
+    ctx.strokeStyle = 'rgba(90,112,134,.75)';
+    ctx.lineWidth = Math.max(1.5, CS * .06);
+    ctx.setLineDash([CS * .09, CS * .07]);
+    ctx.beginPath(); ctx.arc(mx, my, CS * .3, 0, 6.2832); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(90,112,134,.5)';
+    ctx.beginPath(); ctx.arc(mx, my, CS * .08, 0, 6.2832); ctx.fill();
+  }
+}
+function drawCore(x, y, pulse) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(T * .0018);
+  glow('#ffc65c', CS * (.22 + pulse * .26), function () {
+    ctx.fillStyle = '#ffc65c';
+    ctx.beginPath();
+    var r = CS * (.19 + pulse * .022);
+    ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0);
+    ctx.closePath(); ctx.fill();
+  });
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  ctx.beginPath();
+  var r2 = CS * .075;
+  ctx.moveTo(0, -r2); ctx.lineTo(r2, 0); ctx.lineTo(0, r2); ctx.lineTo(-r2, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function drawCrate(x, y, sink) {
+  var s = CS * (.76 - sink * .34);
+  ctx.save();
+  ctx.globalAlpha = 1 - sink * .55;
+  var g = ctx.createLinearGradient(x - s / 2, y - s / 2, x - s / 2, y + s / 2);
+  g.addColorStop(0, '#8a5a38'); g.addColorStop(1, '#5d3c25');
+  ctx.fillStyle = g;
+  rr(x - s / 2, y - s / 2, s, s, s * .13); ctx.fill();
+  ctx.strokeStyle = 'rgba(220,160,110,.55)'; ctx.lineWidth = Math.max(1, CS * .035);
+  rr(x - s / 2, y - s / 2, s, s, s * .13); ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = Math.max(1, CS * .03);
+  ctx.beginPath();
+  ctx.moveTo(x - s / 2, y - s / 2); ctx.lineTo(x + s / 2, y + s / 2);
+  ctx.moveTo(x + s / 2, y - s / 2); ctx.lineTo(x - s / 2, y + s / 2);
+  ctx.stroke();
+  ctx.restore();
+}
+function drawDrone(x, y, scale, pulse) {
+  var s = CS * .58 * scale;
+  glow('#4fe3d2', CS * (.3 + pulse * .18), function () {
+    var g = ctx.createLinearGradient(x, y - s / 2, x, y + s / 2);
+    g.addColorStop(0, '#8affee'); g.addColorStop(1, '#2ba99b');
+    ctx.fillStyle = g;
+    rr(x - s / 2, y - s / 2, s, s, s * .3); ctx.fill();
+  });
+  ctx.fillStyle = '#07131a';
+  rr(x - s * .26, y - s * .26, s * .52, s * .52, s * .17); ctx.fill();
+  ctx.fillStyle = '#8affee';
+  ctx.beginPath(); ctx.arc(x, y, s * (.12 + pulse * .03), 0, 6.2832); ctx.fill();
+}
+function drawNudge(x, y, d) {
+  var a = Math.min(1, nudgeT / 300) * .85;
+  var dx = GLIDE.DX[d], dy = GLIDE.DY[d];
+  ctx.save();
+  ctx.globalAlpha = a;
+  ctx.translate(x + dx * CS * .72, y + dy * CS * .72);
+  ctx.rotate(Math.atan2(dy, dx) + Math.PI / 2);
+  ctx.strokeStyle = '#ffc65c';
+  ctx.lineWidth = Math.max(2, CS * .08);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-CS * .2, CS * .12); ctx.lineTo(0, -CS * .14); ctx.lineTo(CS * .2, CS * .12);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ------------------------------------------------------------------ input
+window.addEventListener('keydown', function (e) {
+  var k = e.key;
+  if (view === 'play') {
+    if ($('win').classList.contains('on')) {
+      // a sandbox test run has no "next deck" — Enter goes back to the editor
+      if (k === 'Enter' || k === ' ') { e.preventDefault(); $(sandPlay ? 'wMenu' : 'wNext').click(); }
+      return;
+    }
+    if (awaitPick) {                       // a red spring is waiting on you
+      if (k >= '1' && k <= '9') { e.preventDefault(); land(+k - 1); return; }
+      if (k === 'h' || k === 'H') { e.preventDefault(); nudge(); return; }
+      if (k === 'z' || k === 'Z' || k === 'u' || k === 'U') { e.preventDefault(); undo(); return; }
+      if (k === 'r' || k === 'R') { e.preventDefault(); restart(); return; }
+      if (k === 'Escape') { e.preventDefault(); leavePlay(); return; }
+      if (k.indexOf('Arrow') === 0) e.preventDefault();
+      return;
+    }
+    var d = -1;
+    if (k === 'ArrowUp' || k === 'w' || k === 'W') d = 0;
+    else if (k === 'ArrowRight' || k === 'd' || k === 'D') d = 1;
+    else if (k === 'ArrowDown' || k === 's' || k === 'S') d = 2;
+    else if (k === 'ArrowLeft' || k === 'a' || k === 'A') d = 3;
+    if (d >= 0) { e.preventDefault(); tryMove(d); return; }
+    if (k === 'z' || k === 'Z' || k === 'u' || k === 'U') { e.preventDefault(); undo(); }
+    else if (k === 'r' || k === 'R') { e.preventDefault(); restart(); }
+    else if (k === 'h' || k === 'H') { e.preventDefault(); nudge(); }
+    else if (k === 'Escape') { e.preventDefault(); leavePlay(); }
+  } else if (view === 'sandbox') {
+    // don't steal keys while a modal input has focus
+    var modal = $('mSave').classList.contains('on') || $('mOpen').classList.contains('on');
+    if (k === 'Escape') { e.preventDefault(); if (modal) closeModals(); else show('title'); }
+    else if (!modal && (k === 'z' || k === 'Z')) { e.preventDefault(); edUndo(); }
+  } else if (view === 'select' && k === 'Escape') { show('title'); }
+  else if (view === 'title') {
+    if ($('mStats').classList.contains('on')) {          // a modal owns the keys
+      if (k === 'Escape' || k === 'Enter' || k === ' ') { e.preventDefault(); closeModals(); }
+      return;
+    }
+    if (k === 'Enter' || k === ' ') { e.preventDefault(); $('bPlay').click(); }
+  }
+});
+
+/* swipe / drag */
+var pt = null;
+function down(e) { var t = e.touches ? e.touches[0] : e; pt = { x: t.clientX, y: t.clientY }; }
+function up(e) {
+  if (!pt) return;
+  var t = e.changedTouches ? e.changedTouches[0] : e;
+  var dx = t.clientX - pt.x, dy = t.clientY - pt.y;
+  pt = null;
+  if (Math.abs(dx) < 22 && Math.abs(dy) < 22) {
+    if (awaitPick) padAt(t.clientX, t.clientY);   // a tap picks a landing pad
+    return;
+  }
+  if (awaitPick) return;                          // no sliding until you choose
+  tryMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
+}
+/* Which numbered pad did that tap land on? */
+function padAt(clx, cly) {
+  var r = cv.getBoundingClientRect();
+  var x = Math.floor((clx - r.left) / CS), y = Math.floor((cly - r.top) / CS);
+  if (x < 0 || y < 0 || x >= L.w || y >= L.h) return;
+  var i = awaitPick.pads.indexOf(y * L.w + x);
+  if (i >= 0) land(i); else SFX.bad();
+}
+function padHover(e) {
+  if (!awaitPick || !L) return;
+  var r = cv.getBoundingClientRect();
+  var x = Math.floor((e.clientX - r.left) / CS), y = Math.floor((e.clientY - r.top) / CS);
+  pickHot = awaitPick.pads.indexOf(y * L.w + x);
+}
+var stage = $('stage');
+stage.addEventListener('touchstart', down, { passive: true });
+stage.addEventListener('touchend', up, { passive: true });
+stage.addEventListener('mousedown', down);
+stage.addEventListener('mousemove', padHover);
+window.addEventListener('mouseup', function (e) { if (view === 'play') up(e); });
+
+/* optimal-move nudge, solved live from where you are standing */
+function nudge() {
+  if (anim || won) return;
+  if (awaitPick) {                       // chooser is open — which pad is best?
+    var best = -1, bv = Infinity;
+    for (var k = 0; k < awaitPick.pads.length; k++) {
+      var r2 = solveFrom(L, GLIDE.resolve(L, st, k), 8000);
+      var v = (r2.big || r2.par === null) ? Infinity : r2.par;
+      if (v < bv) { bv = v; best = k; }
+    }
+    if (best >= 0 && bv < Infinity) { pickHot = best; blip(700, .1, 'sine', .05); }
+    else SFX.bad();
+    return;
+  }
+  var r = solveFrom(L, st, 12000);
+  if (r.par === null) r = solveFrom(L, st, 12000, true);   // no safe line? best hope
+  // No arrow to give: either the deck is too tangled to search cheaply, or
+  // there is genuinely no route left. Say so rather than ignoring the press.
+  if (r.big) { SFX.bad(); return; }
+  if (r.par === null) { SFX.bad(); showStuck(); return; }
+  nudgeDir = r.dir; nudgePad = r.pad; nudgeT = 1400;
+  blip(700, .1, 'sine', .05);
+}
+
+/* ==================================================================
+   SANDBOX — draw your own deck, prove it, play it.
+   The editor renders with the very same tile art the game uses: it
+   borrows the draw helpers by swapping the module globals they read
+   (ctx / CS / L / V) for the duration of one paint.
+   ================================================================== */
+var ecv = $('ecv'), ectx = ecv.getContext('2d');
+var ECS = 34, eDPR = 1, eHover = -1, painting = false, palIcons = [], palTick = 0;
+/* The editor canvas fills the stage and the board is drawn into it at a zoom
+   and an offset, so a big deck can be panned around instead of shrinking. */
+var eFitCS = 34, eZoom = 1, ePanX = 0, ePanY = 0, ePanning = null, ePinch = null;
+function edCS() { return Math.max(5, eFitCS * eZoom); }
+
+var TOOLS = [
+  ['.', 'Floor'], ['#', 'Wall'], ['0', 'Void'], ['~', 'Crack'], ['m', 'Sludge'],
+  ['^', 'Vane'], ['>', 'Vane'], ['v', 'Vane'], ['<', 'Vane'],
+  ['t', 'Relay'], ['!', 'Button'], ['G', 'Shut'], ['g', 'Open'],
+  ['o', 'Bumper'], ['+', 'Rotor'], ['/', 'Mirror'], ['\\', 'Mirror'],
+  ['%', 'Key'], ['=', 'Lock'],
+  ['Y', 'Fix 1'], ['y', 'Pad 1'], ['J', 'Fix 2'], ['j', 'Pad 2'],
+  ['K', 'Fix 3'], ['k', 'Pad 3'], ['L', 'Fix 4'], ['l', 'Pad 4'],
+  ['B', 'Random'], ['b', 'Pad B'], ['R', 'Choose'], ['r', 'Pad R'],
+  ['E', 'Exit'], ['*', 'Core'], ['x', 'Crate'], ['@', 'Start']
+];
+var TIP = {
+  '.': 'Bare plating — you slide straight over it',
+  '#': 'Wall — the only thing that stops a slide',
+  '0': 'Void — blocks you; a crate can plug it',
+  '~': 'Cracked plate — collapses the moment you leave it',
+  'm': 'Sludge — kills your momentum, you stop here',
+  '^': 'Vane — turns your slide upward',
+  '>': 'Vane — turns your slide right',
+  'v': 'Vane — turns your slide down',
+  '<': 'Vane — turns your slide left',
+  't': 'Relay pad — pads pair off in reading order',
+  '!': 'Button — flips every gate on the deck',
+  'G': 'Gate, shut at rest',
+  'g': 'Gate, open at rest',
+  'o': 'Bumper — you never enter it, you bounce straight back and keep sliding',
+  '+': 'Rotor — steers you like a vane, then turns a quarter clockwise for next time',
+  '/': 'Mirror — deflects a quarter turn; which way depends on how you arrive',
+  '\\': 'Mirror — the other diagonal',
+  '%': 'Key — pick it up, spend it on one lock',
+  '=': 'Lock — solid until you spend a key, then open for good',
+  'Y': 'Fixed spring 1 — always throws you to pad 1',
+  'y': 'Pad 1 — where fixed spring 1 puts you down',
+  'J': 'Fixed spring 2 — always throws you to pad 2',
+  'j': 'Pad 2 — where fixed spring 2 puts you down',
+  'K': 'Fixed spring 3 — always throws you to pad 3',
+  'k': 'Pad 3 — where fixed spring 3 puts you down',
+  'L': 'Fixed spring 4 — always throws you to pad 4',
+  'l': 'Pad 4 — where fixed spring 4 puts you down',
+  'B': 'Blue spring — a real coin toss between the blue pads, so give every one of them a way out',
+  'b': 'Blue pad — one of the spots a blue spring may drop you',
+  'R': 'Red spring — throws you to whichever red pad you pick',
+  'r': 'Red pad — a landing spot you get to choose',
+  'E': 'Exit — inert until every core is taken',
+  '*': 'Core — collect them all',
+  'x': 'Crate — shove it one cell at a time',
+  '@': 'Start drone — exactly one per deck'
+};
+
+var ed = { w: 9, h: 8, g: [], name: '', tool: '#', hist: [], par: null, reach: null };
+
+// ---- board plumbing ------------------------------------------------
+/* Lend the game's renderer to another canvas, then put everything back. */
+function withBoard(c2d, cs, fakeL, fn) {
+  var oc = ctx, oCS = CS, oL = L, oV = V;
+  ctx = c2d; CS = cs; L = fakeL;
+  V = { cores: 0, broken: [], filled: [], gates: 0 };
+  try { fn(); } finally { ctx = oc; CS = oCS; L = oL; V = oV; }
+}
+var edPairs = {};                     // yellow spring/pad numbering, editor side
+function drawTile(x, y, i, ch, pulse) {
+  if (ch === '#') { drawWall(x, y, i); return; }
+  if (ch === '0') { drawPit(x, y); return; }
+  drawFloor(x, y, i);
+  if (ch === '~') drawCrack(x, y, i);
+  else if (ch === 'm') drawMud(x, y);
+  else if (GLIDE.ARROW[ch] !== undefined) drawVane(x, y, GLIDE.ARROW[ch]);
+  else if (ch === 't') drawPad(x, y, pulse);
+  else if (ch === '!') drawButton(x, y);
+  else if (ch === 'G' || ch === 'g') drawGate(x, y, ch === 'g', pulse);
+  else if (ch === 'o') drawBumper(x, y, pulse);
+  else if (ch === '+') drawRotor(x, y, 0, pulse);
+  else if (GLIDE.EXTBY[ch]) drawExtTile(x, y, i, GLIDE.EXTBY[ch], pulse, 0);
+  else if (GLIDE.MIRROR[ch]) drawMirror(x, y, ch, pulse);
+  else if (ch === '%') drawKey(x, y, pulse);
+  else if (ch === '=') drawLock(x, y, 0, pulse);
+  else if (GLIDE.SPRING[ch]) drawSpring(x, y, GLIDE.SPRING[ch], pulse, edPairs[i]);
+  else if (GLIDE.PAD[ch]) drawLandPad(x, y, ch, pulse, edPairs[i]);
+  else if (ch === 'E') drawExit(x, y, true, pulse);
+  else if (ch === '*') drawCore(x + CS / 2, y + CS / 2, pulse);
+  else if (ch === 'x') drawCrate(x + CS / 2, y + CS / 2, 0);
+  else if (ch === '@') drawDrone(x + CS / 2, y + CS / 2, 1, pulse);
+}
+
+function edResize() {
+  var s = $('estage');
+  var aw = s.clientWidth - 22, ah = s.clientHeight - 22;
+  if (aw <= 0 || ah <= 0) return;
+  eFitCS = Math.min(64, Math.max(9, Math.floor(Math.min(aw / ed.w, ah / ed.h))));
+  eDPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  ecv.width = Math.round(aw * eDPR); ecv.height = Math.round(ah * eDPR);
+  ecv.style.width = aw + 'px'; ecv.style.height = ah + 'px';
+  edClamp();
+}
+/* Keep the board inside the view: centred when it fits, pinned to the edges
+   when it does not, so you can never lose the deck off-screen. */
+function edClamp() {
+  var cs = edCS(), bw = cs * ed.w, bh = cs * ed.h;
+  var vw = ecv.clientWidth || 1, vh = ecv.clientHeight || 1;
+  ePanX = bw <= vw ? (vw - bw) / 2 : Math.min(0, Math.max(vw - bw, ePanX));
+  ePanY = bh <= vh ? (vh - bh) / 2 : Math.min(0, Math.max(vh - bh, ePanY));
+  $('eZv').textContent = Math.round(eZoom * 100) + '%';
+}
+function edFit() { eZoom = 1; edClamp(); }
+/* Zoom about a point, so whatever is under the cursor stays under it. */
+function edZoomAt(f, clx, cly) {
+  var r = ecv.getBoundingClientRect();
+  var mx = clx === undefined ? ecv.clientWidth / 2 : clx - r.left;
+  var my = cly === undefined ? ecv.clientHeight / 2 : cly - r.top;
+  var cs0 = edCS(), bx = (mx - ePanX) / cs0, by = (my - ePanY) / cs0;
+  eZoom = Math.max(.3, Math.min(4, eZoom * f));
+  var cs1 = edCS();
+  ePanX = mx - bx * cs1; ePanY = my - by * cs1;
+  edClamp();
+}
+
+function edDraw() {
+  var pulse = .5 + .5 * Math.sin(T * .0032);
+  var cs = edCS();
+  edPairs = GLIDE.pairLabels(ed.g.join(''));   // show which yellow feeds which
+  withBoard(ectx, cs, { w: ed.w, h: ed.h }, function () {
+    ectx.setTransform(eDPR, 0, 0, eDPR, 0, 0);
+    ectx.clearRect(0, 0, ecv.width, ecv.height);
+    ectx.save();
+    ectx.translate(Math.round(ePanX), Math.round(ePanY));
+    for (var i = 0; i < ed.w * ed.h; i++)
+      drawTile((i % ed.w) * cs, ((i / ed.w) | 0) * cs, i, ed.g[i], pulse);
+    // after a failed Verify: light up every tile a slide can actually end on,
+    // and black out the rest — usually the answer is visible at a glance
+    if (ed.reach) {
+      for (var r = 0; r < ed.w * ed.h; r++) {
+        if (ed.g[r] === '#') continue;
+        var rx = (r % ed.w) * cs, ry = ((r / ed.w) | 0) * cs;
+        ectx.fillStyle = ed.reach[r] ? 'rgba(79,227,210,.15)' : 'rgba(4,8,13,.66)';
+        ectx.fillRect(rx, ry, cs, cs);
+      }
+    }
+    if (eHover >= 0) {
+      ectx.strokeStyle = 'rgba(79,227,210,.75)';
+      ectx.lineWidth = Math.max(1.5, cs * .055);
+      ectx.strokeRect((eHover % ed.w) * cs + 1.5, ((eHover / ed.w) | 0) * cs + 1.5, cs - 3, cs - 3);
+    }
+    ectx.restore();
+  });
+  edPairs = {};                       // palette icons are single tiles, never a pair
+  if ((palTick++ & 3) === 0) {
+    for (var k = 0; k < palIcons.length; k++) {
+      (function (ic) {
+        withBoard(ic.ctx, 26, { w: 1, h: 1 }, function () {
+          ic.ctx.setTransform(ic.dpr, 0, 0, ic.dpr, 0, 0);
+          ic.ctx.clearRect(0, 0, 26, 26);
+          drawTile(0, 0, 0, ic.ch, pulse);
+        });
+      })(palIcons[k]);
+    }
+  }
+}
+
+// ---- palette -------------------------------------------------------
+/* 123 tiles will not fit in one strip, so the palette is grouped by family
+   and you pick a family from the selector above it. */
+function tipFor(ch) {
+  if (TIP[ch]) return TIP[ch];
+  var sp = GLIDE.EXTBY[ch];
+  return sp ? sp.tip : '';
+}
+function palGroups() {
+  var out = ['Basics'], seen = {};
+  GLIDE.EXT.forEach(function (s) {
+    if (!seen[s.family]) { seen[s.family] = 1; out.push(s.family); }
+  });
+  return out;
+}
+function toolsFor(group) {
+  if (group === 'Basics') return TOOLS;
+  return GLIDE.EXT.filter(function (s) { return s.family === group; })
+    .map(function (s) {
+      var short = s.name.replace(group, '').replace(/^[\s—-]+/, '') || s.name;
+      return [s.g, short.length > 9 ? short.slice(0, 9) : short];
+    });
+}
+function buildGroupSel() {
+  var sel = $('ePalGroup');
+  sel.innerHTML = '';
+  palGroups().forEach(function (g) {
+    var o = document.createElement('option');
+    o.value = g;
+    o.textContent = g === 'Basics' ? 'Basics (' + TOOLS.length + ')'
+      : g + ' (' + toolsFor(g).length + ')';
+    sel.appendChild(o);
+  });
+  sel.onchange = function () { buildPal(sel.value); };
+}
+function buildPal(group) {
+  var p = $('ePal');
+  p.innerHTML = ''; palIcons = [];
+  toolsFor(group || 'Basics').forEach(function (t) {
+    var b = document.createElement('button');
+    b.className = 'tool'; b.setAttribute('data-ch', t[0]); b.title = tipFor(t[0]) || t[1];
+    var c = document.createElement('canvas');
+    var d = Math.min(window.devicePixelRatio || 1, 2.5);
+    c.width = Math.round(26 * d); c.height = Math.round(26 * d);
+    var sp = document.createElement('span'); sp.textContent = t[1];
+    b.appendChild(c); b.appendChild(sp);
+    b.onclick = function () { ed.tool = t[0]; syncPal(); emsg(tipFor(t[0])); };
+    p.appendChild(b);
+    palIcons.push({ ch: t[0], ctx: c.getContext('2d'), dpr: d });
+  });
+  syncPal();
+}
+function syncPal() {
+  var k = $('ePal').children;
+  for (var i = 0; i < k.length; i++)
+    k[i].classList.toggle('sel', k[i].getAttribute('data-ch') === ed.tool);
+}
+function emsg(t, cls) {
+  var e = $('eMsg');
+  e.textContent = t || '';
+  e.className = 'emsg' + (cls ? ' ' + cls : '');
+}
+
+// ---- editing -------------------------------------------------------
+function edBlank(w, h) {
+  var g = [];
+  for (var y = 0; y < h; y++) for (var x = 0; x < w; x++)
+    g.push(x === 0 || y === 0 || x === w - 1 || y === h - 1 ? '#' : '.');
+  return g;
+}
+function edNew() {
+  ed.w = 9; ed.h = 8; ed.g = edBlank(9, 8);
+  ed.g[1 * 9 + 1] = '@'; ed.g[6 * 9 + 7] = 'E';
+  ed.name = ''; ed.hist = []; ed.par = null; ed.reach = null;
+  $('eName').textContent = 'Untitled deck';
+  $('eUndo').disabled = true;
+  edSizeLabels(); edResize();
+  emsg('Pick a tile, then paint the deck. Verify proves it solvable.');
+}
+function edPush() {
+  ed.hist.push(ed.g.slice());
+  if (ed.hist.length > 60) ed.hist.shift();
+  $('eUndo').disabled = false;
+}
+function edUndo() {
+  if (!ed.hist.length) return;
+  ed.g = ed.hist.pop(); ed.par = null; ed.reach = null;       // a resize clears the stack, so shapes always agree
+  $('eUndo').disabled = !ed.hist.length;
+  emsg(''); blip(240, .07, 'sine', .04);
+}
+function edAt(e) {
+  var t = e.touches ? e.touches[0] : e, r = ecv.getBoundingClientRect(), cs = edCS();
+  var x = Math.floor((t.clientX - r.left - ePanX) / cs);
+  var y = Math.floor((t.clientY - r.top - ePanY) / cs);
+  if (x < 0 || y < 0 || x >= ed.w || y >= ed.h) return -1;
+  return y * ed.w + x;
+}
+function edPaint(i) {
+  if (i < 0 || ed.g[i] === ed.tool) return;
+  if (ed.tool === '@') { var o = ed.g.indexOf('@'); if (o >= 0) ed.g[o] = '.'; }
+  ed.g[i] = ed.tool; ed.par = null; ed.reach = null;
+  blip(ed.tool === '#' ? 210 : 320, .03, 'square', .018);
+}
+function edSizeLabels() {
+  $('eWv').textContent = ed.w + ' W';
+  $('eHv').textContent = ed.h + ' H';
+}
+/* ---- whole-board transforms ---- */
+var ROT_CW = { '^': '>', '>': 'v', 'v': '<', '<': '^' };
+var FLIP_H = { '<': '>', '>': '<' };
+function edRotate() {
+  var nw = ed.h, nh = ed.w, g = new Array(nw * nh);
+  for (var y = 0; y < ed.h; y++) for (var x = 0; x < ed.w; x++) {
+    var c = ed.g[y * ed.w + x];
+    g[x * nw + (ed.h - 1 - y)] = ROT_CW[c] || c;      // vanes turn with the deck
+  }
+  ed.w = nw; ed.h = nh; ed.g = g; ed.par = null; ed.reach = null;
+  ed.hist = []; $('eUndo').disabled = true;           // shapes don't mix in one stack
+  edSizeLabels(); edResize(); edFit();
+  emsg('Rotated a quarter turn.'); blip(360, .05, 'square', .02);
+}
+function edMirror() {
+  edPush();
+  var g = new Array(ed.w * ed.h);
+  for (var y = 0; y < ed.h; y++) for (var x = 0; x < ed.w; x++) {
+    var c = ed.g[y * ed.w + x];
+    g[y * ed.w + (ed.w - 1 - x)] = FLIP_H[c] || c;
+  }
+  ed.g = g; ed.par = null; ed.reach = null;
+  emsg('Mirrored left to right.'); blip(360, .05, 'square', .02);
+}
+
+/* Resize keeps the interior and redraws a clean wall frame. */
+function edSize(dw, dh) {
+  var nw = Math.max(5, Math.min(24, ed.w + dw)), nh = Math.max(5, Math.min(24, ed.h + dh));
+  if (nw === ed.w && nh === ed.h) return;
+  var g = [];
+  for (var y = 0; y < nh; y++) for (var x = 0; x < nw; x++) {
+    var edge = x === 0 || y === 0 || x === nw - 1 || y === nh - 1;
+    var inOld = x > 0 && y > 0 && x < ed.w - 1 && y < ed.h - 1;
+    g.push(edge ? '#' : (inOld ? ed.g[y * ed.w + x] : '.'));
+  }
+  ed.hist = [];                    // grids of two shapes don't mix in one stack
+  $('eUndo').disabled = true;
+  ed.w = nw; ed.h = nh; ed.g = g; ed.par = null; ed.reach = null;
+  edSizeLabels(); edResize(); emsg('');
+}
+
+// ---- proving -------------------------------------------------------
+function edLevel(par) {
+  return { id: 0, w: ed.w, h: ed.h, grid: ed.g.join(''), par: par || 0,
+           name: ed.name || 'Untitled deck', tierName: 'Sandbox' };
+}
+function edCheck() {
+  var g = ed.g.join('');
+  var starts = (g.match(/@/g) || []).length;
+  if (starts === 0) return { err: 'No start drone — paint one @ tile.' };
+  if (starts > 1) return { err: 'More than one start drone.' };
+  if (g.indexOf('E') < 0) return { err: 'No exit — every deck needs one.' };
+  if ((g.match(/t/g) || []).length % 2) return { err: 'Relay pads work in pairs; one is unpaired.' };
+  var cnt = function (ch) { return g.split(ch).length - 1; };
+  // Every spring needs somewhere to put you, and every pad needs a spring.
+  var pairs = [['Y', 'y', 'Fixed spring 1', 'pad 1'], ['J', 'j', 'Fixed spring 2', 'pad 2'],
+               ['K', 'k', 'Fixed spring 3', 'pad 3'], ['L', 'l', 'Fixed spring 4', 'pad 4'],
+               ['B', 'b', 'A blue spring', 'a blue pad'], ['R', 'r', 'A red spring', 'a red pad']];
+  for (var i = 0; i < pairs.length; i++) {
+    var s = cnt(pairs[i][0]), p = cnt(pairs[i][1]);
+    if (s && !p) return { err: pairs[i][2] + ' has no ' + pairs[i][3] + ' to throw you to.' };
+    if (p && !s) return { err: 'There is ' + pairs[i][3] + ' with no spring that reaches it.' };
+  }
+  // The kinds must stay distinguishable: one pad turns a blue or red spring
+  // into a fixed one, and a spare fixed pad is simply never used.
+  if (cnt('B') && cnt('b') < 2)
+    return { err: 'A blue spring with one blue pad always lands there — that is just a fixed spring. Add another blue pad.' };
+  if (cnt('R') && cnt('r') < 2)
+    return { err: 'A red spring with one red pad gives you nothing to choose. Add another red pad.' };
+  for (i = 0; i < 4; i++) {
+    var ns = cnt(pairs[i][0]), np = cnt(pairs[i][1]);
+    if (ns && np > ns)
+      return { err: 'Channel ' + (i + 1) + ' is fixed one-to-one, so ' + (np - ns) + ' of its pads ' +
+        (np - ns > 1 ? 'are' : 'is') + ' never used. Add another spring on that channel, or use blue or red for a choice.' };
+  }
+  // every extended fixed channel needs its own pad, and spares are never used
+  var chSpr = {}, chPad = {};
+  for (var gi = 0; gi < g.length; gi++) {
+    var gsp = GLIDE.EXTBY[g.charAt(gi)];
+    if (!gsp) continue;
+    if (gsp.extSpring !== undefined) chSpr[gsp.extSpring] = (chSpr[gsp.extSpring] || 0) + 1;
+    if (gsp.extPad !== undefined) chPad[gsp.extPad] = (chPad[gsp.extPad] || 0) + 1;
+  }
+  for (var slot in chSpr) {
+    var no = 5 + (+slot);
+    if (!chPad[slot]) return { err: 'Fixed spring ' + no + ' has no pad ' + no + ' to throw you to.' };
+    if (chPad[slot] > chSpr[slot])
+      return { err: 'Channel ' + no + ' is fixed one-to-one, so ' + (chPad[slot] - chSpr[slot]) +
+        ' of its pads would never be used.' };
+  }
+  for (var slot2 in chPad)
+    if (!chSpr[slot2]) return { err: 'Pad ' + (5 + (+slot2)) + ' has no spring that reaches it.' };
+  if (cnt('+') > 15) return { err: 'At most 15 rotors on one deck.' };
+  if (cnt('=') > 15) return { err: 'At most 15 locks on one deck.' };
+  if (cnt('=') && !cnt('%'))
+    return { err: 'A lock with no key anywhere on the deck can never open — that is just a wall.' };
+  return {};
+}
+/* When a deck will not go, work out WHY: every tile a slide can actually end
+   on, and how many cores are collectible. Almost always the culprit is that
+   nothing brakes you where you assumed it would. */
+function edDiagnose(cap) {
+  var P = GLIDE.parse(edLevel(0));
+  var s0 = GLIDE.initial(P);
+  var seen = {}, q = [s0], qi = 0, spots = {}, best = 0, n = 0;
+  var need = GLIDE.allCores(P);
+  seen[GLIDE.key(s0)] = 1; spots[s0.p] = 1;
+  while (qi < q.length) {
+    if (++n > cap) break;
+    var A = GLIDE.actions(P, q[qi++]);
+    for (var a = 0; a < A.length; a++)
+      for (var k = 0; k < A[a].states.length; k++) {
+        var ns = A[a].states[k];
+        if (ns.cores > best) best = ns.cores;
+        if (ns.won) continue;
+        spots[ns.p] = 1;
+        var key = GLIDE.key(ns);
+        if (seen[key]) continue;
+        seen[key] = 1; q.push(ns);
+      }
+  }
+  var got = 0, all = P.cores.length;
+  for (var b = 0; b < all; b++) if (best & (1 << b)) got++;
+  return { spots: spots, cores: got, allCores: all, full: best === need,
+           exit: P.terrain.indexOf('E') };
+}
+
+/* Exactly the search that vetted the shipped decks: worst-case optimal play,
+   so a deck with a blue spring only passes if it works out however it lands. */
+/* No search limit here on purpose: the editor always finishes the job and
+   gives you a real answer rather than bailing out on a big deck. */
+function edSolve() {
+  var lv = edLevel(0), P = GLIDE.parse(lv);
+  var r = solveFrom(P, GLIDE.initial(P), Infinity);
+  if (r.par !== null) return { par: r.par, luck: lv.grid.indexOf('B') >= 0 };
+  // No guaranteed line. Is there one at all, if the blue springs are kind?
+  var hope = solveFrom(P, GLIDE.initial(P), Infinity, true);
+  if (hope.par !== null) return { par: hope.par, gamble: 1 };
+  return { none: 1 };
+}
+function edVerify(then) {
+  var v = edCheck();
+  if (v.err) { emsg(v.err, 'bad'); SFX.bad(); return; }
+  emsg('Searching every route…');
+  setTimeout(function () {                     // let the message paint first
+    var r = edSolve();
+    if (r.gamble) {
+      // A route exists — a blue spring can just also strand you. That is the
+      // deck's business, not a reason to refuse it: warn, then let it be played.
+      ed.par = r.par;
+      emsg('Winnable in ' + r.par + ', but a blue spring can drop you where there ' +
+           'is no way out. Give every blue pad an exit to make it safe.', 'bad');
+      blip(320, .12, 'triangle', .05);
+      if (then) then(r.par);
+    } else if (r.par !== undefined) {
+      ed.par = r.par;
+      emsg((r.luck ? 'Solvable however the blue spring lands · worst case ' : 'Solvable · the optimal route is ') +
+           r.par + ' move' + (r.par === 1 ? '' : 's') + '.', 'good');
+      blip(700, .1, 'sine', .05);
+      if (then) then(r.par);
+    } else {
+      var d = edDiagnose(20000);
+      ed.reach = d.spots;
+      var why = !d.full
+        ? 'You can only pick up ' + d.cores + ' of ' + d.allCores + ' cores, so the exit never opens.'
+        : d.spots[d.exit]
+          ? 'You can stand on the exit, but never with every core — check the order.'
+          : 'No slide ever ends on the exit. Remember you never stop in open floor: ' +
+            'you need a wall, sludge, a crate or a spring to brake.';
+      emsg(why + ' Lit tiles are everywhere you can actually stop.', 'bad');
+      SFX.bad();
+    }
+  }, 30);
+}
+function edTest() {
+  edVerify(function (par) {
+    loadObj(edLevel(par), 'sandbox');
+    show('play');
+  });
+}
+
+// ---- saved decks ---------------------------------------------------
+var SBOX_KEY = 'glide.sandbox.v1';
+function sboxAll() {
+  try { var a = JSON.parse(localStorage.getItem(SBOX_KEY)); return a instanceof Array ? a : []; }
+  catch (e) { return []; }
+}
+function sboxSet(a) { try { localStorage.setItem(SBOX_KEY, JSON.stringify(a)); } catch (e) {} }
+function edCode() { return 'GLIDE1:' + ed.w + ':' + ed.h + ':' + ed.g.join(''); }
+function edParse(s) {
+  var m = /^GLIDE1:(\d+):(\d+):(.+)$/.exec((s || '').trim());
+  if (!m) return null;
+  var w = +m[1], h = +m[2], g = m[3];
+  if (w < 3 || h < 3 || w > 24 || h > 24 || g.length !== w * h) return null;
+  for (var vi = 0; vi < g.length; vi++) {
+    var vc = g.charAt(vi);
+    if ('#.0~m^>v<t!Ggo+/\\%=YJKLyjklBRbrE@x*'.indexOf(vc) < 0 && !GLIDE.EXTBY[vc]) return null;
+  }
+  return { w: w, h: h, g: g.split('') };
+}
+function edAdopt(d, name) {
+  ed.w = d.w; ed.h = d.h; ed.g = d.g.slice();
+  ed.name = name || ''; ed.hist = []; ed.par = null; ed.reach = null;
+  $('eName').textContent = ed.name || 'Untitled deck';
+  $('eUndo').disabled = true;
+  edSizeLabels(); edResize(); edFit();
+}
+/* A 40px portrait of a saved deck, painted with the game's own tile art. */
+function drawThumb(c2d, dpr, w, h, gstr) {
+  edPairs = {};                       // too small for tags; edDraw recomputes
+  var cs = Math.max(2, Math.min(40 / w, 40 / h));
+  var ox = (40 - cs * w) / 2, oy = (40 - cs * h) / 2;
+  withBoard(c2d, cs, { w: w, h: h }, function () {
+    c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c2d.clearRect(0, 0, 40, 40);
+    c2d.save(); c2d.translate(ox, oy);
+    for (var i = 0; i < w * h; i++)
+      drawTile((i % w) * cs, ((i / w) | 0) * cs, i, gstr.charAt(i), .5);
+    c2d.restore();
+  });
+}
+function closeModals() {
+  $('mSave').classList.remove('on');
+  $('mOpen').classList.remove('on');
+  $('mStats').classList.remove('on');
+}
+/* ---- flight record ---- */
+function statsShow() {
+  var done = 0, perfect = 0, stars = 0, tiers = {}, order = [];
+  LEVELS.forEach(function (lv) {
+    if (!tiers[lv.tierName]) { tiers[lv.tierName] = { d: 0, n: 0 }; order.push(lv.tierName); }
+    tiers[lv.tierName].n++;
+    var b = save.best[lv.id];
+    if (b !== undefined) {
+      done++; tiers[lv.tierName].d++;
+      stars += starsFor(b, lv.par);
+      if (b <= lv.par) perfect++;
+    }
+  });
+  var rows = [
+    ['Decks cleared', done + ' / ' + LEVELS.length],
+    ['Cleared at par', perfect],
+    ['Stars earned', stars + ' / ' + (LEVELS.length * 3)],
+    ['Best endless run', save.endless],
+    ['Daily decks cleared', Object.keys(save.daily).length],
+    ['Decks played', save.played]
+  ];
+  var html = '<div class="stbar"><i style="width:' +
+    Math.round(done / LEVELS.length * 100) + '%"></i></div>';
+  for (var i = 0; i < rows.length; i++)
+    html += '<div class="strow"><div class="k">' + rows[i][0] +
+            '</div><div class="v mono">' + rows[i][1] + '</div></div>';
+  html += '<div class="mh sub">By tier</div>';
+  for (var t = 0; t < order.length; t++)
+    html += '<div class="strow"><div class="k">' + order[t] + '</div><div class="v mono">' +
+            tiers[order[t]].d + ' / ' + tiers[order[t]].n + '</div></div>';
+  $('statBody').innerHTML = html;
+  $('mStats').classList.add('on');
+}
+function buildSlots() {
+  var list = $('mList'), all = sboxAll();
+  list.innerHTML = '';
+  if (!all.length) {
+    list.innerHTML = '<div class="empty">Nothing saved yet. Draw a deck and hit Save — it lives in this browser.</div>';
+    return;
+  }
+  all.forEach(function (s, i) {
+    var row = document.createElement('div');
+    row.className = 'slot';
+    var th = document.createElement('canvas');
+    th.className = 'thumb';
+    var tdpr = Math.min(window.devicePixelRatio || 1, 2);
+    th.width = Math.round(40 * tdpr); th.height = Math.round(40 * tdpr);
+    drawThumb(th.getContext('2d'), tdpr, s.w, s.h, s.g);
+    var n = document.createElement('div'); n.className = 'sn'; n.textContent = s.n;
+    var z = document.createElement('div'); z.className = 'sz'; z.textContent = s.w + '×' + s.h;
+    var open = document.createElement('button'); open.textContent = 'Open';
+    var del = document.createElement('button'); del.className = 'del'; del.textContent = 'Delete';
+    open.onclick = function () {
+      edAdopt({ w: s.w, h: s.h, g: s.g.split('') }, s.n);
+      closeModals(); emsg('Opened “' + s.n + '”.', 'good');
+    };
+    del.onclick = function () {
+      var a = sboxAll(); a.splice(i, 1); sboxSet(a); buildSlots();
+    };
+    row.appendChild(th); row.appendChild(n); row.appendChild(z);
+    row.appendChild(open); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+// ---- wiring --------------------------------------------------------
+/* Left button paints. Middle, right or shift-drag pans. Wheel zooms about the
+   cursor. On a touchscreen, one finger paints and two fingers pan and pinch. */
+ecv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+ecv.addEventListener('mousedown', function (e) {
+  e.preventDefault();
+  if (e.button === 1 || e.button === 2 || e.shiftKey) {
+    ePanning = { x: e.clientX, y: e.clientY, px: ePanX, py: ePanY };
+    ecv.style.cursor = 'grabbing';
+    return;
+  }
+  painting = true; edPush(); edPaint(edAt(e));
+});
+ecv.addEventListener('mousemove', function (e) {
+  if (ePanning) {
+    ePanX = ePanning.px + (e.clientX - ePanning.x);
+    ePanY = ePanning.py + (e.clientY - ePanning.y);
+    edClamp();
+    return;
+  }
+  eHover = edAt(e); if (painting) edPaint(eHover);
+});
+ecv.addEventListener('mouseleave', function () { eHover = -1; });
+window.addEventListener('mouseup', function () {
+  painting = false; ePanning = null; ecv.style.cursor = 'crosshair';
+});
+ecv.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  edZoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX, e.clientY);
+}, { passive: false });
+
+function pinchOf(e) {
+  var a = e.touches[0], b = e.touches[1];
+  var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY;
+  return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2,
+           d: Math.max(1, Math.sqrt(dx * dx + dy * dy)) };
+}
+ecv.addEventListener('touchstart', function (e) {
+  e.preventDefault();
+  if (e.touches.length === 2) { painting = false; ePinch = pinchOf(e); return; }
+  painting = true; edPush(); edPaint(edAt(e));
+}, { passive: false });
+ecv.addEventListener('touchmove', function (e) {
+  e.preventDefault();
+  if (e.touches.length === 2) {
+    var p = pinchOf(e);
+    if (ePinch) {
+      ePanX += p.x - ePinch.x; ePanY += p.y - ePinch.y;
+      edZoomAt(p.d / ePinch.d, p.x, p.y);
+    }
+    ePinch = p;
+    return;
+  }
+  if (painting) edPaint(edAt(e));
+}, { passive: false });
+window.addEventListener('touchend', function (e) {
+  painting = false;
+  if (!e.touches || e.touches.length < 2) ePinch = null;
+});
+
+$('eBack').onclick = function () { show('title'); };
+$('eUndo').onclick = edUndo;
+$('eNew').onclick = edNew;
+$('eWm').onclick = function () { edSize(-1, 0); };
+$('eWp').onclick = function () { edSize(1, 0); };
+$('eHm').onclick = function () { edSize(0, -1); };
+$('eHp').onclick = function () { edSize(0, 1); };
+$('eZm').onclick = function () { edZoomAt(1 / 1.25); };
+$('eZp').onclick = function () { edZoomAt(1.25); };
+$('eZv').onclick = function () { edFit(); emsg('Zoom reset to fit.'); };
+$('eRot').onclick = edRotate;
+$('eFlip').onclick = edMirror;
+$('eCheck').onclick = function () { edVerify(null); };
+$('eTest').onclick = edTest;
+$('eSave').onclick = function () {
+  $('mName').value = ed.name;
+  $('mCode').value = edCode();
+  $('mLink').value = location.href.split('#')[0] + '#' + edCode();
+  $('mSave').classList.add('on');
+  $('mName').focus();
+};
+$('eOpen').onclick = function () {
+  $('mPaste').value = '';
+  buildSlots();
+  $('mOpen').classList.add('on');
+};
+$('mSaveX').onclick = closeModals;
+$('mOpenX').onclick = closeModals;
+$('mSaveOk').onclick = function () {
+  var n = ($('mName').value || '').trim() || 'Untitled deck';
+  var all = sboxAll();
+  var rec = { n: n, w: ed.w, h: ed.h, g: ed.g.join('') };
+  var at = -1;
+  for (var i = 0; i < all.length; i++) if (all[i].n === n) at = i;
+  if (at >= 0) all[at] = rec; else all.unshift(rec);
+  sboxSet(all.slice(0, 40));
+  ed.name = n; $('eName').textContent = n;
+  closeModals(); emsg('Saved “' + n + '”.', 'good'); blip(660, .09, 'sine', .05);
+};
+$('mImport').onclick = function () {
+  var d = edParse($('mPaste').value);
+  if (!d) { $('mPaste').value = ''; $('mPaste').placeholder = 'That is not a valid GLIDE1 code'; return; }
+  edAdopt(d, '');
+  closeModals(); emsg('Imported a ' + d.w + '×' + d.h + ' deck.', 'good');
+};
+[$('mSave'), $('mOpen'), $('mStats')].forEach(function (m) {
+  m.addEventListener('mousedown', function (e) { if (e.target === m) closeModals(); });
+});
+
+buildGroupSel();
+buildPal('Basics');
+edNew();
+
+// ------------------------------------------------------------------ screens
+function openSelect() {
+  buildGrid();
+  show('select');
+}
+/* Where "back" goes from the board — a sandbox test run belongs to the editor,
+   not to the campaign. */
+function leavePlay() {
+  replay = null;
+  if (sandPlay) { show('sandbox'); edResize(); }
+  else if (playMode === 'campaign') openSelect();
+  else { buildGrid(); show('title'); }
+}
+function buildGrid() {
+  var g = $('sGrid');
+  g.innerHTML = '';
+  var done = 0, perfect = 0;
+  var tier = null;
+  LEVELS.forEach(function (lv, i) {
+    if (lv.tierName !== tier) {
+      tier = lv.tierName;
+      var hd = document.createElement('div');
+      hd.className = 'tierhd'; hd.textContent = tier;
+      g.appendChild(hd);
+    }
+    var best = save.best[lv.id];
+    var locked = i + 1 > save.unlocked;
+    if (best !== undefined) { done++; if (best <= lv.par) perfect++; }
+    var b = document.createElement('button');
+    b.className = 'cell' + (locked ? ' locked' : '') +
+      (best !== undefined ? (best <= lv.par ? ' perfect' : ' done') : '');
+    b.innerHTML = '<div class="n">' + (i + 1) + '</div><div class="m">' +
+      (locked ? '—' : (best !== undefined ? best + '/' + lv.par : 'par ' + lv.par)) + '</div>' +
+      '<div class="s">' + (best !== undefined ? starStr(starsFor(best, lv.par)) : '') + '</div>';
+    if (!locked) b.onclick = function () { load(i); show('play'); };
+    g.appendChild(b);
+  });
+  $('sProg').textContent = done + ' / ' + LEVELS.length + ' cleared · ' + perfect + ' optimal';
+  $('cTotal').textContent = done + ' / ' + LEVELS.length + ' decks cleared · ' + BUILD;
+  $('eSub').textContent = 'Sandbox · ' + TOOLS.length + ' tiles · ' + BUILD;
+}
+
+$('bPlay').onclick = function () {
+  var i = 0;
+  for (var k = 0; k < LEVELS.length; k++) {
+    if (save.best[LEVELS[k].id] === undefined) { i = k; break; }
+    i = Math.min(LEVELS.length - 1, k + 1);
+  }
+  load(i); show('play');
+};
+$('bSelect').onclick = openSelect;
+$('bSand').onclick = function () { show('sandbox'); edResize(); };
+$('bSound').onclick = function () {
+  save.sound = !save.sound; persist();
+  $('bSound').textContent = 'Sound: ' + (save.sound ? 'on' : 'off');
+  if (save.sound) blip(660, .09, 'sine', .06);
+};
+$('sBack').onclick = function () { buildGrid(); show('title'); };
+$('pBack').onclick = leavePlay;
+$('pUndo').onclick = undo;
+$('pReset').onclick = restart;
+$('pHint').onclick = nudge;
+$('wNext').onclick = function () {
+  $('win').classList.remove('on');
+  if (playMode === 'endless') { endless.n++; nextEndless(); return; }
+  if (playMode !== 'campaign') { leavePlay(); return; }
+  if (idx + 1 < LEVELS.length) { load(idx + 1); show('play'); }
+  else { buildGrid(); show('select'); }
+};
+$('wRetry').onclick = function () {
+  $('win').classList.remove('on');
+  // replay the deck you just cleared, whatever kind of deck it was
+  if (playMode !== 'campaign') loadObj(CUR, playMode); else load(idx);
+  show('play');
+};
+$('wReplay').onclick = function () {
+  var enc = (playMode === 'campaign' && save.route[CUR.id]) || encRoute(lastRoute);
+  startReplay(decRoute(enc));
+};
+$('wMenu').onclick = function () { $('win').classList.remove('on'); leavePlay(); };
+$('bDaily').onclick = startDaily;
+$('bEndless').onclick = startEndless;
+$('bStats').onclick = statsShow;
+$('mStatsX').onclick = closeModals;
+
+$('bSound').textContent = 'Sound: ' + (save.sound ? 'on' : 'off');
+$('bPlay').textContent = Object.keys(save.best).length ? 'Continue' : 'Start';
+buildGrid();
+
+/* A share link drops you straight into the editor with that deck loaded. */
+(function () {
+  var h = '';
+  try { h = decodeURIComponent((location.hash || '').replace(/^#/, '')); } catch (e) { h = ''; }
+  if (!h) return;
+  var d = edParse(h);
+  if (!d) return;
+  edAdopt(d, 'Shared deck');
+  show('sandbox');
+  emsg('Opened a shared ' + d.w + '×' + d.h + ' deck. Verify it, then test it.', 'good');
+})();
+
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

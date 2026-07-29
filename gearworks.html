@@ -1,0 +1,1675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GEARWORKS — 100 bays</title>
+</head>
+<body>
+<style>
+  :root {
+    color-scheme: dark;
+
+    /* Machine bay under work lamps — brass, oxide, verdigris on cold graphite */
+    --ink:      #0E1113;
+    --bay:      #151A1D;
+    --panel:    #1A2127;
+    --panel-hi: #212B32;
+    --line:     #2B363E;
+    --steel:    #8A9AA5;
+    --steel-dim:#5E6D77;
+    --chalk:    #E8EEF1;
+    --brass:    #C9992F;
+    --brass-hi: #F0C766;
+    --brass-lo: #7E6020;
+    --oxide:    #C8542D;
+    --patina:   #57B394;
+    --spark:    #6FB2E8;
+
+    --font-display: "Arial Narrow", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --font-data: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  /* Height comes from the content only — this page is measured by its host frame,
+     so no viewport-relative heights anywhere. */
+  html { background: var(--ink); }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(120% 90% at 50% -10%, #1D262C 0%, var(--ink) 62%),
+      var(--ink);
+    color: var(--chalk);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: 700px;   /* fixed px, never vh: a host that measures this page can't collapse it */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .shell {
+    max-width: 1220px;
+    margin: 0 auto;
+    padding: 22px 20px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ---------- name plate ---------- */
+
+  .plate {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px 28px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 14px;
+  }
+  .mark { display: flex; align-items: center; gap: 14px; }
+  .mark canvas { display: block; }
+  .wordmark h1 {
+    font-family: var(--font-display);
+    font-stretch: condensed;
+    font-weight: 700;
+    font-size: clamp(34px, 6vw, 52px);
+    line-height: 0.9;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--chalk);
+  }
+  .wordmark p {
+    margin: 5px 0 0;
+    font-family: var(--font-data);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--steel-dim);
+  }
+
+  .progress {
+    font-family: var(--font-data);
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--steel-dim);
+    text-align: right;
+  }
+  .progress b { color: var(--brass-hi); font-weight: 700; }
+
+  /* ---------- bay index ---------- */
+
+  .index { border: 1px solid var(--line); background: var(--panel); }
+  .index summary {
+    list-style: none; cursor: pointer;
+    font-family: var(--font-data); font-size: 10.5px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--steel-dim);
+    padding: 9px 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .index summary::-webkit-details-marker { display: none; }
+  .index summary::before { content: "▸"; color: var(--brass); }
+  .index[open] summary::before { content: "▾"; }
+  .index summary:hover { color: var(--chalk); }
+  .bays {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+    gap: 4px;
+    padding: 0 12px 12px;
+    max-height: 168px;
+    overflow-y: auto;
+  }
+  .bay-chip {
+    font-family: var(--font-data);
+    font-size: 11px;
+    letter-spacing: .04em;
+    padding: 5px 0;
+    background: var(--bay);
+    border: 1px solid var(--line);
+    color: var(--steel-dim);
+    cursor: pointer;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    transition: color .12s, border-color .12s, background .12s;
+  }
+  .bay-chip:hover { color: var(--chalk); border-color: var(--steel-dim); }
+  .bay-chip.solved { border-color: #2E5A4C; color: var(--patina); }
+  .bay-chip.clean { border-color: var(--patina); color: var(--patina); background: rgba(87,179,148,.10); }
+  .bay-chip[aria-current="true"] {
+    background: var(--brass-lo); border-color: var(--brass); color: #17130A; font-weight: 700;
+  }
+
+  /* ---------- work area ---------- */
+
+  .work { display: grid; grid-template-columns: minmax(0,1fr) 276px; gap: 16px; align-items: start; }
+
+  .stage { position: relative; }
+  canvas#bay {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 920 / 560;
+    background: var(--bay);
+    border: 1px solid var(--line);
+    touch-action: none;
+    cursor: crosshair;
+  }
+  canvas#bay.lifting { cursor: pointer; }
+  canvas#bay.belting, canvas#bay.wiring { cursor: cell; }
+
+  .banner {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    padding: 10px 14px;
+    background: linear-gradient(to top, rgba(14,17,19,.94), rgba(14,17,19,0));
+    font-family: var(--font-data);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    pointer-events: none;
+  }
+  .banner .status { color: var(--steel); }
+  .banner .status.jam { color: var(--oxide); font-weight: 700; }
+  .banner .status.run { color: var(--patina); }
+  .banner .status.tool { color: var(--brass-hi); }
+  .banner .count { color: var(--steel-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .done {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(11,14,16,.86);
+    text-align: center;
+    padding: 20px;
+  }
+  .done.show { display: flex; animation: settle .35s ease-out; }
+  @keyframes settle { from { opacity: 0; transform: scale(1.02); } to { opacity: 1; transform: none; } }
+  .done h2 {
+    font-family: var(--font-display);
+    font-stretch: condensed;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: clamp(26px, 4.6vw, 40px);
+    margin: 0;
+    color: var(--patina);
+  }
+  .done p { margin: 0; font-family: var(--font-data); font-size: 12px; letter-spacing: .09em; color: var(--steel); }
+  .done .best { color: var(--brass-hi); }
+  .done .row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; justify-content: center; }
+
+  /* ---------- spec rail ---------- */
+
+  .rail { display: flex; flex-direction: column; gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--line); padding: 13px 14px; }
+  .card h3 {
+    margin: 0 0 8px;
+    font-family: var(--font-data);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--steel-dim);
+    font-weight: 600;
+  }
+  .card .name {
+    font-family: var(--font-display);
+    font-stretch: condensed;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 24px;
+    line-height: 1.05;
+    margin: 0 0 6px;
+  }
+  .card .brief { margin: 0; font-size: 13.5px; color: var(--steel); }
+  .card.hide { display: none; }
+
+  .outs { display: flex; flex-direction: column; gap: 7px; }
+  .out {
+    display: flex; align-items: center; gap: 9px;
+    font-family: var(--font-data); font-size: 11.5px; letter-spacing: .04em;
+    border-left: 2px solid var(--line);
+    padding-left: 9px;
+    color: var(--steel);
+  }
+  .out.ok { border-left-color: var(--patina); color: var(--patina); }
+  .out.wrong { border-left-color: var(--oxide); color: var(--oxide); }
+  .out b { color: var(--chalk); font-weight: 600; }
+  .out.ok b, .out.wrong b { color: inherit; }
+  .out.volt { border-left-color: var(--spark); }
+  .out.volt.ok { border-left-color: var(--patina); }
+
+  .keys { font-family: var(--font-data); font-size: 11px; color: var(--steel-dim); line-height: 1.9; }
+  .keys kbd {
+    background: var(--panel-hi); border: 1px solid var(--line);
+    padding: 1px 5px; color: var(--steel); font-family: inherit; font-size: 10.5px;
+  }
+
+  /* ---------- parts bin ---------- */
+
+  .bin {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); padding: 11px 12px;
+  }
+  .bin-label {
+    font-family: var(--font-data); font-size: 10px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--steel-dim); margin-right: 2px;
+  }
+  .part {
+    display: flex; align-items: center; gap: 9px;
+    background: transparent; border: 1px solid var(--line);
+    padding: 7px 12px 7px 8px; color: var(--steel);
+    cursor: pointer; text-align: left;
+    transition: border-color .15s, background .15s, color .15s;
+  }
+  .part:hover:not(:disabled) { border-color: var(--steel-dim); color: var(--chalk); }
+  .part[aria-pressed="true"] { border-color: var(--brass); background: rgba(201,153,47,.11); color: var(--chalk); }
+  .part:disabled { opacity: .34; cursor: not-allowed; }
+  .part canvas { display: block; }
+  .part .pname { font-family: var(--font-display); font-stretch: condensed; text-transform: uppercase; letter-spacing: .07em; font-size: 15px; line-height: 1.1; }
+  .part .pqty { font-family: var(--font-data); font-size: 10.5px; letter-spacing: .06em; color: var(--steel-dim); font-variant-numeric: tabular-nums; }
+  .part[aria-pressed="true"] .pqty { color: var(--brass-hi); }
+  .part .glyph { width: 58px; height: 58px; display: grid; place-items: center; font-size: 26px; line-height: 1; }
+  .part.belt[aria-pressed="true"] { border-color: var(--brass); }
+  .part.wire[aria-pressed="true"] { border-color: var(--spark); background: rgba(111,178,232,.12); }
+
+  .spacer { flex: 1 1 24px; }
+
+  button.tool {
+    font-family: var(--font-data); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    background: transparent; border: 1px solid var(--line); color: var(--steel);
+    padding: 8px 12px; cursor: pointer; transition: border-color .15s, color .15s;
+  }
+  button.tool:hover { border-color: var(--steel-dim); color: var(--chalk); }
+  button.tool.go { border-color: var(--brass); color: var(--brass-hi); }
+  button.tool.go:hover { background: rgba(201,153,47,.14); }
+  button.tool:disabled { opacity: .35; cursor: not-allowed; }
+
+  /* ---------- wire drawer ---------- */
+
+  .drawer { border: 1px solid var(--line); background: var(--panel); display: none; }
+  .drawer.show { display: block; }
+  .drawer-head {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding: 11px 13px; border-bottom: 1px solid var(--line);
+  }
+  .drawer-head h3 {
+    margin: 0; font-family: var(--font-data); font-size: 10px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--steel-dim); font-weight: 600;
+  }
+  .drawer-head .spec { font-family: var(--font-data); font-size: 11.5px; color: var(--spark); letter-spacing: .05em; }
+  .drawer-head .spec.none { color: var(--steel-dim); }
+
+  .filters { display: flex; gap: 5px; flex-wrap: wrap; padding: 10px 13px 0; }
+  .filters button {
+    font-family: var(--font-data); font-size: 10px; letter-spacing: .06em;
+    background: var(--bay); border: 1px solid var(--line); color: var(--steel-dim);
+    padding: 4px 7px; cursor: pointer;
+  }
+  .filters button:hover { color: var(--chalk); }
+  .filters button[aria-pressed="true"] { border-color: var(--spark); color: var(--spark); background: rgba(111,178,232,.10); }
+
+  .spool {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+    gap: 4px; padding: 10px 13px 13px; max-height: 250px; overflow-y: auto;
+  }
+  .wrow {
+    display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 9px;
+    background: var(--bay); border: 1px solid var(--line);
+    padding: 6px 9px; cursor: pointer; text-align: left; color: var(--steel);
+    font-family: var(--font-data); font-size: 11px;
+  }
+  .wrow:hover { border-color: var(--steel-dim); }
+  .wrow .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.5); }
+  .wrow .wn { color: var(--chalk); letter-spacing: .03em; }
+  .wrow .ws { color: var(--steel-dim); font-size: 10px; }
+  .wrow .wi { font-variant-numeric: tabular-nums; text-align: right; font-size: 10.5px; }
+  .wrow.fit { border-color: var(--patina); }
+  .wrow.fit .wi { color: var(--patina); }
+  .wrow.bad .wi { color: var(--oxide); }
+  .wrow.warn .wi { color: var(--brass); }
+  .wrow[aria-pressed="true"] { border-color: var(--spark); background: rgba(111,178,232,.13); }
+  .wrow.hidden { display: none; }
+
+  :focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
+
+  .colophon {
+    font-family: var(--font-data); font-size: 10.5px; letter-spacing: .1em;
+    color: #465259; text-transform: uppercase; text-align: center;
+  }
+
+  @media (max-width: 900px) {
+    .work { grid-template-columns: minmax(0,1fr); }
+    .rail { flex-direction: row; flex-wrap: wrap; }
+    .rail .card { flex: 1 1 240px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .done.show { animation: none; }
+  }
+</style>
+
+<div class="shell">
+
+  <header class="plate">
+    <div class="mark">
+      <canvas id="logo" width="72" height="72"></canvas>
+      <div class="wordmark">
+        <h1>Gearworks</h1>
+        <p>Drive-train fitting · shop floor</p>
+      </div>
+    </div>
+    <div class="progress" id="progress"></div>
+  </header>
+
+  <details class="index" id="index">
+    <summary><span id="indexLabel">Bay index</span></summary>
+    <nav class="bays" id="bays" aria-label="Select bay"></nav>
+  </details>
+
+  <div class="work">
+    <div class="stage">
+      <canvas id="bay" width="920" height="560" aria-label="Gear bay"></canvas>
+      <div class="banner">
+        <span class="status" id="status">Fit gears from the motor to every output.</span>
+        <span class="count" id="count"></span>
+      </div>
+      <div class="done" id="done">
+        <h2>Assembly running</h2>
+        <p id="doneline"></p>
+        <p class="best" id="bestline"></p>
+        <div class="row">
+          <button class="tool" id="againBtn">Rebuild this bay</button>
+          <button class="tool go" id="nextBtn">Next bay →</button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rail">
+      <section class="card">
+        <h3 id="bayCode">Bay</h3>
+        <p class="name" id="bayName">—</p>
+        <p class="brief" id="bayBrief">—</p>
+      </section>
+      <section class="card">
+        <h3>Outputs</h3>
+        <div class="outs" id="outs"></div>
+      </section>
+      <section class="card hide" id="loadCard">
+        <h3>Circuit</h3>
+        <div class="outs" id="loadRows"></div>
+      </section>
+      <section class="card">
+        <h3>Bench notes</h3>
+        <div class="keys">
+          <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> pick a gear · <kbd>B</kbd> belt · <kbd>W</kbd> wire<br>
+          <kbd>click</kbd> fit · <kbd>click a fitted gear</kbd> lift it<br>
+          <kbd>Z</kbd> undo · <kbd>R</kbd> strip the bay<br>
+          Every mesh reverses the spin. A belt keeps it.
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="bin">
+    <span class="bin-label">Parts bin</span>
+    <div id="parts" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    <span class="spacer"></span>
+    <button class="tool" id="undoBtn">Undo</button>
+    <button class="tool" id="resetBtn">Strip bay</button>
+    <button class="tool" id="prevBtn">← Prev</button>
+    <button class="tool" id="skipBtn">Skip →</button>
+  </div>
+
+  <div class="drawer" id="drawer">
+    <div class="drawer-head">
+      <h3>Wire store · 100 lines</h3>
+      <span class="spec none" id="wireSpec">Click a load in the bay to spec its run.</span>
+      <span class="spacer"></span>
+      <button class="tool" id="cutBtn">Disconnect</button>
+    </div>
+    <div class="filters" id="filters"></div>
+    <div class="spool" id="spool"></div>
+  </div>
+
+  <p class="colophon">Module 5.6 · involute spur gears · 100 bays · teeth mesh true at every joint</p>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const W = 920, H = 560;
+  const MOD = 5.6;                       // gear module: pitch radius = MOD * teeth / 2
+  const rOf = n => MOD * n / 2;          // 8T→22.4  13T→36.4  19T→53.2
+  const SIZES = [
+    { n: 8,  label: "Pinion", tag: "8T"  },
+    { n: 13, label: "Spur",   tag: "13T" },
+    { n: 19, label: "Crown",  tag: "19T" }
+  ];
+  const SNAP = 30;      // how far the ghost reaches for a mesh
+  const MESH_TOL = 1.2; // centre distance slack that still counts as meshing
+  const PEG_TOL = 7;    // how close a gear must sit to a bored shaft to count as seated
+  const BELT_MAX = 340; // longest belt span, centre to centre
+  const BELT_MIN_GAP = 30;
+  const PX_PER_M = 100; // 1 bay pixel = 1 cm
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const OMEGA = reduced ? 0.32 : 0.85;   // motor speed, rad/s at 13T
+
+  // ---------------------------------------------------------------- wire store
+  //
+  // 10 conductor materials x 10 AWG gauges. Resistance is rho/area, ampacity is
+  // area x a per-material current density — so the catalogue behaves like real stock.
+
+  const MATERIALS = [
+    { m: "Silver",        rho: 0.0159, j: 5.4, hue: "#DCE6EA" },
+    { m: "Copper",        rho: 0.0168, j: 5.0, hue: "#C87F44" },
+    { m: "Tinned copper", rho: 0.0175, j: 4.8, hue: "#B9C3C8" },
+    { m: "Gold-clad",     rho: 0.0244, j: 4.4, hue: "#E3B84B" },
+    { m: "Aluminium",     rho: 0.0282, j: 3.9, hue: "#9AA8B0" },
+    { m: "Tungsten",      rho: 0.0560, j: 6.2, hue: "#6F7A82" },
+    { m: "Brass",         rho: 0.0700, j: 3.4, hue: "#B9962F" },
+    { m: "Steel",         rho: 0.1430, j: 3.0, hue: "#7C878E" },
+    { m: "Manganin",      rho: 0.4820, j: 4.6, hue: "#A2705A" },
+    { m: "Nichrome",      rho: 1.1000, j: 7.5, hue: "#8E6E4E" }
+  ];
+  const GAUGES = [
+    { g: 4, a: 21.15 }, { g: 6, a: 13.30 }, { g: 8, a: 8.37 }, { g: 10, a: 5.26 },
+    { g: 12, a: 3.31 }, { g: 14, a: 2.08 }, { g: 16, a: 1.31 }, { g: 18, a: 0.823 },
+    { g: 20, a: 0.518 }, { g: 22, a: 0.326 }
+  ];
+  const WIRES = [];
+  for (const M of MATERIALS) for (const G of GAUGES) {
+    WIRES.push({
+      id: WIRES.length, name: G.g + " AWG " + M.m, mat: M.m, awg: G.g, area: G.a,
+      ohm: Math.round(M.rho / G.a * 1000) / 1000,
+      amp: Math.round(G.a * M.j * 10) / 10,
+      hue: M.hue
+    });
+  }
+
+  const currentOf = (w, m, v, ohmLoad) => v / (ohmLoad + w.ohm * m);
+
+  function verdict(w, m, v, L) {
+    const I = currentOf(w, m, v, L.ohm);
+    if (I > w.amp)  return { I, ok: false, why: "burnt out" };
+    if (I < L.lo)   return { I, ok: false, why: "starved" };
+    if (I > L.hi)   return { I, ok: false, why: "over-driven" };
+    return { I, ok: true, why: "lit" };
+  }
+
+  // ---------------------------------------------------------------- levels
+
+  const BAYS = [
+    {n:"First drive",b:"Run the motor across to the output. Count your meshes — each one flips the direction.",d:[150,280],t:[[620,280,13,-1]],p:{8:3,13:8},r:6},
+    {n:"The slot",b:"Only a pinion clears the guard slot. Bridge it with something small, then carry on.",d:[150,300],t:[[770,300,13,1]],w:[[440,0,38,245],[440,315,38,245]],p:{8:4,13:11,19:2},r:9},
+    {n:"Split drive",b:"One motor, two outputs, both turning clockwise. The trains are independent — keep them apart.",d:[460,290],t:[[120,150,13,1],[800,430,13,1]],p:{8:4,13:14,19:3},r:10},
+    {n:"The block",b:"The casting is in the way. Under it is roomy; over it only the small stock fits.",d:[120,470],t:[[800,120,13,1]],w:[[330,90,260,340]],p:{8:5,13:16,19:5},r:13},
+    {n:"Fork",b:"Two outputs, opposite hands. Bigger gears cover ground in fewer meshes — that changes the parity.",d:[460,70],t:[[140,480,13,1],[780,480,13,-1]],w:[[430,200,60,250]],p:{8:6,13:18,19:8},r:15},
+    {n:"Serpentine",b:"Down past the first guard, up over the second. Long run — and it still has to arrive clockwise.",d:[120,300],t:[[820,300,8,1]],w:[[300,0,36,390],[560,170,36,390]],p:{8:10,13:14},r:14},
+    {n:"Three ways",b:"Three outputs off one motor, with guards down the middle. Watch for trains that meet — opposing gears jam.",d:[460,300],t:[[140,90,8,1],[860,300,13,-1],[460,520,8,1]],w:[[300,180,40,200],[580,180,40,200]],p:{8:8,13:20,19:4},r:18},
+    {n:"Open bench",b:"Four corners, no guards, deep stock. Build the whole works and get every hand right.",d:[460,280],t:[[120,120,8,1],[800,120,13,-1],[120,440,13,-1],[800,440,8,1]],p:{8:12,13:26,19:8},r:22},
+    {n:"Backlash",b:"A single take-off. Guards are up, so route around them.",d:[153,364],t:[[754,208,13,1]],w:[[209,0,39,172],[439,0,42,224],[439,415,42,145],[710,339,34,221]],p:{8:13,13:19,19:6},r:10},
+    {n:"The long shaft",b:"One output, one train. The castings block the direct line.",d:[722,434],t:[[187,455,19,-1]],w:[[0,303,640,30],[804,303,116,30]],p:{8:13,13:18,19:6},r:9},
+    {n:"Cross drive",b:"Straight job: motor to output. The castings block the direct line.",d:[253,418],t:[[789,347,19,-1]],w:[[474,0,35,290],[474,470,35,90]],p:{8:13,13:18,19:6},r:9},
+    {n:"Idler row",b:"A single take-off. The castings block the direct line.",d:[134,188],t:[[804,449,19,-1]],w:[[747,191,173,36],[0,365,602,40]],p:{8:15,13:22,19:7},r:12},
+    {n:"The gauntlet",b:"A single take-off. Guards are up, so route around them.",d:[718,395],t:[[210,104,13,-1]],w:[[231,464,39,96],[430,0,37,186],[430,400,37,160],[715,0,36,209]],p:{8:13,13:18,19:6},r:9},
+    {n:"Twin take-off",b:"A single take-off. Mind the guards.",d:[664,188],t:[[104,322,19,-1]],w:[[253,118,201,169]],p:{8:13,13:18,19:6},r:9},
+    {n:"Header",b:"Two outputs off the one motor. Guards are up, so route around them.",d:[791,218],t:[[462,337,19,-1],[148,394,13,1]],w:[[242,0,30,142],[242,302,30,258],[476,0,37,167],[695,0,34,150],[695,304,34,256]],p:{8:22,13:33,19:11},r:19},
+    {n:"Deadfall",b:"Two outputs off the one motor. Clear floor. Parity is the whole job.",d:[735,350],t:[[144,196,19,1],[436,208,19,-1]],p:{8:19,13:28,19:9},r:16},
+    {n:"Understage",b:"Two outputs off the one motor. Work the gaps in the guarding.",d:[588,349],t:[[117,208,19,1],[307,419,8,-1]],w:[[333,0,30,90],[606,0,35,283],[606,441,35,119]],p:{8:27,13:42,19:14},r:25},
+    {n:"Overhang",b:"A pair of take-offs to feed. Work the gaps in the guarding.",d:[617,301],t:[[339,319,19,1],[98,130,13,-1]],w:[[444,0,31,217],[444,409,31,151]],p:{8:16,13:24,19:8},r:13},
+    {n:"Lay shaft",b:"Two outputs off the one motor. Guards are up, so route around them.",d:[164,220],t:[[794,401,19,-1],[473,390,13,1]],w:[[332,233,216,91]],p:{8:19,13:28,19:9},r:16},
+    {n:"The narrows",b:"Split the drive two ways. Mind the guards.",d:[135,350],t:[[649,455,13,-1],[332,108,13,-1]],w:[[468,0,42,156],[468,308,42,252]],p:{8:18,13:27,19:9},r:15},
+    {n:"Counterhand",b:"Two outputs off the one motor. A shaft is already bored — fit the marked gear onto it.",d:[806,352],t:[[195,286,13,1],[522,403,13,-1]],g:[[594,340,19]],p:{8:24,13:37,19:12},r:22},
+    {n:"Bell crank",b:"Split the drive two ways. Guards are up, so route around them. The marked shaft must carry a gear before this bay runs.",d:[760,320],t:[[280,318,8,1],[526,465,8,-1]],w:[[255,0,31,131],[431,0,42,186],[431,348,42,212],[691,0,31,247],[691,402,31,158]],g:[[594,311,8]],p:{8:19,13:28,19:9},r:16},
+    {n:"Ratchet row",b:"Split the drive two ways. Mind the guards. The marked shaft must carry a gear before this bay runs.",d:[155,341],t:[[698,182,8,1],[559,423,19,1]],w:[[220,142,175,170]],g:[[373,370,19]],p:{8:20,13:30,19:10},r:17},
+    {n:"The spine",b:"Two outputs off the one motor. Mind the guards. The marked shaft must carry a gear before this bay runs.",d:[260,283],t:[[729,142,13,-1],[699,392,19,-1]],w:[[451,0,30,128],[451,315,30,245]],g:[[540,193,19]],p:{8:25,13:39,19:13},r:23},
+    {n:"Split header",b:"Two outputs off the one motor. Mind the guards. The marked shaft must carry a gear before this bay runs.",d:[671,221],t:[[330,381,8,-1],[210,131,19,1]],w:[[360,61,222,100]],g:[[614,409,19]],p:{8:19,13:28,19:9},r:16},
+    {n:"Quarter turn",b:"A pair of take-offs to feed. Guards are up, so route around them. Seat the called-out gear on its shaft.",d:[706,162],t:[[122,145,19,-1],[263,415,8,1]],w:[[213,0,41,92],[446,0,39,189],[446,362,39,198],[708,445,41,115]],g:[[422,249,19]],p:{8:24,13:37,19:12},r:22},
+    {n:"Third rail",b:"A pair of take-offs to feed. The castings block the direct line. Seat the called-out gear on its shaft.",d:[753,142],t:[[170,344,13,1],[769,397,19,-1]],w:[[500,87,94,166],[562,192,94,116]],g:[[568,411,19]],p:{8:19,13:28,19:9},r:16},
+    {n:"Off-take",b:"Two outputs off the one motor. Guards are up, so route around them. The marked shaft must carry a gear before this bay runs.",d:[739,334],t:[[314,106,13,-1],[231,364,19,-1]],w:[[337,408,37,152],[616,0,34,146],[616,346,34,214]],g:[[570,208,19]],p:{8:20,13:30,19:10},r:17},
+    {n:"Tailstock",b:"Split the drive two ways. Work the gaps in the guarding. The marked shaft must carry a gear before this bay runs.",d:[179,334],t:[[528,188,8,-1],[819,263,19,-1]],w:[[214,79,124,102]],g:[[360,234,19]],p:{8:18,13:27,19:9},r:15},
+    {n:"The chicane",b:"Two outputs off the one motor. Work the gaps in the guarding. A shaft is already bored — fit the marked gear onto it.",d:[241,180],t:[[516,329,19,-1],[779,259,8,-1]],w:[[452,0,33,176]],g:[[351,282,13]],p:{8:18,13:27,19:9},r:15},
+    {n:"Double back",b:"A pair of take-offs to feed. Work the gaps in the guarding. The sealed housing needs a belt over the top.",d:[116,165],t:[[686,151,13,-1],[155,433,19,-1]],w:[[762,203,158,41],[301,349,619,38],[64,342,182,24],[64,500,182,24],[64,366,24,134],[222,366,24,134]],z:1,p:{8:15,13:22,19:7},r:12},
+    {n:"Jack shaft",b:"Split the drive two ways. The castings block the direct line. The sealed housing needs a belt over the top.",d:[131,171],t:[[531,458,8,1],[614,165,8,1]],w:[[437,0,42,132],[471,398,121,24],[471,494,121,24],[471,422,24,73],[567,422,24,73]],z:1,p:{8:15,13:22,19:7},r:12},
+    {n:"Pillar box",b:"Two outputs off the one motor. Mind the guards. One output is boxed in. No gear reaches it — throw a belt.",d:[758,336],t:[[359,378,19,1],[101,357,8,1]],w:[[0,202,199,39],[403,202,517,39],[41,297,121,24],[41,393,121,24],[41,321,24,73],[137,321,24,73]],z:1,p:{8:18,13:27,19:9},r:15},
+    {n:"The crossing",b:"Split the drive two ways. Mind the guards. One output is boxed in. No gear reaches it — throw a belt.",d:[809,326],t:[[567,391,19,1],[114,355,19,1]],w:[[0,194,586,36],[780,194,140,36],[476,300,182,24],[476,458,182,24],[476,324,24,134],[634,324,24,134]],z:1,p:{8:18,13:27,19:9},r:15},
+    {n:"Return line",b:"A pair of take-offs to feed. Work the gaps in the guarding. One output is boxed in. No gear reaches it — throw a belt.",d:[756,226],t:[[110,391,8,-1],[129,125,8,-1]],w:[[0,298,502,30],[696,298,224,30],[50,331,121,24],[50,427,121,24],[50,355,24,73],[146,355,24,73]],z:1,p:{8:20,13:30,19:10},r:17},
+    {n:"Sump drive",b:"Two outputs off the one motor. The castings block the direct line. One output is boxed in. No gear reaches it — throw a belt.",d:[699,153],t:[[513,420,13,-1],[142,277,8,1]],w:[[306,0,31,258],[306,470,31,90],[619,445,42,115],[439,346,149,24],[439,470,149,24],[439,370,24,101],[563,370,24,101]],z:1,p:{8:16,13:24,19:8},r:13},
+    {n:"Feed roll",b:"Split the drive two ways. Work the gaps in the guarding. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[200,326],t:[[481,353,8,1],[770,372,8,1]],w:[[829,267,91,31],[710,312,121,24],[710,408,121,24],[710,336,24,73],[806,336,24,73]],z:1,p:{8:15,13:22,19:7},r:12},
+    {n:"The comb",b:"Split the drive two ways. Mind the guards. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[675,314],t:[[130,376,19,1],[468,129,8,1]],w:[[480,305,37,255],[39,285,182,24],[39,443,182,24],[39,309,24,134],[197,309,24,134]],z:1,p:{8:15,13:22,19:7},r:12},
+    {n:"Gantry",b:"Two outputs off the one motor. Guards are up, so route around them. One output is boxed in. No gear reaches it — throw a belt.",d:[357,142],t:[[825,257,19,-1],[386,426,8,-1]],w:[[0,296,396,32],[326,366,121,24],[326,462,121,24],[326,390,24,73],[422,390,24,73]],z:1,p:{8:15,13:22,19:7},r:12},
+    {n:"Take-up",b:"Split the drive two ways. The castings block the direct line. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[744,260],t:[[107,155,13,1],[304,375,13,-1]],w:[[231,0,34,181],[451,0,41,245],[451,435,41,125],[718,0,36,154],[718,363,36,197],[230,301,149,24],[230,425,149,24],[230,325,24,101],[354,325,24,101]],z:1,p:{8:19,13:28,19:9},r:16},
+    {n:"Stub axle",b:"Three trains out of one shaft. The castings block the direct line. The marked shaft must carry a gear before this bay runs.",d:[384,137],t:[[348,441,13,-1],[703,179,8,-1],[156,213,13,1]],w:[[230,0,32,313],[460,231,32,329]],g:[[421,280,13]],e:{y:0,v:12,l:[[670,80,0.6,10,13]]},p:{8:22,13:33,19:11},r:19},
+    {n:"Rocker",b:"Three outputs, one motor. The castings block the direct line. A shaft is already bored — fit the marked gear onto it.",d:[542,230],t:[[226,375,8,1],[115,194,13,-1],[525,443,13,1]],w:[[0,275,366,38]],g:[[502,346,19]],e:{y:1,v:12,l:[[90,460,1.3,5,6.5]]},p:{8:22,13:34,19:11},r:20},
+    {n:"The vault",b:"Three trains out of one shaft. The castings block the direct line. A shaft is already bored — fit the marked gear onto it.",d:[466,365],t:[[642,142,8,-1],[262,174,8,1],[775,368,13,-1]],w:[[368,298,32,262],[552,0,32,330]],g:[[840,416,13]],e:{y:0,v:20,l:[[690,440,2,6.5,8]]},p:{8:24,13:37,19:12},r:22},
+    {n:"Line shaft",b:"Three outputs, one motor. Mind the guards. The marked shaft must carry a gear before this bay runs.",d:[254,259],t:[[532,463,8,1],[807,146,8,-1],[427,106,13,1]],w:[[277,0,37,190],[277,370,37,190],[628,0,42,110],[628,305,42,255]],g:[[379,317,8]],e:{y:2,v:12,l:[[590,260,3,2,2.6]]},p:{8:25,13:39,19:13},r:23},
+    {n:"Loom drive",b:"Feed all three take-offs. Work the gaps in the guarding. The marked shaft must carry a gear before this bay runs.",d:[158,231],t:[[386,219,13,-1],[206,465,13,1],[658,398,8,-1]],w:[[606,171,314,37]],g:[[221,145,19]],e:{y:2,v:20,l:[[270,300,1,10,13]]},p:{8:22,13:33,19:11},r:19},
+    {n:"The gallery",b:"Three outputs, one motor. Seat the called-out gear on its shaft.",d:[763,230],t:[[335,451,13,1],[530,368,8,1],[466,117,8,1]],g:[[615,397,19]],e:{y:2,v:20,l:[[230,480,3,4,5]]},p:{8:27,13:42,19:14},r:25},
+    {n:"Drop box",b:"Three trains out of one shaft. Mind the guards. The marked shaft must carry a gear before this bay runs.",d:[805,325],t:[[215,212,8,-1],[559,425,13,-1],[339,381,8,-1]],w:[[0,168,92,37],[285,168,635,37],[0,380,272,41]],g:[[523,518,13]],e:{y:0,v:20,l:[[390,80,5,2,2.6]]},p:{8:31,13:48,19:17},r:29},
+    {n:"Header tank",b:"Three outputs, one motor. Guards are up, so route around them. Seat the called-out gear on its shaft.",d:[309,238],t:[[772,124,8,1],[98,235,13,1],[735,401,13,1]],w:[[281,410,36,150],[633,0,42,161]],g:[[550,238,19]],e:{y:0,v:20,l:[[310,60,1.3,8,10]]},p:{8:22,13:33,19:11},r:19},
+    {n:"Pinch point",b:"Three trains out of one shaft. Guards are up, so route around them. The marked shaft must carry a gear before this bay runs.",d:[345,421],t:[[129,99,8,-1],[579,330,13,-1],[825,404,13,-1]],w:[[184,0,32,315]],g:[[121,273,19]],e:{y:2,v:12,l:[[470,240,2,2,2.6]]},p:{8:20,13:30,19:10},r:17},
+    {n:"The trench",b:"Three outputs, one motor. Guards are up, so route around them. The marked shaft must carry a gear before this bay runs.",d:[291,257],t:[[113,456,13,-1],[520,311,13,1],[716,393,13,1]],w:[[293,444,34,116],[606,0,37,109],[606,304,37,256]],g:[[97,520,8]],e:{y:2,v:12,l:[[350,160,0.8,8,10]]},p:{8:31,13:48,19:17},r:29},
+    {n:"Cam row",b:"Feed all three take-offs. Guards are up, so route around them. The marked shaft must carry a gear before this bay runs.",d:[636,239],t:[[138,435,8,1],[332,310,8,1],[793,392,13,-1]],w:[[153,0,32,286],[460,0,32,263],[767,0,32,283]],g:[[417,386,19]],e:{y:2,v:12,l:[[730,160,4,1.5,2]]},p:{8:36,13:57,19:20},r:35},
+    {n:"Sheave",b:"Feed all three take-offs. Work the gaps in the guarding. Seat the called-out gear on its shaft.",d:[737,254],t:[[392,259,13,1],[198,188,8,-1],[727,460,13,1]],w:[[552,0,32,237]],g:[[687,407,8]],e:{y:2,v:12,l:[[370,500,0.6,8,10]]},p:{8:31,13:48,19:17},r:29},
+    {n:"Bight",b:"Three outputs, one motor. Guards are up, so route around them. The sealed housing needs a belt over the top.",d:[740,248],t:[[349,338,13,-1],[145,382,13,1],[309,136,8,-1]],w:[[275,264,149,24],[275,388,149,24],[275,288,24,101],[399,288,24,101]],z:1,e:{y:2,v:20,l:[[610,80,1.3,10,13]]},p:{8:22,13:33,19:11},r:19},
+    {n:"The lattice",b:"Three outputs, one motor. Mind the guards. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[422,331],t:[[762,132,8,1],[133,109,13,1],[154,362,13,-1]],w:[[307,230,32,330],[613,279,32,281],[702,72,121,24],[702,168,121,24],[702,96,24,73],[798,96,24,73]],z:1,e:{y:2,v:12,l:[[510,140,1.3,2,2.6]]},p:{8:31,13:48,19:17},r:29},
+    {n:"Slip ring",b:"Three outputs, one motor. Guards are up, so route around them. The sealed housing needs a belt over the top.",d:[188,167],t:[[670,398,8,-1],[408,247,13,-1],[169,376,8,-1]],w:[[109,316,121,24],[109,412,121,24],[109,340,24,73],[205,340,24,73]],z:1,e:{y:0,v:20,l:[[710,160,1.3,10,13]]},p:{8:20,13:30,19:10},r:17},
+    {n:"Journal",b:"Three trains out of one shaft. The castings block the direct line. One output is boxed in. No gear reaches it — throw a belt.",d:[142,325],t:[[628,372,8,-1],[543,178,13,-1],[394,409,13,-1]],w:[[767,0,32,305],[469,104,149,24],[469,228,149,24],[469,128,24,101],[593,128,24,101]],z:1,e:{y:2,v:12,l:[[310,100,1,6.5,8]]},p:{8:20,13:30,19:10},r:17},
+    {n:"Bearing house",b:"Three outputs, one motor. Work the gaps in the guarding. One output is boxed in. No gear reaches it — throw a belt.",d:[610,239],t:[[104,362,13,1],[394,405,13,-1],[115,127,13,-1]],w:[[178,196,124,119],[320,331,149,24],[320,455,149,24],[320,355,24,101],[444,355,24,101]],z:1,e:{y:2,v:12,l:[[130,460,1.6,4,5]]},p:{8:24,13:37,19:12},r:22},
+    {n:"Trunnion",b:"Three outputs, one motor. Mind the guards. One output is boxed in. No gear reaches it — throw a belt.",d:[163,194],t:[[245,431,8,-1],[494,146,13,-1],[766,134,13,1]],w:[[368,322,32,238],[736,260,32,300],[185,371,121,24],[185,467,121,24],[185,395,24,73],[281,395,24,73]],z:1,e:{y:2,v:12,l:[[670,280,1.3,5,6.5]]},p:{8:22,13:33,19:11},r:19},
+    {n:"The stack",b:"Three outputs, one motor. Guards are up, so route around them. The sealed housing needs a belt over the top.",d:[767,327],t:[[418,353,8,-1],[139,409,13,-1],[174,105,13,1]],w:[[581,66,120,105],[219,153,195,109],[358,293,121,24],[358,389,121,24],[358,317,24,73],[454,317,24,73]],z:1,e:{y:2,v:12,l:[[630,320,0.6,3,4]]},p:{8:24,13:37,19:12},r:22},
+    {n:"Dog clutch",b:"Three trains out of one shaft. Guards are up, so route around them. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[776,334],t:[[531,312,13,1],[135,288,13,1],[373,133,13,1]],w:[[230,0,32,237],[690,0,32,299],[457,238,149,24],[457,362,149,24],[457,262,24,101],[581,262,24,101]],z:1,e:{y:0,v:12,l:[[790,480,1.3,4,5]]},p:{8:22,13:33,19:11},r:19},
+    {n:"Freewheel",b:"Three outputs, one motor. Mind the guards. The sealed housing needs a belt over the top.",d:[699,181],t:[[351,372,8,1],[821,455,13,-1],[118,173,13,-1]],w:[[286,145,90,138],[291,312,121,24],[291,408,121,24],[291,336,24,73],[387,336,24,73]],z:1,e:{y:0,v:20,l:[[430,80,3,4,5]]},p:{8:22,13:33,19:11},r:19},
+    {n:"Coupling",b:"Three trains out of one shaft. Mind the guards. The sealed housing needs a belt over the top.",d:[331,381],t:[[114,255,13,1],[724,325,8,1],[589,138,13,-1]],w:[[460,0,32,301],[613,248,32,312],[767,0,32,239],[664,265,121,24],[664,361,121,24],[664,289,24,73],[760,289,24,73]],z:1,e:{y:0,v:12,l:[[430,360,1.3,4,5]]},p:{8:20,13:30,19:10},r:17},
+    {n:"Face plate",b:"Feed all three take-offs. Mind the guards. One output is boxed in. No gear reaches it — throw a belt.",d:[634,317],t:[[348,312,13,-1],[110,187,8,-1],[155,410,8,-1]],w:[[50,127,121,24],[50,223,121,24],[50,151,24,73],[146,151,24,73]],z:1,e:{y:1,v:20,l:[[450,440,3,4,5]]},p:{8:22,13:34,19:11},r:20},
+    {n:"The cradle",b:"Feed all three take-offs. Work the gaps in the guarding. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[228,145],t:[[692,350,8,1],[371,406,13,-1],[773,99,13,1]],w:[[460,324,32,236],[632,290,121,24],[632,386,121,24],[632,314,24,73],[728,314,24,73]],z:1,e:{y:1,v:12,l:[[230,460,1,8,10]]},p:{8:22,13:34,19:11},r:20},
+    {n:"Bed plate",b:"Feed all three take-offs. Guards are up, so route around them. Seat the called-out gear on its shaft. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[175,255],t:[[446,275,13,-1],[725,277,8,1],[565,462,13,1]],w:[[245,0,30,275],[245,465,30,95],[690,0,40,184],[690,397,40,163],[372,201,149,24],[372,325,149,24],[372,225,24,101],[496,225,24,101]],g:[[371,410,19]],z:1,e:{y:1,v:20,l:[[310,60,5,2,2.6]]},p:{8:28,13:43,19:15},r:26},
+    {n:"Lead screw",b:"Three outputs, one motor. The castings block the direct line. The marked shaft must carry a gear before this bay runs. One output is boxed in. No gear reaches it — throw a belt.",d:[779,298],t:[[221,413,13,1],[283,181,8,-1],[521,286,13,-1]],w:[[488,0,41,173],[709,0,42,102],[447,212,149,24],[447,336,149,24],[447,236,24,101],[571,236,24,101]],g:[[676,495,13],[446,414,19]],z:1,e:{y:1,v:20,l:[[650,80,5,2,2.6]]},p:{8:30,13:46,19:16},r:28},
+    {n:"Tail drive",b:"Three outputs, one motor. Work the gaps in the guarding. A shaft is already bored — fit the marked gear onto it. The sealed housing needs a belt over the top.",d:[499,222],t:[[337,414,13,1],[118,395,13,1],[148,136,13,-1]],w:[[452,0,32,113],[452,311,32,249],[74,62,149,24],[74,186,149,24],[74,86,24,101],[198,86,24,101]],g:[[155,257,13],[384,303,13]],z:1,e:{y:0,v:12,l:[[750,500,1.3,2,2.6]]},p:{8:28,13:43,19:15},r:26},
+    {n:"Cross head",b:"Feed all three take-offs. The castings block the direct line. Seat the called-out gear on its shaft. One output is boxed in. No gear reaches it — throw a belt.",d:[197,129],t:[[773,230,13,1],[275,456,8,-1],[651,453,13,1]],w:[[473,0,38,146],[473,331,38,229],[699,156,149,24],[699,280,149,24],[699,180,24,101],[823,180,24,101]],g:[[253,285,19],[378,285,19]],z:1,e:{y:0,v:12,l:[[570,180,5,1.5,2]]},p:{8:25,13:39,19:13},r:23},
+    {n:"The mill",b:"Three trains out of one shaft. Guards are up, so route around them. The marked shaft must carry a gear before this bay runs. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[122,214],t:[[461,161,13,-1],[232,436,8,-1],[722,293,13,-1]],w:[[244,0,33,315],[440,442,34,118],[667,0,34,184],[667,394,34,166],[172,376,121,24],[172,472,121,24],[172,400,24,73],[268,400,24,73]],g:[[267,338,8],[266,522,8]],z:1,e:{y:0,v:12,l:[[130,60,1,5,6.5]]},p:{8:31,13:48,19:17},r:29},
+    {n:"Roller bed",b:"Three outputs, one motor. Guards are up, so route around them. A shaft is already bored — fit the marked gear onto it. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[223,389],t:[[367,239,13,-1],[602,430,13,-1],[766,191,8,-1]],w:[[298,388,42,172],[607,0,42,170],[293,165,149,24],[293,289,149,24],[293,189,24,101],[417,189,24,101]],g:[[418,368,19],[422,112,19]],z:1,e:{y:0,v:12,l:[[130,500,1.6,3,4]]},p:{8:22,13:34,19:11},r:20},
+    {n:"Kiln drive",b:"Three trains out of one shaft. Guards are up, so route around them. Seat the called-out gear on its shaft. One output is boxed in. No gear reaches it — throw a belt.",d:[189,206],t:[[751,109,13,-1],[565,276,8,-1],[223,419,8,1]],w:[[458,0,36,132],[458,316,36,244],[163,359,121,24],[163,455,121,24],[163,383,24,73],[259,383,24,73]],g:[[475,206,19],[433,289,13]],z:1,e:{y:1,v:20,l:[[730,360,4,3,4],[610,100,2,6.5,8]]},p:{8:22,13:33,19:11},r:19},
+    {n:"Bank of three",b:"Feed all three take-offs. Guards are up, so route around them. The marked shaft must carry a gear before this bay runs. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[756,374],t:[[251,277,13,-1],[387,123,8,-1],[544,373,13,1]],w:[[237,0,36,132],[469,0,32,238],[707,0,32,192],[470,299,149,24],[470,423,149,24],[470,323,24,101],[594,323,24,101]],g:[[494,265,8],[295,411,19]],z:1,e:{y:1,v:20,l:[[590,240,3,5,6.5],[810,100,5,2,2.6]]},p:{8:30,13:46,19:16},r:28},
+    {n:"The loft",b:"Feed all three take-offs. Guards are up, so route around them. A shaft is already bored — fit the marked gear onto it. One output is boxed in. No gear reaches it — throw a belt.",d:[793,215],t:[[298,449,13,1],[261,219,13,1],[559,393,13,-1]],w:[[596,0,32,114],[187,145,149,24],[187,269,149,24],[187,169,24,101],[311,169,24,101]],g:[[680,430,19],[701,326,8]],z:1,e:{y:2,v:12,l:[[170,400,1.3,3,4],[850,420,1.6,4,5]]},p:{8:22,13:34,19:11},r:20},
+    {n:"Winch head",b:"Three trains out of one shaft. The castings block the direct line. A shaft is already bored — fit the marked gear onto it. The sealed housing needs a belt over the top.",d:[391,435],t:[[478,120,13,-1],[715,328,13,-1],[776,95,13,1]],w:[[245,0,37,236],[245,443,37,117],[481,418,36,142],[673,0,35,186],[404,46,149,24],[404,170,149,24],[404,70,24,101],[528,70,24,101]],g:[[528,335,19],[434,232,13]],z:1,e:{y:2,v:12,l:[[610,100,1.6,5,6.5],[610,500,0.6,6.5,8]]},p:{8:24,13:37,19:12},r:22},
+    {n:"Hoist gear",b:"Three trains out of one shaft. Guards are up, so route around them. Seat the called-out gear on its shaft. One output is boxed in. No gear reaches it — throw a belt.",d:[239,207],t:[[502,117,8,-1],[801,107,13,-1],[687,298,8,-1]],w:[[247,360,30,200],[435,362,32,198],[716,398,32,162],[442,57,121,24],[442,153,121,24],[442,81,24,73],[538,81,24,73]],g:[[529,237,19],[396,350,13]],z:1,e:{y:0,v:20,l:[[310,280,2,6.5,8],[850,360,1.6,8,10]]},p:{8:25,13:39,19:13},r:23},
+    {n:"Spindle bank",b:"Three trains out of one shaft. Guards are up, so route around them. A shaft is already bored — fit the marked gear onto it. One output is boxed in. No gear reaches it — throw a belt.",d:[614,385],t:[[267,451,13,1],[111,151,13,1],[317,227,13,-1]],w:[[457,0,42,231],[457,414,42,146],[243,153,149,24],[243,277,149,24],[243,177,24,101],[367,177,24,101]],g:[[420,368,19],[431,208,8]],z:1,e:{y:0,v:12,l:[[90,340,3,2.5,3.2],[350,100,0.8,8,10]]},p:{8:22,13:34,19:11},r:20},
+    {n:"The furnace",b:"Four outputs. Build the whole works. The castings block the direct line. The marked shaft must carry a gear before this bay runs.",d:[168,213],t:[[555,267,13,1],[817,147,13,1],[99,432,13,-1],[309,374,13,-1]],w:[[736,311,32,249]],g:[[295,121,19]],e:{y:3,v:12,l:[[550,440,3,2,2.6],[410,220,1,8,10]]},p:{8:28,13:43,19:15},r:26},
+    {n:"Chain race",b:"Four outputs. Build the whole works. Seat the called-out gear on its shaft.",d:[460,385],t:[[705,223,13,-1],[787,459,13,-1],[293,219,13,1],[188,440,13,-1]],g:[[519,285,19]],e:{y:3,v:12,l:[[90,180,2,3,4],[410,200,2,2.5,3.2]]},p:{8:27,13:42,19:14},r:25},
+    {n:"Crown wheel",b:"Four take-offs — a full shift's fitting. A shaft is already bored — fit the marked gear onto it.",d:[730,448],t:[[367,248,13,1],[222,402,13,1],[587,253,8,1],[124,213,13,-1]],g:[[607,369,8]],e:{y:2,v:20,l:[[750,220,3,3,4],[550,500,6.5,2,2.6]]},p:{8:34,13:54,19:18},r:33},
+    {n:"Bevel row",b:"Four take-offs — a full shift's fitting. Guards are up, so route around them. The marked shaft must carry a gear before this bay runs.",d:[758,366],t:[[320,158,13,1],[115,205,8,1],[224,413,13,1],[790,115,13,1]],w:[[430,218,174,95]],g:[[603,180,13]],e:{y:3,v:12,l:[[470,360,1.6,2,2.6],[370,260,1.3,3,4]]},p:{8:36,13:57,19:20},r:35},
+    {n:"The annex",b:"Four outputs. Build the whole works. Work the gaps in the guarding. The marked shaft must carry a gear before this bay runs.",d:[532,217],t:[[786,171,8,-1],[274,225,13,1],[179,426,13,1],[399,458,8,-1]],w:[[690,0,32,240]],g:[[680,293,19]],e:{y:3,v:20,l:[[610,120,2,6.5,8],[270,100,3,4,5]]},p:{8:39,13:61,19:21},r:38},
+    {n:"Drive stack",b:"Four take-offs — a full shift's fitting. Seat the called-out gear on its shaft.",d:[218,206],t:[[336,417,13,1],[713,192,13,-1],[450,210,8,1],[604,456,13,-1]],g:[[167,347,19]],e:{y:0,v:12,l:[[530,160,2.5,2,2.6],[670,60,0.6,3,4]]},p:{8:39,13:61,19:21},r:38},
+    {n:"Pit head",b:"Four take-offs — a full shift's fitting. Guards are up, so route around them. Seat the called-out gear on its shaft.",d:[602,377],t:[[197,227,13,1],[356,402,8,1],[631,102,8,-1],[805,213,13,-1]],w:[[460,0,32,291]],g:[[527,530,8]],e:{y:0,v:12,l:[[370,180,1.3,5,6.5],[70,60,1.3,5,6.5]]},p:{8:31,13:48,19:17},r:29},
+    {n:"Under floor",b:"Four outputs. Build the whole works. The marked shaft must carry a gear before this bay runs.",d:[288,382],t:[[576,241,13,1],[795,133,8,-1],[100,261,8,1],[824,381,13,-1]],g:[[388,270,19]],e:{y:3,v:12,l:[[470,140,1,3,4],[570,440,2,3,4]]},p:{8:28,13:43,19:15},r:26},
+    {n:"The maze",b:"Four take-offs — a full shift's fitting. The castings block the direct line. Seat the called-out gear on its shaft.",d:[779,213],t:[[225,397,13,1],[507,213,13,-1],[188,118,13,-1],[777,439,13,1]],w:[[368,249,32,311]],g:[[486,120,19]],e:{y:2,v:12,l:[[630,300,1,4,5],[170,280,0.6,10,13]]},p:{8:33,13:52,19:18},r:32},
+    {n:"Twin belts",b:"Four take-offs — a full shift's fitting. Guards are up, so route around them. A shaft is already bored — fit the marked gear onto it.",d:[437,434],t:[[630,195,13,1],[228,206,8,-1],[815,286,13,-1],[662,432,13,1]],w:[[296,186,121,167]],g:[[444,327,8]],e:{y:2,v:12,l:[[570,60,1,5,6.5],[550,480,2.5,2,2.6]]},p:{8:25,13:39,19:13},r:23},
+    {n:"Long haul",b:"Four take-offs — a full shift's fitting. A shaft is already bored — fit the marked gear onto it.",d:[729,346],t:[[248,255,8,1],[454,239,13,-1],[444,463,13,-1],[618,112,8,1]],g:[[502,380,19]],e:{y:1,v:12,l:[[150,220,1.6,3,4],[270,80,0.6,10,13]]},p:{8:25,13:39,19:13},r:23},
+    {n:"Four corners",b:"Four outputs. Build the whole works. The castings block the direct line. A shaft is already bored — fit the marked gear onto it.",d:[322,239],t:[[782,171,8,-1],[582,279,13,1],[120,361,13,-1],[411,464,13,-1]],w:[[184,0,32,285],[736,251,32,309]],g:[[600,172,19]],e:{y:1,v:12,l:[[150,500,1,2,2.6],[510,80,2,3,4]]},p:{8:24,13:37,19:12},r:22},
+    {n:"The works",b:"Four outputs. Build the whole works. Mind the guards. The marked shaft must carry a gear before this bay runs. The sealed housing needs a belt over the top.",d:[619,179],t:[[821,349,13,1],[118,300,13,-1],[368,394,8,1],[579,461,13,-1]],w:[[184,0,32,262],[308,334,121,24],[308,430,121,24],[308,358,24,73],[404,358,24,73]],g:[[778,77,19],[395,274,19]],z:1,e:{y:0,v:12,l:[[530,300,0.8,8,10],[550,80,1,5,6.5]]},p:{8:25,13:39,19:13},r:23},
+    {n:"Night shift",b:"Every corner of the bay wants drive. Mind the guards. Seat the called-out gear on its shaft. The sealed housing needs a belt over the top.",d:[129,434],t:[[647,260,8,1],[407,123,13,1],[344,323,13,1],[185,155,13,1]],w:[[452,310,35,250],[587,200,121,24],[587,296,121,24],[587,224,24,73],[683,224,24,73]],g:[[429,479,8],[155,329,19]],z:1,e:{y:1,v:12,l:[[650,460,0.6,8,10],[70,60,2,2,2.6]]},p:{8:36,13:57,19:20},r:35},
+    {n:"Overhaul",b:"Four take-offs — a full shift's fitting. Work the gaps in the guarding. A shaft is already bored — fit the marked gear onto it. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[139,375],t:[[457,264,13,1],[784,450,13,-1],[655,161,13,1],[268,160,13,-1]],w:[[368,327,32,233],[581,87,149,24],[581,211,149,24],[581,111,24,101],[705,111,24,101]],g:[[313,368,13],[326,83,19]],z:1,e:{y:1,v:12,l:[[530,400,1,6.5,8],[790,100,1.3,3,4]]},p:{8:39,13:61,19:21},r:38},
+    {n:"Full load",b:"Four outputs. Build the whole works. The castings block the direct line. A shaft is already bored — fit the marked gear onto it. The sealed housing needs a belt over the top.",d:[461,157],t:[[207,461,13,1],[138,261,8,-1],[608,436,13,-1],[728,106,13,-1]],w:[[251,0,42,121],[441,275,31,285],[715,355,41,205],[654,32,149,24],[654,156,149,24],[654,56,24,101],[778,56,24,101]],g:[[402,235,19],[293,200,19]],z:1,e:{y:1,v:20,l:[[550,260,4,2.5,3.2],[130,60,6.5,1.5,2]]},p:{8:27,13:42,19:14},r:25},
+    {n:"Cold start",b:"Every corner of the bay wants drive. Guards are up, so route around them. Seat the called-out gear on its shaft. The sealed housing needs a belt over the top.",d:[765,267],t:[[376,329,8,-1],[162,334,8,-1],[591,422,8,1],[290,122,13,1]],w:[[460,289,32,271],[316,269,121,24],[316,365,121,24],[316,293,24,73],[412,293,24,73]],g:[[386,206,19],[767,379,19]],z:1,e:{y:1,v:20,l:[[630,340,4,2.5,3.2],[330,480,6.5,2,2.6]]},p:{8:28,13:43,19:15},r:26},
+    {n:"The proof",b:"Four take-offs — a full shift's fitting. The castings block the direct line. Seat the called-out gear on its shaft. The sealed housing needs a belt over the top.",d:[126,112],t:[[680,109,13,-1],[462,210,13,-1],[610,412,8,1],[363,455,13,-1]],w:[[481,382,42,178],[550,352,121,24],[550,448,121,24],[550,376,24,73],[646,376,24,73]],g:[[387,62,19],[349,516,8]],z:1,e:{y:1,v:12,l:[[190,460,0.8,8,10],[350,340,2.5,2.5,3.2]]},p:{8:37,13:58,19:20},r:36},
+    {n:"Test bed",b:"Every corner of the bay wants drive. The castings block the direct line. The marked shaft must carry a gear before this bay runs. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[242,127],t:[[766,149,13,-1],[131,349,13,1],[821,366,13,1],[317,450,8,-1]],w:[[460,297,32,263],[747,292,149,24],[747,416,149,24],[747,316,24,101],[871,316,24,101]],g:[[530,259,13],[186,199,8]],z:1,e:{y:1,v:12,l:[[370,120,0.6,8,10],[410,320,2,3,4]]},p:{8:28,13:43,19:15},r:26},
+    {n:"Final drive",b:"Every corner of the bay wants drive. The castings block the direct line. Seat the called-out gear on its shaft. One output is boxed in. No gear reaches it — throw a belt.",d:[677,365],t:[[447,255,13,-1],[172,170,8,-1],[261,449,13,1],[624,126,8,-1]],w:[[253,0,36,217],[486,392,41,168],[686,0,38,130],[187,375,149,24],[187,499,149,24],[187,399,24,101],[311,399,24,101]],g:[[634,259,19],[387,337,19]],z:1,e:{y:0,v:12,l:[[790,360,1.3,5,6.5],[130,400,0.6,10,13]]},p:{8:30,13:46,19:16},r:28},
+    {n:"Shutdown",b:"Four take-offs — a full shift's fitting. Guards are up, so route around them. A shaft is already bored — fit the marked gear onto it. Gears can't get inside the housing. Belt it, and remember a belt keeps the hand.",d:[713,395],t:[[682,160,13,1],[173,153,13,1],[387,235,13,-1],[271,436,13,-1]],w:[[552,0,32,309],[197,362,149,24],[197,486,149,24],[197,386,24,101],[321,386,24,101]],g:[[702,295,8],[471,418,19]],z:1,e:{y:0,v:12,l:[[790,480,0.8,6.5,8],[250,220,1,3,4]]},p:{8:28,13:43,19:15},r:26},
+    {n:"The long day",b:"Every corner of the bay wants drive. Work the gaps in the guarding. The marked shaft must carry a gear before this bay runs. One output is boxed in. No gear reaches it — throw a belt.",d:[770,349],t:[[333,240,8,1],[664,101,8,1],[135,107,13,-1],[125,433,13,-1]],w:[[552,0,32,277],[273,180,121,24],[273,276,121,24],[273,204,24,73],[369,204,24,73]],g:[[753,236,13],[455,242,19]],z:1,e:{y:2,v:12,l:[[290,360,1.6,4,5],[450,480,0.6,3,4]]},p:{8:33,13:52,19:18},r:32},
+    {n:"Graveyard",b:"Every corner of the bay wants drive. Mind the guards. Seat the called-out gear on its shaft. The sealed housing needs a belt over the top.",d:[386,177],t:[[255,463,13,1],[804,157,13,1],[95,275,8,-1],[618,347,13,-1]],w:[[230,0,32,324],[460,289,32,271],[690,0,32,251],[181,389,149,24],[181,513,149,24],[181,413,24,101],[305,413,24,101]],g:[[634,144,19],[287,352,13]],z:1,e:{y:2,v:20,l:[[150,80,2,6.5,8],[510,160,6.5,1.5,2]]},p:{8:28,13:43,19:15},r:26},
+    {n:"Last bay",b:"Four outputs. Build the whole works. Guards are up, so route around them. The marked shaft must carry a gear before this bay runs. The sealed housing needs a belt over the top.",d:[546,116],t:[[186,258,13,1],[98,460,13,1],[321,428,13,1],[784,294,13,1]],w:[[460,321,32,239],[24,386,149,24],[24,510,149,24],[24,410,24,101],[148,410,24,101]],g:[[373,208,19],[202,124,19]],z:1,e:{y:2,v:12,l:[[630,400,0.8,6.5,8],[70,320,1,6.5,8]]},p:{8:33,13:52,19:18},r:32}
+  ];
+
+  const LEVELS = BAYS.map((b, i) => ({
+    code: "BAY-" + String(i + 1).padStart(2, "0"),
+    name: b.n,
+    brief: b.b,
+    driver: { x: b.d[0], y: b.d[1] },
+    targets: b.t.map(t => ({ x: t[0], y: t[1], n: t[2], dir: t[3] })),
+    walls: (b.w || []).map(w => ({ x: w[0], y: w[1], w: w[2], h: w[3] })),
+    pegs: (b.g || []).map(g => ({ x: g[0], y: g[1], n: g[2] })),
+    belts: b.z || 0,
+    elec: b.e ? {
+      dyno: b.e.y, volts: b.e.v,
+      loads: b.e.l.map(l => ({ x: l[0], y: l[1], ohm: l[2], lo: l[3], hi: l[4] }))
+    } : null,
+    parts: b.p,
+    par: b.r
+  }));
+
+  // ---------------------------------------------------------------- save file
+
+  const SAVE_KEY = "gearworks.progress.v2";
+  let SAVE = { best: {} };
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) { const p = JSON.parse(raw); if (p && p.best) SAVE = p; }
+  } catch (e) { /* private mode, or a corrupt file — play on without one */ }
+  const bestOf = i => SAVE.best[i];
+  function record(i, used) {
+    const b = SAVE.best[i];
+    if (b === undefined || used < b) {
+      SAVE.best[i] = used;
+      try { localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); } catch (e) {}
+      return true;
+    }
+    return false;
+  }
+  function lastPlayed() {
+    let n = 0;
+    while (n < LEVELS.length && SAVE.best[n] !== undefined) n++;
+    return Math.min(n, LEVELS.length - 1);
+  }
+
+  // ---------------------------------------------------------------- state
+
+  const S = {
+    li: 0,
+    gears: [],        // [0] = driver, then targets, then fitted parts
+    belts: [],        // {a,b} gear references
+    stock: {},
+    beltsLeft: 0,
+    pick: 13,
+    mode: "gear",     // gear | belt | wire
+    beltFrom: null,
+    loads: [],        // {x,y,ohm,lo,hi,wire,I,ok}
+    loadSel: -1,
+    filterMat: null,
+    filterAwg: null,
+    history: [],      // {t:"gear"|"belt", ...}
+    t: 0,
+    shake: 0,
+    jam: false,
+    won: false,
+    ghost: null,      // {x,y,n,r,ok}
+    lift: -1          // index of fitted gear under the cursor
+  };
+
+  const cv = document.getElementById("bay");
+  const ctx = cv.getContext("2d");
+  const $ = id => document.getElementById(id);
+
+  function loadLevel(i) {
+    S.li = i = Math.max(0, Math.min(LEVELS.length - 1, i));
+    const L = LEVELS[i];
+    S.gears = [{ x: L.driver.x, y: L.driver.y, n: 13, r: rOf(13), kind: "drive" }];
+    L.targets.forEach((t, k) => S.gears.push({
+      x: t.x, y: t.y, n: t.n, r: rOf(t.n),
+      kind: (L.elec && L.elec.dyno === k) ? "dyno" : "out",
+      req: t.dir, oi: k
+    }));
+    S.stock = Object.assign({}, L.parts);
+    S.beltsLeft = L.belts;
+    S.belts = [];
+    S.loads = L.elec ? L.elec.loads.map(l => Object.assign({}, l, { wire: null, I: 0, ok: false })) : [];
+    S.loadSel = -1;
+    S.history = [];
+    S.won = false;
+    S.jam = false;
+    S.shake = 0;
+    S.t = 0;
+    S.ghost = null;
+    S.lift = -1;
+    S.beltFrom = null;
+    S.mode = "gear";
+    if (!S.stock[S.pick]) S.pick = Number(Object.keys(S.stock)[0]);
+    $("done").classList.remove("show");
+    paintChrome();
+  }
+
+  // ---------------------------------------------------------------- geometry
+
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  function hitsWall(x, y, r) {
+    for (const w of LEVELS[S.li].walls) {
+      const cx = Math.max(w.x, Math.min(x, w.x + w.w));
+      const cy = Math.max(w.y, Math.min(y, w.y + w.h));
+      if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) return true;
+    }
+    return false;
+  }
+
+  function segCircle(a, b, c, r) {
+    const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+    let t = L2 ? ((c.x - a.x) * dx + (c.y - a.y) * dy) / L2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(a.x + t * dx - c.x, a.y + t * dy - c.y) < r;
+  }
+
+  // Slide a candidate gear onto a true mesh. A seat against two gears at once wins —
+  // that is how a train gets closed onto an output. A bored shaft pulls it in too.
+  function snapTo(px, py, r, n) {
+    // A bored shaft carries the gear on its own, so seating one there needs no mesh yet.
+    let peg = null, pegD = Infinity;
+    for (const g of LEVELS[S.li].pegs) {
+      if (g.n !== n) continue;
+      const d = Math.hypot(px - g.x, py - g.y);
+      if (d < SNAP * 1.6 && d < pegD && placeable(g.x, g.y, r, false)) { pegD = d; peg = { x: g.x, y: g.y, peg: true }; }
+    }
+
+    const near = S.gears.filter(g => Math.hypot(px - g.x, py - g.y) < g.r + r + SNAP * 1.6);
+
+    // A pocket between two gears: seating there closes a train onto an output.
+    let pair = null, pairD = Infinity;
+    for (let i = 0; i < near.length; i++) {
+      for (let j = i + 1; j < near.length; j++) {
+        const A = near[i], B = near[j], R1 = A.r + r, R2 = B.r + r;
+        const dx = B.x - A.x, dy = B.y - A.y, d = Math.hypot(dx, dy);
+        if (d < 1e-6 || d > R1 + R2 || d < Math.abs(R1 - R2)) continue;
+        const a = (R1 * R1 - R2 * R2 + d * d) / (2 * d), h2 = R1 * R1 - a * a;
+        if (h2 < 0) continue;
+        const h = Math.sqrt(h2), mx = A.x + a * dx / d, my = A.y + a * dy / d;
+        for (const s of [1, -1]) {
+          const x = mx + s * h * (-dy / d), y = my + s * h * (dx / d);
+          const dd = Math.hypot(px - x, py - y);
+          if (dd < SNAP * 1.5 && dd < pairD && placeable(x, y, r)) { pairD = dd; pair = { x, y }; }
+        }
+      }
+    }
+
+    // A seat against one gear: slide the cursor out onto that gear's pitch ring.
+    let solo = null, soloD = Infinity;
+    for (const g of S.gears) {
+      const d = Math.hypot(px - g.x, py - g.y);
+      if (d < 1) continue;
+      const want = g.r + r;
+      const err = Math.abs(d - want);
+      if (err < SNAP && err < soloD) {
+        soloD = err;
+        solo = { x: g.x + (px - g.x) / d * want, y: g.y + (py - g.y) / d * want };
+      }
+    }
+
+    // Whichever seat sits nearest the cursor wins, ties going to the more deliberate
+    // intent: a bored shaft first, then a pocket. Closing a train costs nothing under this
+    // rule — aimed at a pocket, the single-gear projection lands on that same point anyway.
+    // Grabbing every shaft within 48px and every pocket within 45px outright used to drag
+    // gears off a seat sitting dead under the cursor, which left most of the solution seats
+    // in the game unreachable however carefully you aimed.
+    const soloOk = solo && placeable(solo.x, solo.y, r, true);
+    let best = null, bestD = Infinity;
+    if (soloOk) { best = solo; bestD = soloD; }
+    if (pair && pairD <= bestD) { best = pair; bestD = pairD; }
+    if (peg && pegD <= bestD) { best = peg; bestD = pegD; }
+    return best || solo || pair || peg;
+  }
+
+  function placeable(x, y, r, needMesh) {
+    if (x - r < 4 || x + r > W - 4 || y - r < 4 || y + r > H - 4) return false;
+    if (hitsWall(x, y, r)) return false;
+    let meshes = false;
+    for (const g of S.gears) {
+      const d = Math.hypot(x - g.x, y - g.y);
+      const want = g.r + r;
+      if (d < want - MESH_TOL) return false;          // teeth would clash
+      if (Math.abs(d - want) <= MESH_TOL) meshes = true;
+    }
+    return needMesh === false ? true : meshes;
+  }
+
+  const beltBetween = (a, b) => S.belts.find(w => (w.a === a && w.b === b) || (w.a === b && w.b === a));
+
+  function beltLegal(a, b) {
+    if (!a || !b || a === b) return false;
+    if (beltBetween(a, b)) return false;
+    const d = dist(a, b);
+    if (Math.abs(d - (a.r + b.r)) <= MESH_TOL) return false;      // that is a mesh, not a belt
+    if (d < a.r + b.r + BELT_MIN_GAP) return false;
+    if (d > BELT_MAX) return false;
+    for (const g of S.gears) {
+      if (g === a || g === b) continue;
+      if (segCircle(a, b, g, g.r * 0.6)) return false;            // the band would foul a hub
+    }
+    return true;
+  }
+
+  const pegFilled = p => S.gears.some(g =>
+    g.kind === "part" && g.n === p.n && Math.hypot(g.x - p.x, g.y - p.y) <= PEG_TOL);
+
+  // ---------------------------------------------------------------- simulation
+
+  function simulate(dt) {
+    const gs = S.gears, N = gs.length;
+    // edge sign: a mesh reverses the spin, a belt keeps it
+    const adj = Array.from({ length: N }, () => []);
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        if (Math.abs(dist(gs[i], gs[j]) - (gs[i].r + gs[j].r)) <= MESH_TOL) {
+          adj[i].push({ j, s: -1 }); adj[j].push({ j: i, s: -1 });
+        }
+      }
+    }
+    for (const w of S.belts) {
+      const i = gs.indexOf(w.a), j = gs.indexOf(w.b);
+      if (i < 0 || j < 0) continue;
+      adj[i].push({ j, s: 1, belt: true }); adj[j].push({ j: i, s: 1, belt: true });
+    }
+
+    const dir = new Array(N).fill(0), parent = new Array(N).fill(-1),
+          pbelt = new Array(N).fill(false), order = [0];
+    dir[0] = 1;
+    for (let q = 0; q < order.length; q++) {
+      const i = order[q];
+      for (const e of adj[i]) if (!dir[e.j]) {
+        dir[e.j] = dir[i] * e.s; parent[e.j] = i; pbelt[e.j] = !!e.belt; order.push(e.j);
+      }
+    }
+
+    let jam = false;
+    for (let i = 0; i < N; i++) for (const e of adj[i])
+      if (dir[i] && dir[e.j] && dir[i] * e.s !== dir[e.j]) jam = true;
+    S.jam = jam;
+    S.shake = jam ? Math.min(1, S.shake + dt * 6) : Math.max(0, S.shake - dt * 4);
+
+    if (!jam) S.t += dt;
+
+    for (let i = 0; i < N; i++) {
+      gs[i].powered = dir[i] !== 0;
+      gs[i].dir = dir[i];
+      gs[i].th = gs[i].th || 0;
+      if (gs[i].seat) gs[i].seat = Math.max(0, gs[i].seat - dt * 2.2);
+    }
+    gs[0].th = S.t * OMEGA;
+    // Phase each gear off its driver so the teeth actually interleave at the joint.
+    for (let q = 1; q < order.length; q++) {
+      const i = order[q], b = gs[i], a = gs[parent[i]];
+      if (pbelt[i]) {
+        b.th = (a.n / b.n) * a.th;                 // a band carries the ratio, not the phase
+      } else {
+        const beta = Math.atan2(b.y - a.y, b.x - a.x);
+        b.th = beta + Math.PI - Math.PI / b.n + (a.n / b.n) * (beta - a.th);
+      }
+    }
+
+    // ---- electrics: the dynamo makes volts, the wire decides what reaches the load
+    const L = LEVELS[S.li];
+    let circuitOk = true;
+    if (L.elec) {
+      const dy = gs.find(g => g.kind === "dyno");
+      const live = dy && dy.powered && dy.dir === dy.req && !jam;
+      for (const ld of S.loads) {
+        const m = Math.round(Math.hypot(ld.x - dy.x, ld.y - dy.y)) / PX_PER_M;
+        ld.m = m;
+        if (!live || ld.wire === null) { ld.I = 0; ld.ok = false; ld.why = live ? "no wire" : "no drive"; }
+        else {
+          const v = verdict(WIRES[ld.wire], m, L.elec.volts, ld);
+          ld.I = v.I; ld.ok = v.ok; ld.why = v.why;
+        }
+        if (!ld.ok) circuitOk = false;
+      }
+    }
+
+    // win: every output powered the right way, every shaft seated, every load lit
+    let ok = !jam && circuitOk;
+    for (const g of gs) if ((g.kind === "out" || g.kind === "dyno") && (!g.powered || g.dir !== g.req)) ok = false;
+    for (const p of L.pegs) if (!pegFilled(p)) ok = false;
+
+    if (ok && !S.won) {
+      S.won = true;
+      const used = S.history.filter(h => h.t === "gear").length;
+      const par = L.par, prev = bestOf(S.li), fresh = record(S.li, used);
+      $("doneline").textContent =
+        used + " gears fitted · shop par " + par + (used <= par ? " · clean build" : "");
+      $("bestline").textContent = fresh
+        ? (prev === undefined ? "Logged. Bay " + (S.li + 1) + " of " + LEVELS.length + " complete."
+                              : "New best — was " + prev + " gears.")
+        : "Best on file: " + prev + " gears.";
+      $("done").classList.add("show");
+      $("nextBtn").style.display = S.li < LEVELS.length - 1 ? "" : "none";
+      paintChrome();
+    }
+  }
+
+  // ---------------------------------------------------------------- drawing
+
+  function gearPath(c, x, y, r, n, th) {
+    const P = Math.PI * 2 / n, ro = r + MOD * 0.92, ri = Math.max(3, r - MOD * 1.12);
+    c.beginPath();
+    for (let k = 0; k < n; k++) {
+      const a = th + k * P;
+      const s = a - P * 0.30, o1 = a - P * 0.15, o2 = a + P * 0.15, e = a + P * 0.30;
+      const P1 = [x + ri * Math.cos(s), y + ri * Math.sin(s)];
+      if (k === 0) c.moveTo(P1[0], P1[1]); else c.lineTo(P1[0], P1[1]);
+      c.lineTo(x + ro * Math.cos(o1), y + ro * Math.sin(o1));
+      c.lineTo(x + ro * Math.cos(o2), y + ro * Math.sin(o2));
+      c.lineTo(x + ri * Math.cos(e), y + ri * Math.sin(e));
+      c.arc(x, y, ri, e, a + P - P * 0.30);
+    }
+    c.closePath();
+  }
+
+  const PALETTES = {
+    live:  { hi: "#F2CE77", mid: "#C9992F", lo: "#6E5320", edge: "#3A2C0F" },
+    idle:  { hi: "#7E8D97", mid: "#5B6B75", lo: "#3B474E", edge: "#242D33" },
+    jam:   { hi: "#E4835C", mid: "#C8542D", lo: "#7A3319", edge: "#3A1B0E" },
+    drive: { hi: "#F0F5F7", mid: "#B9C6CD", lo: "#6C7A83", edge: "#2A343B" },
+    out:   { hi: "#8CD9BE", mid: "#57B394", lo: "#2F6B58", edge: "#173129" },
+    dyno:  { hi: "#A6D2F2", mid: "#6FB2E8", lo: "#31607F", edge: "#152A38" }
+  };
+
+  function drawGear(c, g, pal, scale) {
+    const r = g.r * (scale || 1);
+    c.save();
+    c.shadowColor = "rgba(0,0,0,.55)"; c.shadowBlur = 10; c.shadowOffsetY = 3;
+    const grd = c.createLinearGradient(g.x - r, g.y - r, g.x + r, g.y + r);
+    grd.addColorStop(0, pal.hi); grd.addColorStop(0.45, pal.mid); grd.addColorStop(1, pal.lo);
+    gearPath(c, g.x, g.y, r, g.n, g.th || 0);
+    c.fillStyle = grd; c.fill();
+    c.shadowColor = "transparent";
+    c.lineWidth = 1; c.strokeStyle = pal.edge; c.stroke();
+
+    // web + hub
+    const ri = r - MOD * 1.12;
+    if (g.n >= 13) {
+      c.beginPath(); c.arc(g.x, g.y, ri * 0.74, 0, 7); c.fillStyle = "#151A1D"; c.fill();
+      const spokes = g.n >= 19 ? 6 : 5;
+      c.strokeStyle = pal.mid; c.lineWidth = ri * 0.17; c.lineCap = "round";
+      for (let k = 0; k < spokes; k++) {
+        const a = (g.th || 0) + k * Math.PI * 2 / spokes;
+        c.beginPath();
+        c.moveTo(g.x + Math.cos(a) * ri * 0.28, g.y + Math.sin(a) * ri * 0.28);
+        c.lineTo(g.x + Math.cos(a) * ri * 0.70, g.y + Math.sin(a) * ri * 0.70);
+        c.stroke();
+      }
+      c.beginPath(); c.arc(g.x, g.y, ri * 0.34, 0, 7); c.fillStyle = pal.mid; c.fill();
+      c.strokeStyle = pal.edge; c.lineWidth = 1; c.stroke();
+    }
+    c.beginPath(); c.arc(g.x, g.y, Math.max(2.4, r * 0.11), 0, 7);
+    c.fillStyle = "#0E1113"; c.fill();
+    c.restore();
+  }
+
+  function drawArrow(c, x, y, rad, dir, color) {
+    const A = -0.35 * Math.PI, B = 0.95 * Math.PI;
+    const start = dir > 0 ? A : B, end = dir > 0 ? B : A;
+    c.save();
+    c.strokeStyle = color; c.lineWidth = 2.2; c.lineCap = "round";
+    c.beginPath(); c.arc(x, y, rad, start, end, dir < 0);
+    c.stroke();
+    const ex = x + Math.cos(end) * rad, ey = y + Math.sin(end) * rad;
+    const tan = end + (dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+    c.beginPath();
+    c.moveTo(ex, ey);
+    c.lineTo(ex + Math.cos(tan + 2.5) * 7, ey + Math.sin(tan + 2.5) * 7);
+    c.lineTo(ex + Math.cos(tan - 2.5) * 7, ey + Math.sin(tan - 2.5) * 7);
+    c.closePath(); c.fillStyle = color; c.fill();
+    c.restore();
+  }
+
+  // A flat belt wraps the outside of both pulleys, so it runs on the two external tangents.
+  function beltPath(c, a, b) {
+    const ra = a.r + MOD * 0.6, rb = b.r + MOD * 0.6;
+    const d = dist(a, b);
+    const th = Math.atan2(b.y - a.y, b.x - a.x);
+    const phi = Math.acos(Math.max(-1, Math.min(1, (ra - rb) / d)));
+    c.beginPath();
+    c.arc(a.x, a.y, ra, th + phi, th - phi);
+    c.lineTo(b.x + rb * Math.cos(th - phi), b.y + rb * Math.sin(th - phi));
+    c.arc(b.x, b.y, rb, th - phi, th + phi);
+    c.closePath();
+  }
+
+  function drawLoad(c, ld, i) {
+    const w = 52, h = 38, x = ld.x - w / 2, y = ld.y - h / 2;
+    c.save();
+    if (S.mode === "wire" && S.loadSel === i) {
+      c.strokeStyle = "#6FB2E8"; c.lineWidth = 2; c.setLineDash([4, 4]);
+      c.strokeRect(x - 6.5, y - 6.5, w + 13, h + 13); c.setLineDash([]);
+    }
+    c.fillStyle = "#1D262C"; c.fillRect(x, y, w, h);
+    c.strokeStyle = ld.ok ? "#57B394" : (ld.why === "burnt out" ? "#C8542D" : "#39464E");
+    c.lineWidth = 1.4; c.strokeRect(x + .5, y + .5, w - 1, h - 1);
+
+    // lamp
+    const cx = ld.x, cy = ld.y - 4;
+    if (ld.ok) {
+      const glow = c.createRadialGradient(cx, cy, 1, cx, cy, 26);
+      glow.addColorStop(0, "rgba(240,199,102,.55)"); glow.addColorStop(1, "rgba(240,199,102,0)");
+      c.fillStyle = glow; c.beginPath(); c.arc(cx, cy, 26, 0, 7); c.fill();
+    }
+    c.beginPath(); c.arc(cx, cy, 7, 0, 7);
+    c.fillStyle = ld.ok ? "#F0C766" : (ld.why === "burnt out" ? "#5A2313" : "#2B363E");
+    c.fill();
+    c.strokeStyle = ld.ok ? "#7E6020" : "#39464E"; c.lineWidth = 1; c.stroke();
+
+    c.font = "700 9px ui-monospace, Consolas, monospace";
+    c.textAlign = "center"; c.textBaseline = "middle";
+    c.fillStyle = ld.ok ? "#57B394" : "#7E8D97";
+    c.fillText(ld.wire !== null ? ld.I.toFixed(1) + "A" : ld.lo + "-" + ld.hi + "A", cx, ld.y + 12);
+    c.restore();
+  }
+
+  function render() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (S.shake > 0.01 && !reduced) {
+      ctx.translate(Math.sin(S.t * 47) * 2.2 * S.shake, Math.sin(S.t * 61) * 1.6 * S.shake);
+    }
+
+    const L = LEVELS[S.li];
+
+    // bay floor: faint layout grid + centre datum
+    ctx.fillStyle = "#151A1D"; ctx.fillRect(-6, -6, W + 12, H + 12);
+    ctx.strokeStyle = "rgba(138,154,165,.055)"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 40; x < W; x += 40) { ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); }
+    for (let y = 40; y < H; y += 40) { ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); }
+    ctx.stroke();
+
+    // guards
+    for (const w of L.walls) {
+      ctx.fillStyle = "#1D262C"; ctx.fillRect(w.x, w.y, w.w, w.h);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(w.x, w.y, w.w, w.h); ctx.clip();
+      ctx.strokeStyle = "rgba(200,84,45,.30)"; ctx.lineWidth = 5;
+      ctx.beginPath();
+      for (let d = -w.h; d < w.w + w.h; d += 16) { ctx.moveTo(w.x + d, w.y); ctx.lineTo(w.x + d + w.h, w.y + w.h); }
+      ctx.stroke(); ctx.restore();
+      ctx.strokeStyle = "#39464E"; ctx.lineWidth = 1;
+      ctx.strokeRect(w.x + .5, w.y + .5, w.w - 1, w.h - 1);
+    }
+
+    // cables, under everything mechanical
+    const dy = S.gears.find(g => g.kind === "dyno");
+    if (dy) for (const ld of S.loads) {
+      if (ld.wire === null) {
+        ctx.strokeStyle = "rgba(111,178,232,.16)"; ctx.lineWidth = 1.2;
+        ctx.setLineDash([3, 7]);
+        ctx.beginPath(); ctx.moveTo(dy.x, dy.y); ctx.lineTo(ld.x, ld.y); ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
+      const wr = WIRES[ld.wire];
+      const gauge = Math.max(2, 7.5 - wr.awg * 0.26);
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(10,13,15,.85)"; ctx.lineWidth = gauge + 3;
+      ctx.beginPath(); ctx.moveTo(dy.x, dy.y); ctx.lineTo(ld.x, ld.y); ctx.stroke();
+      ctx.strokeStyle = ld.why === "burnt out" ? "#C8542D" : wr.hue;
+      ctx.lineWidth = gauge;
+      ctx.beginPath(); ctx.moveTo(dy.x, dy.y); ctx.lineTo(ld.x, ld.y); ctx.stroke();
+      if (ld.ok && !reduced) {
+        // a bead of current running the length of the cable
+        const f = (S.t * 0.55) % 1;
+        ctx.beginPath();
+        ctx.arc(dy.x + (ld.x - dy.x) * f, dy.y + (ld.y - dy.y) * f, gauge * 0.62, 0, 7);
+        ctx.fillStyle = "#F0C766"; ctx.fill();
+      }
+    }
+
+    // bored shafts
+    for (const p of L.pegs) {
+      const filled = pegFilled(p);
+      ctx.save();
+      ctx.strokeStyle = filled ? "rgba(87,179,148,.55)" : "rgba(240,199,102,.55)";
+      ctx.lineWidth = 1.4; ctx.setLineDash(filled ? [] : [5, 5]);
+      ctx.beginPath(); ctx.arc(p.x, p.y, rOf(p.n), 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(p.x - 9, p.y); ctx.lineTo(p.x + 9, p.y);
+      ctx.moveTo(p.x, p.y - 9); ctx.lineTo(p.x, p.y + 9);
+      ctx.stroke();
+      if (!filled) {
+        ctx.font = "700 10px ui-monospace, Consolas, monospace";
+        ctx.fillStyle = "rgba(240,199,102,.8)"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(p.n + "T", p.x, p.y - rOf(p.n) - 9);
+      }
+      ctx.restore();
+    }
+
+    // mesh joints, drawn under the gears
+    const gs = S.gears;
+    for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) {
+      if (Math.abs(dist(gs[i], gs[j]) - (gs[i].r + gs[j].r)) <= MESH_TOL) {
+        ctx.strokeStyle = S.jam ? "rgba(200,84,45,.5)"
+          : (gs[i].powered ? "rgba(201,153,47,.35)" : "rgba(138,154,165,.16)");
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(gs[i].x, gs[i].y); ctx.lineTo(gs[j].x, gs[j].y); ctx.stroke();
+      }
+    }
+
+    // belts
+    for (const w of S.belts) {
+      beltPath(ctx, w.a, w.b);
+      ctx.strokeStyle = S.jam ? "rgba(200,84,45,.75)"
+        : (w.a.powered ? "rgba(232,238,241,.55)" : "rgba(138,154,165,.28)");
+      ctx.lineWidth = 5; ctx.stroke();
+      ctx.strokeStyle = "rgba(14,17,19,.7)"; ctx.lineWidth = 1.4; ctx.stroke();
+    }
+
+    // output sockets
+    for (const g of gs) {
+      if (g.kind !== "out" && g.kind !== "dyno") continue;
+      const good = g.powered && g.dir === g.req;
+      const tint = g.kind === "dyno" ? "111,178,232" : "138,154,165";
+      ctx.beginPath(); ctx.arc(g.x, g.y, g.r + 20, 0, 7);
+      ctx.strokeStyle = good ? "rgba(87,179,148,.75)" : "rgba(" + tint + ",.4)";
+      ctx.setLineDash(good ? [] : [5, 6]); ctx.lineWidth = good ? 2.4 : 1.4;
+      ctx.stroke(); ctx.setLineDash([]);
+      if (good) {
+        ctx.beginPath(); ctx.arc(g.x, g.y, g.r + 20, 0, 7);
+        ctx.strokeStyle = "rgba(87,179,148,.16)"; ctx.lineWidth = 10; ctx.stroke();
+      }
+    }
+
+    // gears
+    for (const g of gs) {
+      let pal;
+      if (S.jam && g.powered) pal = PALETTES.jam;
+      else if (g.kind === "drive") pal = PALETTES.drive;
+      else if (g.kind === "dyno") pal = (g.powered && g.dir === g.req) ? PALETTES.dyno : PALETTES.idle;
+      else if (g.kind === "out") pal = (g.powered && g.dir === g.req) ? PALETTES.out : PALETTES.idle;
+      else pal = g.powered ? PALETTES.live : PALETTES.idle;
+      drawGear(ctx, g, pal);
+
+      if (g.seat > 0) {
+        ctx.beginPath(); ctx.arc(g.x, g.y, g.r + 6 + (1 - g.seat) * 12, 0, 7);
+        ctx.strokeStyle = "rgba(240,199,102," + (g.seat * 0.7).toFixed(3) + ")";
+        ctx.lineWidth = 2; ctx.stroke();
+      }
+
+      if (g.kind === "drive") {
+        ctx.beginPath(); ctx.arc(g.x, g.y, g.r * 0.30, 0, 7);
+        ctx.fillStyle = "#C8542D"; ctx.fill();
+        ctx.font = "700 9px ui-monospace, Consolas, monospace";
+        ctx.fillStyle = "#0E1113"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("M", g.x, g.y + .5);
+      }
+      if (g.kind === "dyno") {
+        const good = g.powered && g.dir === g.req;
+        ctx.beginPath(); ctx.arc(g.x, g.y, g.r * 0.32, 0, 7);
+        ctx.fillStyle = good ? "#6FB2E8" : "#3B474E"; ctx.fill();
+        ctx.font = "700 9px ui-monospace, Consolas, monospace";
+        ctx.fillStyle = "#0E1113"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("G", g.x, g.y + .5);
+        ctx.font = "700 11px ui-monospace, Consolas, monospace";
+        ctx.fillStyle = good ? "#A6D2F2" : "#5E6D77";
+        ctx.fillText(L.elec.volts + " V", g.x, g.y + g.r + 32);
+        drawArrow(ctx, g.x, g.y, g.r + 32, g.req, good ? "#6FB2E8" : (g.powered ? "#C8542D" : "#7E8D97"));
+      }
+      if (g.kind === "out") {
+        const good = g.powered && g.dir === g.req;
+        drawArrow(ctx, g.x, g.y, g.r + 32, g.req, good ? "#57B394" : (g.powered ? "#C8542D" : "#7E8D97"));
+      }
+    }
+
+    // loads
+    S.loads.forEach((ld, i) => drawLoad(ctx, ld, i));
+
+    // belt-in-progress
+    if (S.mode === "belt" && S.beltFrom) {
+      ctx.beginPath(); ctx.arc(S.beltFrom.x, S.beltFrom.y, S.beltFrom.r + 8, 0, 7);
+      ctx.strokeStyle = "#F0C766"; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // lift highlight
+    if (S.lift >= 0 && S.gears[S.lift]) {
+      const g = S.gears[S.lift];
+      ctx.beginPath(); ctx.arc(g.x, g.y, g.r + 7, 0, 7);
+      ctx.strokeStyle = "#C8542D"; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // ghost
+    if (S.ghost && S.lift < 0 && S.mode === "gear") {
+      const gh = S.ghost;
+      ctx.save();
+      ctx.globalAlpha = gh.ok ? 0.62 : 0.34;
+      drawGear(ctx, { x: gh.x, y: gh.y, r: gh.r, n: gh.n, th: S.t * 0.6 }, gh.ok ? PALETTES.live : PALETTES.jam);
+      ctx.restore();
+      ctx.beginPath(); ctx.arc(gh.x, gh.y, gh.r + 6, 0, 7);
+      ctx.strokeStyle = gh.ok ? "rgba(240,199,102,.6)" : "rgba(200,84,45,.6)";
+      ctx.lineWidth = 1; ctx.setLineDash([3, 5]); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  // ---------------------------------------------------------------- loop
+
+  let last = performance.now();
+  function frame(now) {
+    try {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      simulate(dt);
+      render();
+      updateBanner();
+    } catch (err) {
+      // Never die silently behind a still canvas — say what broke and stop cleanly.
+      const st = $("status");
+      if (st) { st.className = "status jam"; st.textContent = "Bay fault: " + err.message; }
+      return;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---------------------------------------------------------------- chrome
+
+  function updateBanner() {
+    const st = $("status"), ct = $("count"), L = LEVELS[S.li];
+    let live = 0, need = 0;
+    for (const g of S.gears) if (g.kind === "out" || g.kind === "dyno") {
+      need++; if (g.powered && g.dir === g.req) live++;
+    }
+    const pegsLeft = L.pegs.filter(p => !pegFilled(p)).length;
+    const dark = S.loads.filter(l => !l.ok).length;
+
+    let cls = "status", msg;
+    if (S.mode === "belt") { cls += " tool"; msg = S.beltFrom ? "Belt: pick the second pulley" : "Belt: pick the first pulley"; }
+    else if (S.mode === "wire") { cls += " tool"; msg = S.loadSel < 0 ? "Wire: pick a load to spec its run" : "Wire: choose a line from the store"; }
+    else if (S.jam) { cls += " jam"; msg = "JAMMED — two meshed gears are being driven the same way"; }
+    else if (S.won) { cls += " run"; msg = "Running · everything locked"; }
+    else {
+      msg = live + " of " + need + " outputs turning true";
+      if (pegsLeft) msg += " · " + pegsLeft + " shaft" + (pegsLeft > 1 ? "s" : "") + " bare";
+      if (dark) msg += " · " + dark + " load" + (dark > 1 ? "s" : "") + " dark";
+    }
+    st.className = cls; st.textContent = msg;
+
+    const used = S.history.filter(h => h.t === "gear").length;
+    const b = bestOf(S.li);
+    ct.textContent = used + " fitted · par " + L.par + (b !== undefined ? " · best " + b : "");
+
+    const rows = $("outs").children;
+    let k = 0;
+    for (const g of S.gears) {
+      if (g.kind !== "out" && g.kind !== "dyno") continue;
+      const el = rows[k++]; if (!el) continue;
+      const good = g.powered && g.dir === g.req;
+      const wrong = g.powered && !good;
+      el.className = "out" + (g.kind === "dyno" ? " volt" : "") + (good ? " ok" : wrong ? " wrong" : "");
+      el.querySelector(".stat").textContent = good ? "locked" : wrong ? "wrong hand" : "no drive";
+    }
+
+    const lrows = $("loadRows").children;
+    S.loads.forEach((ld, i) => {
+      const el = lrows[i]; if (!el) return;
+      el.className = "out" + (ld.ok ? " ok" : (ld.wire !== null ? " wrong" : ""));
+      el.querySelector(".stat").textContent =
+        ld.wire === null ? "no wire" : ld.I.toFixed(2) + " A · " + ld.why;
+    });
+  }
+
+  function paintChrome() {
+    const L = LEVELS[S.li];
+    $("bayCode").textContent = L.code;
+    $("bayName").textContent = L.name;
+    $("bayBrief").textContent = L.brief;
+
+    const done = Object.keys(SAVE.best).length;
+    $("progress").innerHTML = "<b>" + done + "</b> / " + LEVELS.length + " bays signed off";
+    $("indexLabel").textContent = "Bay index · " + L.code + " · " + L.name;
+
+    const outs = $("outs");
+    outs.innerHTML = "";
+    L.targets.forEach((t, i) => {
+      const isDy = L.elec && L.elec.dyno === i;
+      const d = document.createElement("div");
+      d.className = "out" + (isDy ? " volt" : "");
+      d.innerHTML = "<b>" + (isDy ? "DYNAMO" : "OUT " + (i + 1)) + "</b> " + t.n + "T · " +
+        (t.dir > 0 ? "&#8635; CW" : "&#8634; CCW") +
+        (isDy ? " · " + L.elec.volts + " V" : "") + ' · <span class="stat">no drive</span>';
+      outs.appendChild(d);
+    });
+
+    const lc = $("loadCard"), lr = $("loadRows");
+    lc.classList.toggle("hide", !S.loads.length);
+    lr.innerHTML = "";
+    S.loads.forEach((ld, i) => {
+      const d = document.createElement("div");
+      d.className = "out";
+      d.innerHTML = "<b>LOAD " + (i + 1) + "</b> " + ld.ohm + "&#8486; · needs " + ld.lo + "–" + ld.hi +
+        ' A · <span class="stat">no wire</span>';
+      lr.appendChild(d);
+    });
+
+    // parts bin
+    const bin = $("parts");
+    bin.innerHTML = "";
+    for (const s of SIZES) {
+      if (!(s.n in L.parts)) continue;
+      const left = S.stock[s.n] || 0;
+      const b = document.createElement("button");
+      b.className = "part";
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(S.mode === "gear" && S.pick === s.n));
+      b.disabled = left === 0;
+      const c = document.createElement("canvas");
+      const dpr = Math.min(2, devicePixelRatio || 1), box = 58;
+      c.width = c.height = box * dpr;
+      c.style.width = c.style.height = box + "px";
+      const cc = c.getContext("2d");
+      const k = (box / 2 - 4) / (rOf(19) + MOD) * dpr;   // 19T fills the swatch; the rest stay to scale
+      cc.setTransform(k, 0, 0, k, 0, 0);
+      drawGear(cc, { x: (box * dpr) / (2 * k), y: (box * dpr) / (2 * k), r: rOf(s.n), n: s.n, th: 0.2 },
+               left ? PALETTES.live : PALETTES.idle);
+      b.appendChild(c);
+      const txt = document.createElement("span");
+      txt.innerHTML = '<span class="pname">' + s.tag + " " + s.label + "</span><br>" +
+                      '<span class="pqty">' + left + " in bin</span>";
+      b.appendChild(txt);
+      b.addEventListener("click", () => { S.mode = "gear"; S.pick = s.n; S.beltFrom = null; paintChrome(); });
+      bin.appendChild(b);
+    }
+
+    if (L.belts) {
+      const b = document.createElement("button");
+      b.className = "part belt"; b.type = "button";
+      b.setAttribute("aria-pressed", String(S.mode === "belt"));
+      b.disabled = S.beltsLeft === 0 && S.mode !== "belt";
+      b.innerHTML = '<span class="glyph">⭗</span><span><span class="pname">Belt</span><br>' +
+        '<span class="pqty">' + S.beltsLeft + " on the rack</span></span>";
+      b.addEventListener("click", () => {
+        S.mode = S.mode === "belt" ? "gear" : "belt"; S.beltFrom = null; S.ghost = null; paintChrome();
+      });
+      bin.appendChild(b);
+    }
+
+    if (S.loads.length) {
+      const b = document.createElement("button");
+      b.className = "part wire"; b.type = "button";
+      b.setAttribute("aria-pressed", String(S.mode === "wire"));
+      b.innerHTML = '<span class="glyph">⌁</span><span><span class="pname">Wire</span><br>' +
+        '<span class="pqty">100 lines stocked</span></span>';
+      b.addEventListener("click", () => {
+        S.mode = S.mode === "wire" ? "gear" : "wire"; S.beltFrom = null; S.ghost = null;
+        if (S.mode === "wire" && S.loadSel < 0) S.loadSel = 0;
+        paintChrome();
+      });
+      bin.appendChild(b);
+    }
+
+    $("drawer").classList.toggle("show", S.mode === "wire");
+    if (S.mode === "wire") paintSpool();
+
+    cv.classList.toggle("belting", S.mode === "belt");
+    cv.classList.toggle("wiring", S.mode === "wire");
+
+    $("prevBtn").disabled = S.li === 0;
+    $("skipBtn").disabled = S.li === LEVELS.length - 1;
+
+    // bay index
+    const bays = $("bays");
+    if (bays.childElementCount !== LEVELS.length) {
+      bays.innerHTML = "";
+      LEVELS.forEach((L2, i) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "bay-chip";
+        b.textContent = String(i + 1).padStart(2, "0");
+        b.addEventListener("click", () => loadLevel(i));
+        bays.appendChild(b);
+      });
+    }
+    LEVELS.forEach((L2, i) => {
+      const b = bays.children[i], best = bestOf(i);
+      b.className = "bay-chip" + (best !== undefined ? (best <= L2.par ? " clean" : " solved") : "");
+      b.setAttribute("aria-current", String(i === S.li));
+      b.title = L2.code + " · " + L2.name + " · par " + L2.par +
+        (best !== undefined ? " · best " + best : "");
+    });
+  }
+
+  // ---------------------------------------------------------------- wire store
+
+  let spoolBuilt = false;
+  function buildSpool() {
+    const f = $("filters");
+    f.innerHTML = "";
+    const mk = (label, on, fn) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = label;
+      b.setAttribute("aria-pressed", String(on));
+      b.addEventListener("click", fn);
+      f.appendChild(b);
+    };
+    mk("All", !S.filterMat && !S.filterAwg, () => { S.filterMat = null; S.filterAwg = null; paintSpool(); });
+    for (const M of MATERIALS) mk(M.m, S.filterMat === M.m,
+      () => { S.filterMat = S.filterMat === M.m ? null : M.m; paintSpool(); });
+    for (const G of GAUGES) mk(G.g + "AWG", S.filterAwg === G.g,
+      () => { S.filterAwg = S.filterAwg === G.g ? null : G.g; paintSpool(); });
+
+    const sp = $("spool");
+    sp.innerHTML = "";
+    for (const w of WIRES) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "wrow"; b.dataset.id = w.id;
+      b.innerHTML = '<span class="swatch" style="background:' + w.hue + '"></span>' +
+        '<span><span class="wn">' + w.name + "</span><br>" +
+        '<span class="ws">' + w.ohm.toFixed(3) + " Ω/m · " + w.amp + " A max</span></span>" +
+        '<span class="wi"></span>';
+      b.addEventListener("click", () => {
+        if (S.loadSel < 0) return;
+        const ld = S.loads[S.loadSel];
+        if (ld.wire !== w.id) S.won = false, $("done").classList.remove("show");
+        ld.wire = w.id;
+        paintSpool();
+      });
+      sp.appendChild(b);
+    }
+    spoolBuilt = true;
+  }
+
+  function paintSpool() {
+    if (!spoolBuilt) buildSpool();
+    const L = LEVELS[S.li];
+    const ld = S.loadSel >= 0 ? S.loads[S.loadSel] : null;
+    const spec = $("wireSpec");
+    if (!ld) {
+      spec.className = "spec none";
+      spec.textContent = "Click a load in the bay to spec its run.";
+    } else {
+      const dy = S.gears.find(g => g.kind === "dyno");
+      const m = Math.round(Math.hypot(ld.x - dy.x, ld.y - dy.y)) / PX_PER_M;
+      spec.className = "spec";
+      spec.textContent = "LOAD " + (S.loadSel + 1) + " · " + L.elec.volts + " V source · " +
+        m.toFixed(2) + " m run · " + ld.ohm + " Ω load · needs " + ld.lo + "–" + ld.hi + " A";
+    }
+    $("cutBtn").disabled = !ld || ld.wire === null;
+
+    // Filter chips re-render on state change, so rebuild their pressed flags.
+    const fbtn = $("filters").children;
+    fbtn[0].setAttribute("aria-pressed", String(!S.filterMat && !S.filterAwg));
+    MATERIALS.forEach((M, i) => fbtn[1 + i].setAttribute("aria-pressed", String(S.filterMat === M.m)));
+    GAUGES.forEach((G, i) => fbtn[1 + MATERIALS.length + i].setAttribute("aria-pressed", String(S.filterAwg === G.g)));
+
+    const rows = $("spool").children;
+    for (let i = 0; i < rows.length; i++) {
+      const w = WIRES[i], el = rows[i];
+      const hide = (S.filterMat && w.mat !== S.filterMat) || (S.filterAwg && w.awg !== S.filterAwg);
+      el.classList.toggle("hidden", !!hide);
+      el.setAttribute("aria-pressed", String(!!ld && ld.wire === w.id));
+      const cell = el.querySelector(".wi");
+      if (!ld) { cell.textContent = ""; el.className = el.className.replace(/ (fit|bad|warn)/g, ""); continue; }
+      const dy = S.gears.find(g => g.kind === "dyno");
+      const m = Math.round(Math.hypot(ld.x - dy.x, ld.y - dy.y)) / PX_PER_M;
+      const v = verdict(w, m, L.elec.volts, ld);
+      cell.textContent = v.I.toFixed(2) + " A\n" + v.why;
+      cell.style.whiteSpace = "pre";
+      el.classList.remove("fit", "bad", "warn");
+      el.classList.add(v.ok ? "fit" : (v.why === "burnt out" ? "bad" : "warn"));
+    }
+  }
+
+  // ---------------------------------------------------------------- input
+
+  function toBay(e) {
+    const r = cv.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  }
+
+  function refreshGhost(p) {
+    S.lift = -1;
+    if (S.mode !== "gear") { S.ghost = null; cv.classList.remove("lifting"); return; }
+    for (let i = S.gears.length - 1; i >= 0; i--) {
+      const g = S.gears[i];
+      if (g.kind !== "part") continue;
+      if (Math.hypot(p.x - g.x, p.y - g.y) < g.r * 0.8) { S.lift = i; break; }
+    }
+    cv.classList.toggle("lifting", S.lift >= 0);
+    if (S.lift >= 0) { S.ghost = null; return; }
+
+    const n = S.pick, r = rOf(n);
+    if (!S.stock[n]) { S.ghost = null; return; }
+    const snapped = snapTo(p.x, p.y, r, n);
+    if (!snapped) { S.ghost = null; return; }
+    S.ghost = { x: snapped.x, y: snapped.y, n, r, ok: placeable(snapped.x, snapped.y, r, !snapped.peg) };
+  }
+
+  const unwin = () => { S.won = false; $("done").classList.remove("show"); };
+
+  function gearAt(p) {
+    let best = null, bd = Infinity;
+    for (const g of S.gears) {
+      const d = Math.hypot(p.x - g.x, p.y - g.y);
+      if (d < g.r && d < bd) { bd = d; best = g; }
+    }
+    return best;
+  }
+
+  cv.addEventListener("pointermove", e => refreshGhost(toBay(e)));
+  cv.addEventListener("pointerleave", () => { S.ghost = null; S.lift = -1; cv.classList.remove("lifting"); });
+
+  cv.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    const p = toBay(e);
+
+    if (S.mode === "wire") {
+      let hit = -1, hd = Infinity;
+      S.loads.forEach((ld, i) => {
+        const d = Math.max(Math.abs(p.x - ld.x) / 34, Math.abs(p.y - ld.y) / 27);
+        if (d <= 1 && d < hd) { hd = d; hit = i; }
+      });
+      if (hit >= 0) { S.loadSel = hit; paintSpool(); }
+      return;
+    }
+
+    if (S.mode === "belt") {
+      // Clicking a belt's midpoint takes it off the rack again.
+      for (const w of S.belts) {
+        const mx = (w.a.x + w.b.x) / 2, my = (w.a.y + w.b.y) / 2;
+        if (Math.hypot(p.x - mx, p.y - my) < 16) {
+          S.belts.splice(S.belts.indexOf(w), 1);
+          S.beltsLeft++;
+          S.history = S.history.filter(h => h.w !== w);
+          unwin(); paintChrome();
+          return;
+        }
+      }
+      const g = gearAt(p);
+      if (!g) { S.beltFrom = null; return; }
+      if (!S.beltFrom) { S.beltFrom = g; return; }
+      if (S.beltsLeft > 0 && beltLegal(S.beltFrom, g)) {
+        const w = { a: S.beltFrom, b: g };
+        S.belts.push(w);
+        S.history.push({ t: "belt", w });
+        S.beltsLeft--;
+        S.beltFrom = null;
+        unwin(); paintChrome();
+      } else {
+        S.beltFrom = g === S.beltFrom ? null : g;
+      }
+      return;
+    }
+
+    refreshGhost(p);
+    if (S.lift >= 0) {
+      const g = S.gears.splice(S.lift, 1)[0];
+      S.stock[g.n] = (S.stock[g.n] || 0) + 1;
+      S.history = S.history.filter(h => h.g !== g);
+      dropBeltsOn(g);
+      unwin();
+      S.lift = -1;
+      paintChrome();
+      refreshGhost(p);
+      return;
+    }
+    if (S.ghost && S.ghost.ok) {
+      const g = { x: S.ghost.x, y: S.ghost.y, n: S.ghost.n, r: S.ghost.r, kind: "part", th: 0, seat: 1 };
+      S.gears.push(g);
+      S.history.push({ t: "gear", g });
+      S.stock[g.n]--;
+      if (!S.stock[S.pick]) {
+        const next = SIZES.find(s => S.stock[s.n] > 0);
+        if (next) S.pick = next.n;
+      }
+      paintChrome();
+      refreshGhost(p);
+    }
+  });
+
+  function dropBeltsOn(g) {
+    for (let i = S.belts.length - 1; i >= 0; i--) {
+      const w = S.belts[i];
+      if (w.a === g || w.b === g) {
+        S.belts.splice(i, 1); S.beltsLeft++;
+        S.history = S.history.filter(h => h.w !== w);
+      }
+    }
+  }
+
+  function undo() {
+    const h = S.history.pop();
+    if (!h) return;
+    if (h.t === "belt") {
+      const i = S.belts.indexOf(h.w);
+      if (i >= 0) { S.belts.splice(i, 1); S.beltsLeft++; }
+    } else {
+      const i = S.gears.indexOf(h.g);
+      if (i >= 0) S.gears.splice(i, 1);
+      S.stock[h.g.n] = (S.stock[h.g.n] || 0) + 1;
+      dropBeltsOn(h.g);
+    }
+    unwin();
+    paintChrome();
+  }
+
+  $("undoBtn").addEventListener("click", undo);
+  $("resetBtn").addEventListener("click", () => loadLevel(S.li));
+  $("againBtn").addEventListener("click", () => loadLevel(S.li));
+  $("prevBtn").addEventListener("click", () => loadLevel(S.li - 1));
+  $("skipBtn").addEventListener("click", () => loadLevel(S.li + 1));
+  $("nextBtn").addEventListener("click", () => loadLevel(S.li + 1));
+  $("cutBtn").addEventListener("click", () => {
+    if (S.loadSel < 0) return;
+    S.loads[S.loadSel].wire = null; unwin(); paintSpool();
+  });
+
+  addEventListener("keydown", e => {
+    if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k === "z") undo();
+    else if (k === "r") loadLevel(S.li);
+    else if (k === "b" && LEVELS[S.li].belts) { S.mode = S.mode === "belt" ? "gear" : "belt"; S.beltFrom = null; paintChrome(); }
+    else if (k === "w" && S.loads.length) { S.mode = S.mode === "wire" ? "gear" : "wire"; if (S.mode === "wire" && S.loadSel < 0) S.loadSel = 0; paintChrome(); }
+    else if (k === "g") { S.mode = "gear"; S.beltFrom = null; paintChrome(); }
+    else if (k === "1" || k === "2" || k === "3") {
+      const s = SIZES[Number(k) - 1];
+      if (s && s.n in LEVELS[S.li].parts) { S.mode = "gear"; S.pick = s.n; paintChrome(); }
+    } else if (k === "n" && S.won) loadLevel(S.li + 1);
+  });
+
+  // ---------------------------------------------------------------- logo
+
+  (function logo() {
+    const c = $("logo"), g = c.getContext("2d");
+    const dpr = Math.min(2, devicePixelRatio || 1), box = 72;
+    c.width = c.height = box * dpr;
+    c.style.width = c.style.height = box + "px";
+    const k = 0.56 * dpr;
+    const big = { x: 46, y: 64, r: rOf(13), n: 13, th: 0 };
+    const beta = -0.62;
+    const small = { x: big.x + Math.cos(beta) * (big.r + rOf(8)), y: big.y + Math.sin(beta) * (big.r + rOf(8)), r: rOf(8), n: 8, th: 0 };
+    let a = 0;
+    (function spin() {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, c.width, c.height);
+      g.setTransform(k, 0, 0, k, 0, 0);
+      big.th = a;
+      small.th = beta + Math.PI - Math.PI / 8 + (13 / 8) * (beta - big.th);
+      drawGear(g, big, PALETTES.live);
+      drawGear(g, small, PALETTES.drive);
+      if (!reduced) a += 0.007;
+      requestAnimationFrame(spin);
+    })();
+  })();
+
+  try {
+    loadLevel(lastPlayed());
+    requestAnimationFrame(frame);
+  } catch (err) {
+    const st = $("status");
+    if (st) { st.className = "status jam"; st.textContent = "Bay fault on start: " + err.message; }
+  }
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>RING</title>
+<style>
+  :root{
+    --bg:#05070d; --ink:#dff3ff; --dim:#6f8296;
+    --cy:#4ff0ff; --cy2:#0aa8c4;
+    --am:#ffc857; --gold:#ffcf5c; --red:#ff4d6a; --grn:#5cffa8; --vio:#b98cff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#05070d;color:#dff3ff}
+  body{font-family:"Segoe UI",Inter,system-ui,-apple-system,sans-serif;user-select:none;touch-action:none}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+  .mono{font-family:ui-monospace,"Cascadia Mono",Consolas,"SF Mono",monospace}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .25s}
+  #hud.on{opacity:1}
+  #hudTop{position:absolute;top:0;left:0;right:0;padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .chip{font-family:ui-monospace,Consolas,monospace;font-size:12px;letter-spacing:.14em;color:#8fb2c6;
+        background:rgba(8,16,26,.6);border:1px solid rgba(79,240,255,.14);border-radius:6px;padding:6px 10px;backdrop-filter:blur(6px)}
+  .chip b{color:#dff3ff;font-weight:600}
+  #hudL{display:flex;flex-direction:column;gap:7px;align-items:flex-start}
+  #hudR{display:flex;flex-direction:column;gap:7px;align-items:flex-end}
+  #keyRow{display:flex;gap:5px;align-items:center}
+  .kdot{width:9px;height:9px;transform:rotate(45deg);border:1px solid #ffcf5c;background:transparent;border-radius:1px}
+  .kdot.on{background:#ffcf5c;box-shadow:0 0 8px #ffcf5c}
+  #dangerBar{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;width:min(340px,52vw);height:4px;
+             background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden}
+  #dangerFill{height:100%;width:0%;background:linear-gradient(90deg,#4ff0ff,#ffcf5c 62%,#ff4d6a);transition:width .1s linear}
+  #toast{position:absolute;left:50%;top:14%;transform:translateX(-50%);text-align:center;font-size:14px;letter-spacing:.16em;
+         color:#bfe6f5;text-shadow:0 0 18px rgba(79,240,255,.5);opacity:0;transition:opacity .4s;white-space:nowrap;
+         font-family:ui-monospace,Consolas,monospace}
+  #toast.on{opacity:1}
+  #flash{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font-size:clamp(22px,5vw,44px);
+         letter-spacing:.3em;font-weight:700;opacity:0;color:#ff4d6a;text-shadow:0 0 30px rgba(255,77,106,.7)}
+
+  /* ---------- Screens ---------- */
+  .screen{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+          background:radial-gradient(ellipse at 50% 45%,rgba(6,12,22,.82),rgba(3,5,10,.96));backdrop-filter:blur(3px);z-index:10}
+  .screen.on{display:flex;animation:fade .28s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+
+  h1{margin:0;font-size:clamp(52px,13vw,120px);letter-spacing:.42em;font-weight:200;color:#dff3ff;
+     text-shadow:0 0 44px rgba(79,240,255,.55),0 0 90px rgba(79,240,255,.2);text-indent:.42em}
+  .tag{margin-top:2px;font-size:12px;letter-spacing:.38em;color:#5d7near;color:#5f7a8c;font-family:ui-monospace,Consolas,monospace;text-indent:.38em}
+  h2{margin:0 0 4px;font-size:clamp(20px,4vw,30px);letter-spacing:.24em;font-weight:300;text-indent:.24em}
+
+  .btn{pointer-events:auto;cursor:pointer;font-family:ui-monospace,Consolas,monospace;font-size:13px;letter-spacing:.18em;
+       color:#cfe9f6;background:rgba(12,24,38,.72);border:1px solid rgba(79,240,255,.26);border-radius:7px;
+       padding:12px 26px;transition:.16s;text-indent:.18em}
+  .btn:hover{background:rgba(79,240,255,.14);border-color:rgba(79,240,255,.65);color:#fff;box-shadow:0 0 22px rgba(79,240,255,.22)}
+  .btn:active{transform:translateY(1px)}
+  .btn.pri{border-color:rgba(92,255,168,.5);color:#dcffe9}
+  .btn.pri:hover{background:rgba(92,255,168,.16);border-color:rgba(92,255,168,.9);box-shadow:0 0 22px rgba(92,255,168,.25)}
+  .btn.sm{padding:8px 15px;font-size:11px}
+  .btn:disabled{opacity:.32;cursor:not-allowed}
+  .row{display:flex;gap:11px;flex-wrap:wrap;justify-content:center;margin-top:22px}
+
+  /* level select */
+  #lvWrap{width:min(880px,94vw);display:flex;flex-direction:column;height:min(760px,88vh)}
+  #lvHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px;flex-wrap:wrap}
+  #grid{overflow-y:auto;overflow-x:hidden;display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));
+        gap:9px;padding:6px 10px 20px 2px;flex:1}
+  #grid::-webkit-scrollbar{width:8px}
+  #grid::-webkit-scrollbar-thumb{background:rgba(79,240,255,.22);border-radius:4px}
+  .cell{pointer-events:auto;cursor:pointer;aspect-ratio:1;border-radius:9px;border:1px solid rgba(79,240,255,.16);
+        background:rgba(10,20,32,.6);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+        font-family:ui-monospace,Consolas,monospace;font-size:15px;color:#9fc3d6;transition:.14s;position:relative}
+  .cell:hover{border-color:rgba(79,240,255,.7);background:rgba(79,240,255,.11);color:#fff;transform:translateY(-2px)}
+  .cell.lock{opacity:.3;cursor:not-allowed;pointer-events:none}
+  .cell.done{border-color:rgba(92,255,168,.34);color:#dff3ff}
+  .cell.boss{border-color:rgba(185,140,255,.4)}
+  .cell.boss::after{content:"";position:absolute;inset:3px;border-radius:6px;border:1px solid rgba(185,140,255,.22)}
+  .st{display:flex;gap:2px;height:7px}
+  .st i{width:6px;height:6px;transform:rotate(45deg);border-radius:1px;background:rgba(255,255,255,.13)}
+  .st i.f{background:#ffcf5c;box-shadow:0 0 6px rgba(255,207,92,.8)}
+
+  /* results */
+  #stars{display:flex;gap:16px;margin:20px 0 8px}
+  #stars i{width:26px;height:26px;transform:rotate(45deg);border-radius:3px;background:rgba(255,255,255,.09);
+           border:1px solid rgba(255,255,255,.16);transition:.3s}
+  #stars i.f{background:#ffcf5c;border-color:#ffe9a8;box-shadow:0 0 26px rgba(255,207,92,.75)}
+  .stats{display:flex;gap:26px;margin-top:12px;font-family:ui-monospace,Consolas,monospace;font-size:12px;letter-spacing:.12em;color:#7d99ad}
+  .stats b{display:block;color:#dff3ff;font-size:19px;margin-top:5px;letter-spacing:.06em;font-weight:500}
+
+  .help{max-width:min(540px,90vw);margin-top:24px;font-family:ui-monospace,Consolas,monospace;font-size:12px;
+        line-height:2.15;color:#6f8296;letter-spacing:.06em;text-align:left}
+  .help b{color:#cfe9f6;font-weight:500}
+  kbd{display:inline-block;min-width:22px;text-align:center;padding:1px 6px;border:1px solid rgba(79,240,255,.3);
+      border-radius:4px;background:rgba(79,240,255,.07);color:#9fdff0;font-size:11px}
+
+  /* touch */
+  #touch{position:fixed;inset:auto 0 0 0;display:none;justify-content:space-between;padding:16px;gap:12px;z-index:6;pointer-events:none}
+  #touch button{pointer-events:auto;flex:1;max-width:120px;height:76px;border-radius:14px;font-size:22px;
+     background:rgba(12,26,40,.6);border:1px solid rgba(79,240,255,.24);color:#bfe6f5;backdrop-filter:blur(4px)}
+  #touch button:active{background:rgba(79,240,255,.22)}
+  #touch .mid{display:flex;flex-direction:column;gap:8px;max-width:140px;flex:1.2}
+  #touch .mid button{height:auto;flex:1;font-size:13px;letter-spacing:.14em}
+  body.touch #touch{display:flex}
+  body.touch #hud.on ~ #touch{display:flex}
+
+  #mute{position:fixed;top:14px;right:50%;z-index:20}
+  .corner{position:fixed;bottom:14px;right:16px;z-index:20;display:flex;gap:8px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="hudTop">
+    <div id="hudL">
+      <div class="chip">RING <b id="hLv">01</b> <span style="opacity:.4">/</span> 100</div>
+      <div class="chip" id="hRing">LAYER <b>0</b>/0</div>
+    </div>
+    <div id="hudR">
+      <div class="chip">TIME <b id="hTime">0.0</b></div>
+      <div class="chip" id="hShard">SHARDS <b>0</b>/0</div>
+      <div class="chip" id="hKeys" style="display:none"><span id="keyRow"></span></div>
+    </div>
+  </div>
+  <div id="dangerBar"><div id="dangerFill"></div></div>
+  <div id="toast" class="mono"></div>
+  <div id="flash" class="mono"></div>
+</div>
+
+<div id="touch">
+  <button id="tL">◀</button>
+  <div class="mid">
+    <button id="tOut">DASH ▲</button>
+    <button id="tIn">▼ BACK</button>
+  </div>
+  <button id="tR">▶</button>
+</div>
+
+<!-- TITLE -->
+<div class="screen on" id="sTitle">
+  <h1>RING</h1>
+  <div class="tag">THE CORE IS COLLAPSING</div>
+  <div class="row">
+    <button class="btn pri" id="bPlay">CONTINUE</button>
+    <button class="btn" id="bLevels">LAYERS</button>
+    <button class="btn" id="bHow">BRIEFING</button>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button class="btn sm" id="bSound">SOUND ON</button>
+  </div>
+</div>
+
+<!-- HOW -->
+<div class="screen" id="sHow">
+  <h2>BRIEFING</h2>
+  <div class="help">
+    You are a spark trapped at the centre of a failing reactor. Nine concentric
+    <b>rings</b> stand between you and the rim, and the core is expanding outward
+    behind you. Ride the lanes, find the gaps, get out.
+    <br><br>
+    <b>MOUSE</b> &nbsp;the spark chases your cursor around the lane<br>
+    <b>LEFT CLICK</b> &nbsp;dash <b>outward</b> — only passes through a gap<br>
+    <b>RIGHT CLICK</b> &nbsp;fall back one lane to dodge<br>
+    <br>
+    <kbd>←</kbd> <kbd>→</kbd> &nbsp;orbit by keyboard instead — either scheme works,<br>
+    &nbsp;whichever you touched last takes over<br>
+    <kbd>SPACE</kbd> / <kbd>↑</kbd> &nbsp;dash outward &nbsp;·&nbsp; <kbd>↓</kbd> &nbsp;fall back<br>
+    <kbd>R</kbd> &nbsp;restart &nbsp;·&nbsp; <kbd>ESC</kbd> &nbsp;pause
+    <br><br>
+    <b>Gold shards</b> are keys. <b>Amber rings</b> are sealed until you hold enough.
+    <b>Shutter rings</b> breathe open and shut. Stay ahead of the front —
+    the further ahead you finish, the more stars you keep.
+  </div>
+  <div class="row"><button class="btn" id="bHowBack">BACK</button></div>
+</div>
+
+<!-- LEVELS -->
+<div class="screen" id="sLevels">
+  <div id="lvWrap">
+    <div id="lvHead">
+      <h2 style="margin:0">LAYERS</h2>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="chip mono"><b id="totStars">0</b> / 300 ★</div>
+        <button class="btn sm" id="bLvBack">BACK</button>
+      </div>
+    </div>
+    <div id="grid"></div>
+  </div>
+</div>
+
+<!-- PAUSE -->
+<div class="screen" id="sPause">
+  <h2>PAUSED</h2>
+  <div class="row">
+    <button class="btn pri" id="bResume">RESUME</button>
+    <button class="btn" id="bRestart">RESTART</button>
+    <button class="btn" id="bQuit">LAYERS</button>
+  </div>
+  <div class="row" id="skipRow" style="display:none">
+    <button class="btn sm" id="bSkip">SKIP THIS LAYER</button>
+  </div>
+</div>
+
+<!-- WIN -->
+<div class="screen" id="sWin">
+  <h2 id="winTitle">LAYER CLEARED</h2>
+  <div id="stars"><i></i><i></i><i></i></div>
+  <div class="stats">
+    <div>TIME<b id="wTime">0.0</b></div>
+    <div>MARGIN<b id="wMargin">0%</b></div>
+    <div>SHARDS<b id="wShard">0/0</b></div>
+  </div>
+  <div class="row">
+    <button class="btn pri" id="bNext">NEXT LAYER</button>
+    <button class="btn" id="bAgain">RETRY</button>
+    <button class="btn" id="bWinQuit">LAYERS</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================================
+   RING — a single-file arcade about escaping a collapsing reactor.
+   ========================================================================== */
+
+const TAU = Math.PI * 2;
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const lerp  = (a,b,t) => a + (b-a) * t;
+const norm  = a => { a %= TAU; return a < 0 ? a + TAU : a; };
+const angDiff = (a,b) => { let d = (a-b) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; };
+const easeIO = t => t < .5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2;
+const easeOut = t => 1 - Math.pow(1-t, 3);
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a>>>15, 1|a);
+    t = t + Math.imul(t ^ t>>>7, 61|t) ^ t;
+    return ((t ^ t>>>14) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------------------------------------------------------- geometry */
+const CORE_R   = 46;    // radius of the collapsing core at t=0
+const SPACING  = 56;    // radial distance between ring walls
+const WALL_W   = 12;    // drawn wall thickness
+const PLAYER_R = 8.5;
+const LEVELS   = 100;
+
+const wallRadius = i => CORE_R + SPACING * (i + 1);
+const laneCenter = i => CORE_R + SPACING * (i + 0.5);
+const playerOmega = r => clamp(2.45 * Math.sqrt(100 / r), 0.86, 3.05);
+
+/* ============================================================================
+   LEVEL GENERATION
+   Seeded per level number, so every player sees the same 100 layers.
+   Front speed is derived from an analytic traversal estimate, which keeps
+   every layer beatable while the safety slack tightens over the campaign.
+   ========================================================================== */
+
+function genLevel(n){
+  const rnd = mulberry32((Math.imul(n, 0x9E3779B1) ^ 0x5bf03635) >>> 0);
+  const R = () => rnd();
+  const t = (n - 1) / (LEVELS - 1);
+  const boss = n % 10 === 0;
+
+  const ringCount = clamp(3 + Math.round(t * 4.5) + (boss ? 1 : 0), 3, 9);
+  const arcPx = lerp(88, 46, t) * (boss ? .88 : 1);
+
+  const walls = [], hazards = [], shards = [];
+  let locksPlaced = 0;
+  const maxLocks = n < 20 ? 0 : (t > .62 ? 2 : 1);
+
+  for (let i = 0; i < ringCount; i++){
+    const r = wallRadius(i);
+
+    /* --- gaps ------------------------------------------------------------ */
+    let gapCount = 3;
+    if (R() < t * 0.95) gapCount--;
+    if (t > .48 && R() < (t - .48) * 1.5) gapCount--;
+    gapCount = clamp(gapCount, 1, 3);
+
+    const slot = TAU / gapCount;
+    const hw   = Math.min(arcPx / (2 * r), slot * 0.34);
+    const jit  = Math.max(0, slot * 0.5 - hw - 0.06) * 0.7;
+    const base = R() * TAU;
+    const gaps = [];
+    for (let k = 0; k < gapCount; k++)
+      gaps.push({ a: norm(base + k * slot + (R()*2 - 1) * jit), hw });
+
+    /* --- motion ---------------------------------------------------------- */
+    const dir = R() < .5 ? -1 : 1;
+    let spd = dir * lerp(.17, .60, t) * (0.55 + R() * 0.95) * (boss ? 1.18 : 1);
+
+    let osc = null;
+    if (n >= 8 && R() < clamp(.08 + t * .45, 0, .46)){
+      osc = { amp: .45 + R() * 1.15, freq: .45 + R() * .8, phase: R() * TAU };
+      spd *= .3;
+    }
+
+    let shutter = null;
+    if (n >= 14 && R() < clamp((t - .08) * .55, 0, .36))
+      shutter = { freq: .62 + R() * .85, phase: R() * TAU };
+
+    /* --- lock ------------------------------------------------------------ */
+    let lock = 0;
+    if (i >= 1 && locksPlaced < maxLocks && R() < .34){
+      lock = clamp(1 + Math.floor(R() * (t > .6 ? 2.4 : 1.5)), 1, 3);
+      locksPlaced++;
+      // Keys always live in the lane directly inside the sealed ring, so the
+      // collapsing front can never strand the player behind a lock.
+      const kb = R() * TAU;
+      for (let k = 0; k < lock; k++)
+        shards.push({ lane: i, r: laneCenter(i) + (R()-.5)*SPACING*.3, ang: norm(kb + k*TAU/lock + (R()-.5)*.8),
+                      spd: (R()<.5?-1:1) * (.15 + R()*.3), key: true, taken: false });
+    }
+
+    walls.push({ r, base: R()*TAU, spd, osc, shutter, lock, gaps, dead: false, flash: 0 });
+
+    /* --- hazards in the lane inside this ring ---------------------------- */
+    let hz = 0;
+    if (n >= 5) hz = Math.floor(clamp(t * 2.7 + R() * 1.5, 0, boss ? 3 : 2.4));
+    if (i === 0 && n < 22) hz = 0;
+
+    let sweeps = 0;
+    for (let k = 0; k < hz; k++){
+      if (n >= 25 && sweeps === 0 && R() < .3){
+        sweeps++;
+        hazards.push({ type:'sweep', lane:i, ang:R()*TAU,
+                       spd:(R()<.5?-1:1) * lerp(.24,.66,t) * (.7+R()*.6), halfPx: 7, dead:false });
+      } else {
+        // Capped below the player's own angular speed in this lane: in the
+        // outer lanes playerOmega falls to ~1.07 while the raw roll reaches
+        // 1.47, which produced orbs you simply could not steer away from.
+        const orbCap = playerOmega(laneCenter(i)) * 0.82;
+        hazards.push({ type:'orb', lane:i, r: laneCenter(i) + (R()-.5)*SPACING*.44,
+                       ang:R()*TAU, spd:(R()<.5?-1:1) * Math.min(lerp(.32,1.05,t) * (.6+R()*.8), orbCap),
+                       rad: 8, dead:false });
+      }
+    }
+
+    /* --- bonus shard ------------------------------------------------------ */
+    if (R() < .42)
+      shards.push({ lane:i, r: laneCenter(i) + (R()-.5)*SPACING*.4, ang:R()*TAU,
+                    spd:(R()<.5?-1:1)*(.2+R()*.4), key:false, taken:false });
+  }
+
+  /* --- pacing: derive the front speed from a traversal estimate ----------
+     These coefficients are a least-squares fit against headless rollouts of
+     the real movement code, so `need` tracks what a competent run actually
+     costs (rmse ~1.5s, no drift across the campaign). That leaves `slack`
+     as the pure safety margin, which tightens as the layers go deeper.
+     Note there is deliberately no flat per-ring term: the fit put it at
+     -0.003s, i.e. the dash is already paid for inside the gap-hunt term. */
+  let need = -0.35;
+  for (let i = 0; i < ringCount; i++){
+    const w = walls[i];
+    const wp = playerOmega(laneCenter(i));
+    const wspd = Math.abs(w.spd) + (w.osc ? w.osc.amp * w.osc.freq * .6 : 0);
+    need += (Math.PI / w.gaps.length) / Math.max(.4, wp + wspd) * 1.03;
+    if (w.shutter) need += 0.95 / w.shutter.freq;
+    if (w.lock)    need += 0.51 * w.lock;
+    need += 0.26 * hazards.filter(h => h.lane === i).length;
+  }
+  need = Math.max(1.6, need);
+  // `need` is fitted to headless rollouts, i.e. to a machine with perfect
+  // reaction time. A human is furthest from that on the opening layers, where
+  // they are still reading the screen, and closest by the deep ones — so the
+  // margin decays as a curve rather than a straight line. Falls ~4.3x -> 1.15x.
+  const slack  = (1.15 + 3.2 * Math.pow(1 - t, 2)) * (boss ? .93 : 1);
+  const travel = wallRadius(ringCount - 1) - CORE_R;
+  const grace  = lerp(2.3, 1.0, t);
+  const frontSpeed = clamp(travel / (need * slack), 7, 62);
+
+  return {
+    n, boss, ringCount, walls, hazards, shards,
+    grace, frontSpeed, par: need,
+    rMax: wallRadius(ringCount - 1),
+    totalShards: shards.length
+  };
+}
+
+/* wall phase + shutter -------------------------------------------------- */
+function wallPhase(w, t){
+  return w.base + w.spd * t + (w.osc ? w.osc.amp * Math.sin(t * w.osc.freq + w.osc.phase) : 0);
+}
+function shutterMul(w, t){
+  if (!w.shutter) return 1;
+  const raw = .5 + .5 * Math.sin(t * w.shutter.freq + w.shutter.phase);
+  return clamp((raw - .20) / .58, 0, 1);
+}
+/** Returns the gap containing `ang`, or null. `tol` widens it for dash assist. */
+function gapAt(w, ang, t, tol){
+  const ph = wallPhase(w, t), m = shutterMul(w, t);
+  let best = null, bestD = 1e9;
+  for (const g of w.gaps){
+    const hw = g.hw * m;
+    if (hw < .004) continue;
+    const c = g.a + ph, d = Math.abs(angDiff(ang, c));
+    if (d < hw * (tol || 1) && d < bestD){ bestD = d; best = { center: c, hw }; }
+  }
+  return best;
+}
+
+/* ============================================================================
+   AUDIO — small WebAudio synth, no assets.
+   ========================================================================== */
+let actx = null, master = null;
+function initAudio(){
+  if (actx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  actx = new AC();
+  master = actx.createGain();
+  master.gain.value = 0.30;
+  master.connect(actx.destination);
+}
+function tone(f, dur, type, vol, slide, delay){
+  if (!actx || !save.sound) return;
+  const t0 = actx.currentTime + (delay || 0);
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type || 'sine';
+  o.frequency.setValueAtTime(f, t0);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f * slide), t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol || .2, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur + .05);
+}
+function noiseBurst(dur, vol, freq, q){
+  if (!actx || !save.sound) return;
+  const t0 = actx.currentTime;
+  const len = Math.ceil(actx.sampleRate * dur);
+  const buf = actx.createBuffer(1, len, actx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random()*2 - 1) * (1 - i/len);
+  const s = actx.createBufferSource(); s.buffer = buf;
+  const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq || 800; f.Q.value = q || 1.2;
+  const g = actx.createGain(); g.gain.value = vol || .25;
+  s.connect(f); f.connect(g); g.connect(master); s.start(t0);
+}
+const sfx = {
+  dash:  () => tone(320, .13, 'triangle', .16, 2.4),
+  pass:  () => { tone(880, .16, 'sine', .18, 1.6); tone(1320, .12, 'sine', .09, 1.5, .02); },
+  block: () => { tone(120, .16, 'sawtooth', .16, .55); noiseBurst(.12, .18, 340, .8); },
+  seal:  () => { tone(200, .22, 'square', .12, .5); tone(150, .26, 'square', .1, .5, .06); },
+  shard: () => { tone(1180, .1, 'sine', .16, 1.4); tone(1760, .12, 'sine', .1, 1.3, .05); },
+  key:   () => { [880,1174,1568].forEach((f,i) => tone(f, .16, 'triangle', .14, 1, i*.055)); },
+  die:   () => { tone(220, .5, 'sawtooth', .2, .18); noiseBurst(.45, .3, 260, .6); },
+  win:   () => { [523,659,784,1046].forEach((f,i) => tone(f, .5, 'sine', .16, 1, i*.09)); },
+  warn:  () => tone(90, .1, 'square', .07)
+};
+
+/* ============================================================================
+   SAVE
+   ========================================================================== */
+const SAVE_KEY = 'ring.save.v1';
+let save = { best: {}, sound: true };
+function loadSave(){
+  try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.best) save = Object.assign(save, s); }
+  catch(e){}
+}
+function writeSave(){ try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch(e){} }
+function highestUnlocked(){
+  let m = 1;
+  for (let i = 1; i <= LEVELS; i++) if (save.best[i]) m = Math.min(LEVELS, i + 1);
+  return m;
+}
+function totalStars(){ let s = 0; for (const k in save.best) s += save.best[k].stars || 0; return s; }
+
+/* ============================================================================
+   CANVAS
+   ========================================================================== */
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let VW = 0, VH = 0, DPR = 1;
+function resize(){
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  VW = window.innerWidth; VH = window.innerHeight;
+  cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* Star field for the backdrop (fixed, seeded). */
+const stars = [];
+{
+  const r = mulberry32(1337);
+  for (let i = 0; i < 220; i++)
+    stars.push({ x: r(), y: r(), s: r()*1.5 + .3, a: r()*.5 + .12, tw: r()*TAU });
+}
+
+/* ============================================================================
+   GAME STATE
+   ========================================================================== */
+const S = { MENU:'menu', PLAY:'play', DEAD:'dead', WIN:'win', PAUSE:'pause' };
+let mode = S.MENU;
+
+let L = null;                 // current level data
+let time = 0;                 // level clock
+let frontR = CORE_R;
+let keysHeld = 0, shardsGot = 0;
+let deaths = 0, deathStreak = 0;
+let curLevel = 1;
+let deadT = 0, winT = 0;
+let shake = 0, camScale = 1, warnCd = 0;
+
+const p = {
+  lane: 0, ang: 0, av: 0, r: laneCenter(0),
+  mode: 'ride', dir: 1, dt: 0, dur: .17, from: 0, to: 0, wall: 0, checked: false,
+  stun: 0, buffer: 0, bufferDir: 1, trail: []
+};
+
+const parts = [];
+function emit(x, y, n, col, spd, life, size){
+  for (let i = 0; i < n; i++){
+    const a = Math.random() * TAU, v = spd * (.35 + Math.random() * .8);
+    parts.push({ x, y, vx: Math.cos(a)*v, vy: Math.sin(a)*v,
+                 t: 0, max: life * (.6 + Math.random()*.7), col,
+                 s: size * (.5 + Math.random()) });
+  }
+}
+function emitAt(r, ang, n, col, spd, life, size){
+  emit(Math.cos(ang)*r, Math.sin(ang)*r, n, col, spd, life, size);
+}
+
+/* ---------------------------------------------------------------- start --- */
+function startLevel(n){
+  curLevel = clamp(n, 1, LEVELS);
+  L = genLevel(curLevel);
+  time = 0; frontR = CORE_R;
+  keysHeld = 0; shardsGot = 0;
+  p.lane = 0; p.ang = Math.random() * TAU; p.av = 0; p.r = laneCenter(0);
+  p.mode = 'ride'; p.stun = 0; p.buffer = 0; p.trail.length = 0;
+  parts.length = 0;
+  shake = 0; deadT = 0; winT = 0; warnCd = 0;
+  camScale = fitScale();
+  mode = S.PLAY;
+  showScreen(null);
+  hud.classList.add('on');
+  syncHud();
+  showHint(curLevel);
+}
+
+function fitScale(){
+  const view = (L ? L.rMax : 400) + SPACING * .72;
+  return Math.min(VW, VH) / (2 * view);
+}
+
+/* ---------------------------------------------------------------- input --- */
+const keys = Object.create(null);
+const touch = { l:false, r:false };
+
+/* Mouse aiming. `aim.on` flips to true the moment the cursor moves and back to
+   false on any steer key, so both schemes stay live without a settings toggle.
+   The world is drawn centred on VW/2,VH/2 and angle is scale-independent, so
+   the cursor's angle needs no camera maths — just atan2 from screen centre. */
+const aim = { on:false, ang:0, x:0, y:0, seen:false };
+function aimFrom(e){
+  const dx = e.clientX - VW/2, dy = e.clientY - VH/2;
+  if (dx*dx + dy*dy < 16) return;          // dead zone at the very centre
+  const moved = (e.clientX-aim.x)**2 + (e.clientY-aim.y)**2 > 16;
+  aim.x = e.clientX; aim.y = e.clientY;
+  aim.ang = norm(Math.atan2(dy, dx));
+  if (moved || !aim.seen){ aim.on = true; aim.seen = true; }
+}
+window.addEventListener('pointermove', e => { if (e.pointerType !== 'touch') aimFrom(e); }, { passive:true });
+
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if ([' ','arrowleft','arrowright','arrowup','arrowdown'].includes(k)) e.preventDefault();
+  if (['arrowleft','arrowright','a','d'].includes(k)) aim.on = false;   // back to keys
+  if (keys[k]) return;
+  keys[k] = true;
+  if (mode === S.PLAY){
+    if (k === ' ' || k === 'arrowup' || k === 'w') queueDash(1);
+    if (k === 'arrowdown' || k === 's') queueDash(-1);
+    if (k === 'r') startLevel(curLevel);
+    if (k === 'escape') pause();
+  } else if (mode === S.PAUSE && k === 'escape') resume();
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; touch.l = touch.r = false; });
+
+function queueDash(dir){ p.buffer = .22; p.bufferDir = dir; }
+
+function bindHold(el, on, off){
+  const d = e => { e.preventDefault(); on(); };
+  const u = e => { e.preventDefault(); off(); };
+  el.addEventListener('pointerdown', d);
+  el.addEventListener('pointerup', u);
+  el.addEventListener('pointercancel', u);
+  el.addEventListener('pointerleave', u);
+}
+bindHold(document.getElementById('tL'), () => touch.l = true, () => touch.l = false);
+bindHold(document.getElementById('tR'), () => touch.r = true, () => touch.r = false);
+document.getElementById('tOut').addEventListener('pointerdown', e => { e.preventDefault(); if (mode===S.PLAY) queueDash(1); });
+document.getElementById('tIn') .addEventListener('pointerdown', e => { e.preventDefault(); if (mode===S.PLAY) queueDash(-1); });
+if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.body.classList.add('touch');
+
+cv.addEventListener('pointerdown', e => {
+  initAudio();
+  if (e.pointerType === 'touch' || document.body.classList.contains('touch')) return;
+  aimFrom(e);
+  if (mode !== S.PLAY) return;
+  if (e.button === 2) queueDash(-1);        // right click falls back a lane
+  else if (e.button === 0) queueDash(1);    // left click dashes outward
+});
+// right-drag would otherwise pop the context menu mid-run
+cv.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ---------------------------------------------------------------- dash ---- */
+function startDash(dir){
+  if (p.mode !== 'ride' || p.stun > 0) return;
+  const target = p.lane + dir;
+  if (target < 0 || target > L.ringCount) return;
+  p.mode = 'dash'; p.dir = dir; p.dt = 0; p.dur = .17; p.checked = false;
+  p.from = laneCenter(p.lane); p.to = laneCenter(target);
+  p.wall = dir > 0 ? p.lane : p.lane - 1;
+  sfx.dash();
+  emitAt(p.r, p.ang, 6, '#4ff0ff', 40, .3, 2);
+}
+
+function resolveCrossing(){
+  const w = L.walls[p.wall];
+  if (!w || w.dead) return true;
+  if (p.dir > 0 && w.lock && keysHeld < w.lock){
+    sfx.seal();
+    showToast('SEALED — ' + (w.lock - keysHeld) + ' MORE SHARD' + (w.lock - keysHeld > 1 ? 'S' : ''), 1.1);
+    return false;
+  }
+  if (gapAt(w, p.ang, time)) return true;
+  const assist = gapAt(w, p.ang, time, 1.42);
+  if (assist){
+    p.ang = assist.center + clamp(angDiff(p.ang, assist.center), -assist.hw * .68, assist.hw * .68);
+    return true;
+  }
+  return false;
+}
+
+/* ---------------------------------------------------------------- death --- */
+function die(reason){
+  if (mode !== S.PLAY) return;
+  mode = S.DEAD; deadT = 0; deaths++; deathStreak++;
+  shake = 16;
+  emitAt(p.r, p.ang, 46, '#ff4d6a', 180, .9, 3.2);
+  emitAt(p.r, p.ang, 22, '#ffffff', 120, .5, 2.2);
+  sfx.die();
+  const f = document.getElementById('flash');
+  f.textContent = reason || 'SIGNAL LOST';
+  f.style.opacity = 1;
+  setTimeout(() => f.style.opacity = 0, 620);
+}
+
+function win(){
+  mode = S.WIN; winT = 0;
+  // Fraction of the time budget consumed: 0 = out before the core even moved,
+  // 1 = the front reached the rim. This floors at 0 on every layer, whereas
+  // frontR/rMax floors at CORE_R/rMax — which ranges .215 on a 3-ring layer
+  // down to .084 on a 9-ring one, so fixed cutoffs could never mean the same
+  // thing twice. Thresholds below are calibrated against headless rollouts.
+  const frac = clamp((frontR - CORE_R) / (L.rMax - CORE_R), 0, 1);
+  const stars = frac <= .30 ? 3 : frac <= .60 ? 2 : 1;
+  const prev = save.best[curLevel];
+  if (!prev || stars > prev.stars || (stars === prev.stars && frac < prev.frac))
+    save.best[curLevel] = { stars, frac, time, shards: shardsGot };
+  writeSave();
+  deathStreak = 0;
+  sfx.win();
+  emitAt(p.r, p.ang, 60, '#5cffa8', 200, 1.1, 3);
+  document.getElementById('winTitle').textContent = curLevel === LEVELS ? 'REACTOR ESCAPED' : (L.boss ? 'DEEP LAYER CLEARED' : 'LAYER CLEARED');
+  document.getElementById('wTime').textContent = time.toFixed(1) + 's';
+  document.getElementById('wMargin').textContent = Math.round((1 - frac) * 100) + '%';
+  document.getElementById('wShard').textContent = shardsGot + '/' + L.totalShards;
+  const si = document.querySelectorAll('#stars i');
+  si.forEach((el, i) => { el.classList.remove('f'); setTimeout(() => { if (i < stars) el.classList.add('f'); }, 260 + i * 210); });
+  document.getElementById('bNext').style.display = curLevel < LEVELS ? '' : 'none';
+  setTimeout(() => { if (mode === S.WIN) showScreen('sWin'); }, 900);
+}
+
+/* ============================================================================
+   UPDATE
+   ========================================================================== */
+function update(dt){
+  // particles always run
+  for (let i = parts.length - 1; i >= 0; i--){
+    const q = parts[i];
+    q.t += dt;
+    if (q.t >= q.max){ parts.splice(i, 1); continue; }
+    q.x += q.vx * dt; q.y += q.vy * dt;
+    q.vx *= Math.pow(.12, dt); q.vy *= Math.pow(.12, dt);
+  }
+  shake *= Math.pow(.02, dt);
+
+  if (mode === S.DEAD){
+    deadT += dt;
+    if (deadT > .85) startLevel(curLevel);
+    return;
+  }
+  if (mode === S.WIN){ winT += dt; return; }
+  if (mode !== S.PLAY) return;
+
+  time += dt;
+
+  /* --- collapsing front ------------------------------------------------- */
+  if (time > L.grace) frontR += L.frontSpeed * dt;
+  for (const w of L.walls){
+    if (!w.dead && frontR > w.r){ w.dead = true; w.flash = 1; shake = Math.max(shake, 5); }
+    if (w.flash > 0) w.flash = Math.max(0, w.flash - dt * 2.2);
+  }
+  for (const h of L.hazards) if (!h.dead && frontR > laneCenter(h.lane) + SPACING * .5) h.dead = true;
+  for (const s of L.shards) if (!s.taken && frontR > s.r + 6) s.taken = 'burned';
+
+  /* --- steering ---------------------------------------------------------- */
+  const om = playerOmega(p.r);
+  let want = 0;
+  if (aim.on){
+    /* Chase the cursor. `want` is continuous here rather than -1/0/1: inside
+       the ease band it tapers, so the spark settles onto the cursor angle
+       instead of buzzing back and forth across it. The band scales with om
+       because av needs ~1/17s to shed speed, and that costs far more angle in
+       lane 0 (om 2.85) than out at the rim (om 1.07). */
+    want = clamp(angDiff(aim.ang, p.ang) / (om * 0.075), -1, 1);
+  } else {
+    if (keys['arrowleft'] || keys['a'] || touch.l) want -= 1;
+    if (keys['arrowright'] || keys['d'] || touch.r) want += 1;
+  }
+  if (p.stun > 0){ p.stun -= dt; want = 0; }
+
+  const tgt = want * om;
+  p.av += (tgt - p.av) * (1 - Math.exp(-dt * (want ? 17 : 11)));
+  p.ang = norm(p.ang + p.av * dt);
+
+  /* --- dash state machine ------------------------------------------------ */
+  if (p.buffer > 0){
+    p.buffer -= dt;
+    if (p.mode === 'ride' && p.stun <= 0){ startDash(p.bufferDir); p.buffer = 0; }
+  }
+
+  if (p.mode === 'dash'){
+    p.dt += dt;
+    const k = clamp(p.dt / p.dur, 0, 1);
+    p.r = lerp(p.from, p.to, easeIO(k));
+    if (!p.checked && k >= .5){
+      p.checked = true;
+      if (resolveCrossing()){
+        sfx.pass();
+        emitAt(L.walls[p.wall] ? L.walls[p.wall].r : p.r, p.ang, 10, '#4ff0ff', 90, .4, 2.2);
+      } else {
+        p.mode = 'bounce'; p.dt = 0; p.dur = .14;
+        const back = p.from; p.from = p.r; p.to = back;
+        p.stun = .27; shake = Math.max(shake, 7);
+        sfx.block();
+        emitAt(p.r, p.ang, 14, '#ff9d5c', 80, .4, 2.4);
+      }
+    }
+    if (k >= 1){
+      p.lane += p.dir; p.mode = 'ride'; p.r = laneCenter(p.lane);
+      if (p.lane >= L.ringCount){ win(); return; }
+    }
+  } else if (p.mode === 'bounce'){
+    p.dt += dt;
+    const k = clamp(p.dt / p.dur, 0, 1);
+    p.r = lerp(p.from, p.to, easeOut(k));
+    if (k >= 1){ p.mode = 'ride'; p.r = laneCenter(p.lane); }
+  } else {
+    p.r = laneCenter(p.lane);
+  }
+
+  /* --- trail -------------------------------------------------------------- */
+  p.trail.push({ r: p.r, a: p.ang, t: 0 });
+  for (let i = p.trail.length - 1; i >= 0; i--){
+    p.trail[i].t += dt;
+    if (p.trail[i].t > .3) p.trail.splice(i, 1);
+  }
+
+  /* --- hazards ------------------------------------------------------------ */
+  const px = Math.cos(p.ang) * p.r, py = Math.sin(p.ang) * p.r;
+  for (const h of L.hazards){
+    if (h.dead) continue;
+    h.ang = norm(h.ang + h.spd * dt);
+    if (h.type === 'orb'){
+      const hx = Math.cos(h.ang) * h.r, hy = Math.sin(h.ang) * h.r;
+      const dx = px - hx, dy = py - hy;
+      if (dx*dx + dy*dy < (PLAYER_R + h.rad) * (PLAYER_R + h.rad)) return die('BURNED OUT');
+    } else {
+      const lo = CORE_R + SPACING * h.lane, hi = lo + SPACING;
+      if (p.r > lo + 3 && p.r < hi - 3){
+        const half = (h.halfPx + PLAYER_R) / Math.max(40, p.r);
+        if (Math.abs(angDiff(p.ang, h.ang)) < half) return die('CUT DOWN');
+      }
+    }
+  }
+
+  /* --- shards -------------------------------------------------------------- */
+  for (const s of L.shards){
+    if (s.taken) continue;
+    s.ang = norm(s.ang + s.spd * dt);
+    const sx = Math.cos(s.ang) * s.r, sy = Math.sin(s.ang) * s.r;
+    const dx = px - sx, dy = py - sy;
+    if (dx*dx + dy*dy < 22*22){
+      s.taken = true; shardsGot++;
+      if (s.key){ keysHeld++; sfx.key(); } else sfx.shard();
+      emitAt(s.r, s.ang, 14, '#ffcf5c', 90, .5, 2.2);
+      syncHud();
+    }
+  }
+
+  /* --- front collision ------------------------------------------------------ */
+  if (frontR >= p.r - PLAYER_R * .55) return die('CONSUMED');
+
+  /* --- proximity warning ---------------------------------------------------- */
+  const margin = (p.r - frontR) / SPACING;
+  warnCd -= dt;
+  if (margin < 1.05 && warnCd <= 0){ sfx.warn(); warnCd = clamp(margin * .34, .1, .5); }
+
+  /* --- camera ---------------------------------------------------------------- */
+  const fit = fitScale();
+  const want2 = fit * lerp(1.14, 1.0, clamp(p.r / L.rMax, 0, 1));
+  camScale += (want2 - camScale) * (1 - Math.exp(-dt * 4));
+
+  syncHudLive();
+}
+
+/* ============================================================================
+   RENDER
+   ========================================================================== */
+function render(now){
+  const t = now / 1000;
+
+  // background
+  const g = ctx.createRadialGradient(VW/2, VH/2, 0, VW/2, VH/2, Math.max(VW, VH) * .75);
+  g.addColorStop(0, '#0a1220'); g.addColorStop(.55, '#060a13'); g.addColorStop(1, '#03050a');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+
+  ctx.save();
+  for (const s of stars){
+    const a = s.a * (.6 + .4 * Math.sin(t * 1.4 + s.tw));
+    ctx.fillStyle = 'rgba(180,225,255,' + a.toFixed(3) + ')';
+    ctx.fillRect(s.x * VW, s.y * VH, s.s, s.s);
+  }
+  ctx.restore();
+
+  ctx.save();
+  const sh = shake;
+  ctx.translate(VW/2 + (Math.random()-.5)*sh, VH/2 + (Math.random()-.5)*sh);
+
+  if (mode === S.MENU || !L){ drawMenuField(t); ctx.restore(); drawVignette(); return; }
+
+  ctx.scale(camScale, camScale);
+
+  drawCore(t);
+  for (let i = L.walls.length - 1; i >= 0; i--) drawWall(L.walls[i], i, t);
+  drawExit(t);
+  drawShards(t);
+  drawHazards(t);
+  drawFront(t);
+  if (mode !== S.DEAD) drawPlayer(t);
+  drawParticles();
+
+  ctx.restore();
+  drawVignette();
+}
+
+function drawMenuField(t){
+  ctx.save();
+  const s = Math.min(VW, VH) / 900;
+  ctx.scale(s, s);
+  for (let i = 0; i < 7; i++){
+    const r = 90 + i * 62;
+    const ph = t * (i % 2 ? .18 : -.24) * (1 + i * .1);
+    ctx.lineWidth = 9;
+    for (let k = 0; k < 3; k++){
+      const a0 = ph + k * TAU/3 + .42, a1 = ph + (k+1) * TAU/3 - .42;
+      ctx.strokeStyle = 'rgba(79,240,255,' + (0.05 + 0.05 * (7-i)/7) + ')';
+      ctx.beginPath(); ctx.arc(0, 0, r, a0, a1); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = 'rgba(79,240,255,' + (.1 + .05*Math.sin(t*2)) + ')';
+  ctx.beginPath(); ctx.arc(0, 0, 40 + Math.sin(t*1.6)*4, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+function drawCore(t){
+  const pulse = 1 + Math.sin(t * 3.2) * .04;
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, CORE_R * pulse);
+  g.addColorStop(0, 'rgba(255,240,200,.85)');
+  g.addColorStop(.5, 'rgba(255,140,80,.4)');
+  g.addColorStop(1, 'rgba(255,60,60,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(0, 0, CORE_R * pulse, 0, TAU); ctx.fill();
+}
+
+function glowArc(r, a0, a1, w, col, glowCol){
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = glowCol; ctx.lineWidth = w * 2.6;
+  ctx.beginPath(); ctx.arc(0, 0, r, a0, a1); ctx.stroke();
+  ctx.strokeStyle = col; ctx.lineWidth = w;
+  ctx.beginPath(); ctx.arc(0, 0, r, a0, a1); ctx.stroke();
+}
+
+function drawWall(w, idx, t){
+  if (w.dead){
+    if (w.flash > 0){
+      ctx.strokeStyle = 'rgba(255,180,120,' + (w.flash * .7).toFixed(3) + ')';
+      ctx.lineWidth = WALL_W * (1 + (1 - w.flash) * 2);
+      ctx.beginPath(); ctx.arc(0, 0, w.r, 0, TAU); ctx.stroke();
+    }
+    return;
+  }
+  const ph = wallPhase(w, time), m = shutterMul(w, time);
+  const locked = w.lock && keysHeld < w.lock;
+
+  let col, glow;
+  if (locked)       { col = 'rgba(255,180,70,.92)';  glow = 'rgba(255,150,40,.13)'; }
+  else if (w.lock)  { col = 'rgba(120,255,190,.92)'; glow = 'rgba(92,255,168,.13)'; }
+  else if (w.shutter){col = 'rgba(185,140,255,.9)';  glow = 'rgba(160,110,255,.12)'; }
+  else              { col = 'rgba(120,215,240,.86)'; glow = 'rgba(79,240,255,.1)'; }
+
+  const near = p.lane === idx || p.lane === idx + 1;
+  if (near) glow = glow.replace(/[\d.]+\)$/, '0.2)');
+
+  const segs = w.gaps.map(g => ({ a: norm(g.a + ph), hw: g.hw * m }))
+                     .filter(g => g.hw > .004)
+                     .sort((x, y) => x.a - y.a);
+
+  if (!segs.length){
+    glowArc(w.r, 0, TAU, WALL_W, col, glow);
+  } else {
+    for (let i = 0; i < segs.length; i++){
+      const nx = segs[(i + 1) % segs.length];
+      let a0 = segs[i].a + segs[i].hw;
+      let a1 = nx.a - nx.hw;
+      if (a1 <= a0) a1 += TAU;
+      glowArc(w.r, a0, a1, WALL_W, col, glow);
+    }
+    // gap edge markers
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = locked ? 'rgba(255,210,130,.8)' : 'rgba(210,250,255,.65)';
+    for (const s of segs){
+      for (const sgn of [-1, 1]){
+        const a = s.a + sgn * s.hw;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * (w.r - WALL_W * .9), Math.sin(a) * (w.r - WALL_W * .9));
+        ctx.lineTo(Math.cos(a) * (w.r + WALL_W * .9), Math.sin(a) * (w.r + WALL_W * .9));
+        ctx.stroke();
+      }
+    }
+  }
+
+  // lock badge
+  if (locked){
+    ctx.fillStyle = 'rgba(255,190,90,.95)';
+    ctx.font = '600 13px ui-monospace,Consolas,monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const a = wallPhase(w, time) + Math.PI * .5;
+    ctx.save();
+    ctx.translate(Math.cos(a) * w.r, Math.sin(a) * w.r);
+    ctx.fillText('◆'.repeat(w.lock - keysHeld), 0, 0);
+    ctx.restore();
+  }
+}
+
+function drawExit(t){
+  const r = L.rMax + SPACING * .48;
+  ctx.setLineDash([13, 11]);
+  ctx.lineDashOffset = -t * 22;
+  ctx.strokeStyle = 'rgba(92,255,168,' + (.3 + .16 * Math.sin(t*2.4)).toFixed(3) + ')';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawShards(t){
+  for (const s of L.shards){
+    if (s.taken) continue;
+    const x = Math.cos(s.ang) * s.r, y = Math.sin(s.ang) * s.r;
+    const col = s.key ? '#ffcf5c' : '#7fe3ff';
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(t * 2.2 + s.ang);
+    const sz = 6.5 + Math.sin(t * 4 + s.ang * 3) * .8;
+    ctx.fillStyle = col + '2e';
+    ctx.fillRect(-sz*1.9, -sz*1.9, sz*3.8, sz*3.8);
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(0, -sz); ctx.lineTo(sz, 0); ctx.lineTo(0, sz); ctx.lineTo(-sz, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawHazards(t){
+  for (const h of L.hazards){
+    if (h.dead) continue;
+    if (h.type === 'orb'){
+      const x = Math.cos(h.ang) * h.r, y = Math.sin(h.ang) * h.r;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(t * 3.4 * Math.sign(h.spd));
+      ctx.fillStyle = 'rgba(255,77,106,.16)';
+      ctx.beginPath(); ctx.arc(0, 0, h.rad * 2.3, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#ff4d6a';
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++){
+        const a = i * TAU/4;
+        ctx.lineTo(Math.cos(a) * h.rad * 1.5, Math.sin(a) * h.rad * 1.5);
+        const b = a + TAU/8;
+        ctx.lineTo(Math.cos(b) * h.rad * .55, Math.sin(b) * h.rad * .55);
+      }
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    } else {
+      const lo = CORE_R + SPACING * h.lane + 3, hi = lo + SPACING - 6;
+      const c = Math.cos(h.ang), s = Math.sin(h.ang);
+      ctx.strokeStyle = 'rgba(255,77,106,.2)'; ctx.lineWidth = 16;
+      ctx.beginPath(); ctx.moveTo(c*lo, s*lo); ctx.lineTo(c*hi, s*hi); ctx.stroke();
+      ctx.strokeStyle = '#ff4d6a'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(c*lo, s*lo); ctx.lineTo(c*hi, s*hi); ctx.stroke();
+      ctx.fillStyle = '#ffd0d8';
+      ctx.beginPath(); ctx.arc(c*hi, s*hi, 4, 0, TAU); ctx.fill();
+    }
+  }
+}
+
+function drawFront(t){
+  const N = 72;
+  ctx.beginPath();
+  for (let i = 0; i <= N; i++){
+    const a = i / N * TAU;
+    const wob = 1 + Math.sin(a * 6 + t * 3.1) * .015 + Math.sin(a * 11 - t * 2.2) * .01;
+    const r = frontR * wob;
+    const x = Math.cos(a) * r, y = Math.sin(a) * r;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+  const g = ctx.createRadialGradient(0, 0, frontR * .25, 0, 0, frontR);
+  g.addColorStop(0, 'rgba(255,110,40,.55)');
+  g.addColorStop(.7, 'rgba(255,70,60,.34)');
+  g.addColorStop(1, 'rgba(255,200,120,.5)');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,225,170,.95)'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,140,60,.28)'; ctx.lineWidth = 12; ctx.stroke();
+}
+
+function drawPlayer(t){
+  /* Aim tick — only surfaces once the spark is meaningfully behind the cursor,
+     and fades in with the error. Out at the rim playerOmega drops to ~1.07 so
+     the chase visibly lags; in the inner lanes it never appears at all. */
+  if (aim.on && mode === S.PLAY){
+    const err = Math.abs(angDiff(aim.ang, p.ang));
+    const k = clamp((err - 0.25) / 0.5, 0, 1);
+    if (k > 0){
+      const r0 = p.r - SPACING * .34, r1 = p.r + SPACING * .34;
+      ctx.strokeStyle = 'rgba(79,240,255,' + (k * .30).toFixed(3) + ')';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(aim.ang) * r0, Math.sin(aim.ang) * r0);
+      ctx.lineTo(Math.cos(aim.ang) * r1, Math.sin(aim.ang) * r1);
+      ctx.stroke();
+    }
+  }
+  // trail
+  for (const q of p.trail){
+    const k = 1 - q.t / .3;
+    ctx.fillStyle = 'rgba(120,240,255,' + (k * .3).toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.arc(Math.cos(q.a) * q.r, Math.sin(q.a) * q.r, PLAYER_R * k * .8, 0, TAU);
+    ctx.fill();
+  }
+  const x = Math.cos(p.ang) * p.r, y = Math.sin(p.ang) * p.r;
+  const stunned = p.stun > 0;
+  ctx.fillStyle = stunned ? 'rgba(255,160,90,.22)' : 'rgba(79,240,255,.22)';
+  ctx.beginPath(); ctx.arc(x, y, PLAYER_R * 2.9, 0, TAU); ctx.fill();
+  ctx.fillStyle = stunned ? '#ffb066' : '#8ff6ff';
+  ctx.beginPath(); ctx.arc(x, y, PLAYER_R, 0, TAU); ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(x, y, PLAYER_R * .45, 0, TAU); ctx.fill();
+
+  // aim tick: shows where you'd cross
+  if (p.mode === 'ride' && p.lane < L.ringCount){
+    const w = L.walls[p.lane];
+    if (w && !w.dead){
+      const ok = !!gapAt(w, p.ang, time, 1.42) && !(w.lock && keysHeld < w.lock);
+      ctx.strokeStyle = ok ? 'rgba(92,255,168,.7)' : 'rgba(255,255,255,.13)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(p.ang) * (p.r + PLAYER_R + 3), Math.sin(p.ang) * (p.r + PLAYER_R + 3));
+      ctx.lineTo(Math.cos(p.ang) * (w.r - WALL_W * .7), Math.sin(p.ang) * (w.r - WALL_W * .7));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+function drawParticles(){
+  for (const q of parts){
+    const k = 1 - q.t / q.max;
+    ctx.globalAlpha = k;
+    ctx.fillStyle = q.col;
+    ctx.fillRect(q.x - q.s/2, q.y - q.s/2, q.s * k + .6, q.s * k + .6);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawVignette(){
+  const g = ctx.createRadialGradient(VW/2, VH/2, Math.min(VW,VH)*.32, VW/2, VH/2, Math.max(VW,VH)*.72);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,.62)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+}
+
+/* ============================================================================
+   HUD + SCREENS
+   ========================================================================== */
+const hud = document.getElementById('hud');
+const $ = id => document.getElementById(id);
+
+function syncHud(){
+  if (!L) return;
+  $('hLv').textContent = String(curLevel).padStart(2, '0');
+  $('hShard').innerHTML = 'SHARDS <b>' + shardsGot + '</b>/' + L.totalShards;
+  const need = L.walls.reduce((m, w) => Math.max(m, w.lock || 0), 0);
+  $('hKeys').style.display = need ? '' : 'none';
+  if (need){
+    let h = '';
+    for (let i = 0; i < need; i++) h += '<span class="kdot' + (i < keysHeld ? ' on' : '') + '"></span>';
+    $('keyRow').innerHTML = h;
+  }
+}
+function syncHudLive(){
+  $('hTime').textContent = time.toFixed(1);
+  $('hRing').innerHTML = 'LAYER <b>' + Math.min(p.lane, L.ringCount) + '</b>/' + L.ringCount;
+  const frac = clamp(frontR / L.rMax, 0, 1);
+  $('dangerFill').style.width = (frac * 100).toFixed(1) + '%';
+}
+
+let toastT = null;
+function showToast(txt, dur){
+  const el = $('toast');
+  el.textContent = txt; el.classList.add('on');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove('on'), (dur || 2.6) * 1000);
+}
+const HINTS = {
+  1:  '◀ ▶ TO ORBIT  ·  SPACE TO DASH OUTWARD',
+  2:  'THE CORE IS EXPANDING — KEEP MOVING OUT',
+  3:  'PRESS ▼ TO FALL BACK A LAYER AND DODGE',
+  5:  'RED NODES ARE LETHAL',
+  8:  'SOME RINGS SWAY INSTEAD OF SPINNING',
+  14: 'VIOLET RINGS SHUTTER OPEN AND SHUT',
+  20: 'AMBER RINGS ARE SEALED — COLLECT THE GOLD SHARDS',
+  25: 'RED BARS SWEEP THE WHOLE LANE',
+  50: 'HALFWAY. THE COLLAPSE ACCELERATES.',
+  90: 'FINAL LAYERS. NO MARGIN LEFT.'
+};
+function showHint(n){ if (HINTS[n]) showToast(HINTS[n], 4); }
+
+const SCREENS = ['sTitle','sHow','sLevels','sPause','sWin'];
+function showScreen(id){
+  SCREENS.forEach(s => $(s).classList.toggle('on', s === id));
+  if (id) hud.classList.remove('on');
+}
+
+function pause(){ if (mode !== S.PLAY) return; mode = S.PAUSE; showScreen('sPause');
+  $('skipRow').style.display = deathStreak >= 6 ? '' : 'none'; }
+function resume(){ if (mode !== S.PAUSE) return; mode = S.PLAY; showScreen(null); hud.classList.add('on'); }
+
+function buildGrid(){
+  const g = $('grid'); g.innerHTML = '';
+  const unlocked = highestUnlocked();
+  for (let i = 1; i <= LEVELS; i++){
+    const b = save.best[i];
+    const el = document.createElement('div');
+    el.className = 'cell' + (i > unlocked ? ' lock' : '') + (b ? ' done' : '') + (i % 10 === 0 ? ' boss' : '');
+    let st = '<div class="st">';
+    for (let k = 0; k < 3; k++) st += '<i class="' + (b && b.stars > k ? 'f' : '') + '"></i>';
+    st += '</div>';
+    el.innerHTML = String(i).padStart(2,'0') + st;
+    if (i <= unlocked) el.onclick = () => { initAudio(); deathStreak = 0; startLevel(i); };
+    g.appendChild(el);
+  }
+  $('totStars').textContent = totalStars();
+}
+
+/* buttons */
+$('bPlay').onclick   = () => { initAudio(); deathStreak = 0; startLevel(highestUnlocked()); };
+$('bLevels').onclick = () => { buildGrid(); showScreen('sLevels'); };
+$('bLvBack').onclick = () => showScreen('sTitle');
+$('bHow').onclick    = () => showScreen('sHow');
+$('bHowBack').onclick= () => showScreen('sTitle');
+$('bResume').onclick = resume;
+$('bRestart').onclick= () => startLevel(curLevel);
+$('bQuit').onclick   = () => { mode = S.MENU; L = null; buildGrid(); showScreen('sLevels'); };
+$('bSkip').onclick   = () => { deathStreak = 0; if (!save.best[curLevel]) save.best[curLevel] = { stars:0, frac:1, time:0, shards:0 }; writeSave(); startLevel(Math.min(LEVELS, curLevel+1)); };
+$('bNext').onclick   = () => { deathStreak = 0; startLevel(Math.min(LEVELS, curLevel + 1)); };
+$('bAgain').onclick  = () => startLevel(curLevel);
+$('bWinQuit').onclick= () => { mode = S.MENU; L = null; buildGrid(); showScreen('sLevels'); };
+$('bSound').onclick  = () => { save.sound = !save.sound; writeSave(); $('bSound').textContent = 'SOUND ' + (save.sound ? 'ON' : 'OFF'); };
+
+/* ============================================================================
+   BOOT
+   ========================================================================== */
+loadSave();
+$('bSound').textContent = 'SOUND ' + (save.sound ? 'ON' : 'OFF');
+$('bPlay').textContent = save.best[1] ? 'CONTINUE' : 'BEGIN';
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  render(now);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* Exposed for headless verification (node). */
+if (typeof module !== 'undefined') module.exports = { genLevel, gapAt, wallPhase, shutterMul, playerOmega, laneCenter, wallRadius, CORE_R, SPACING, LEVELS };
+</script>
+</body>
+</html>

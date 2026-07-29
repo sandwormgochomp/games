@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Six Games</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink:    #0B0E10;
+    --panel:  #14191D;
+    --panel2: #1A2126;
+    --line:   #28323A;
+    --dim:    #74858F;
+    --text:   #E6EDF1;
+    --amber:  #E0A02C;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--ink); }
+  body {
+    margin: 0;
+    padding: 0 24px 80px;
+    background: radial-gradient(120% 80% at 50% -10%, #1A232A 0%, var(--ink) 60%), var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+
+  header { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  h1 {
+    margin: 0;
+    font-size: clamp(34px, 7vw, 56px);
+    letter-spacing: 0.14em;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .sub {
+    margin: 14px 0 0;
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 40px;
+  }
+
+  a.card {
+    display: block;
+    padding: 22px 22px 20px;
+    background: linear-gradient(180deg, var(--panel2), var(--panel));
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color .15s ease, transform .15s ease, background .15s ease;
+  }
+  a.card:hover, a.card:focus-visible {
+    border-color: var(--amber);
+    transform: translateY(-2px);
+    outline: none;
+  }
+
+  .name {
+    font-family: var(--mono);
+    font-size: 19px;
+    letter-spacing: 0.12em;
+    color: var(--amber);
+    text-transform: uppercase;
+  }
+  .kind {
+    margin-top: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+  .blurb { margin: 12px 0 0; font-size: 14.5px; color: #C3CED5; }
+  .facts {
+    margin: 14px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .facts li {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--dim);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  @media (max-width: 520px) {
+    header { padding-top: 48px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Six Games</h1>
+    <p class="sub">single-file HTML &middot; no build step &middot; keyboard + mouse &middot; open one and play</p>
+  </header>
+
+  <main class="grid">
+
+    <a class="card" href="aegis.html">
+      <div class="name">Aegis</div>
+      <div class="kind">Wave defense</div>
+      <p class="blurb">Hold the ring against a data-driven bestiary. Earn refits between waves and rebuild the loadout that finally holds.</p>
+      <ul class="facts"><li>100 levels</li><li>Canvas 2D</li><li>Bestiary</li></ul>
+    </a>
+
+    <a class="card" href="gearworks.html">
+      <div class="name">Gearworks</div>
+      <div class="kind">Logic puzzle</div>
+      <p class="blurb">Route belts, spin the dynamo, and wire the bay until the machine runs. Every bay is solver-verified, so a solution always exists.</p>
+      <ul class="facts"><li>100 bays</li><li>100 wires</li><li>Solver-checked</li></ul>
+    </a>
+
+    <a class="card" href="glide.html">
+      <div class="name">Glide</div>
+      <div class="kind">Sliding puzzle</div>
+      <p class="blurb">You do not stop when you want to — you stop when something stops you. Momentum is the whole problem.</p>
+      <ul class="facts"><li>100 levels</li><li>Solver-proved</li><li>Undo</li></ul>
+    </a>
+
+    <a class="card" href="halden.html">
+      <div class="name">Halden Deep</div>
+      <div class="kind">First-person horror</div>
+      <p class="blurb">A raycast descent through a flooded facility. Read the datapads if you want to know what is down there with you. Or don't.</p>
+      <ul class="facts"><li>7 sublevels</li><li>27 datapads</li><li>Raycaster</li></ul>
+    </a>
+
+    <a class="card" href="hivebound.html">
+      <div class="name">Hivebound</div>
+      <div class="kind">3D colony defense</div>
+      <p class="blurb">Rule the colony as its queen. Weather and wave modifiers pick at your defenses; silk and jelly buy them back.</p>
+      <ul class="facts"><li>3D / three.js</li><li>Waves</li><li>Jelly shop</li></ul>
+    </a>
+
+    <a class="card" href="ring.html">
+      <div class="name">Ring</div>
+      <div class="kind">Arcade</div>
+      <p class="blurb">Nine concentric rings, one collapsing reactor, and a shrinking amount of time to get from the core to the outside.</p>
+      <ul class="facts"><li>100 levels</li><li>9 rings</li><li>Canvas 2D</li></ul>
+    </a>
+
+  </main>
+
+  <footer>
+    Each game is one self-contained HTML file. Download it, open it in a browser, done.
+  </footer>
+
+</div>
+</body>
+</html>
