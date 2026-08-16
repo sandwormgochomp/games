@@ -1,0 +1,1076 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NINE LIVES</title>
+<style>
+  :root{
+    --ink:#f2e3d0; --dim:#a08a76; --ember:#ff7a2f; --blood:#c8392b;
+    --panel:#150e0c; --edge:#3a2620;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0706;color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;overflow:hidden}
+  #wrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+  canvas{image-rendering:pixelated;background:#080605;max-width:100%;max-height:100%;
+    box-shadow:0 0 90px rgba(255,90,20,.13)}
+  .layer{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at 50% 40%,rgba(30,12,6,.86),rgba(4,3,3,.97));
+    backdrop-filter:blur(2px)}
+  .layer.on{display:flex}
+  .card{max-width:640px;padding:34px 40px;background:var(--panel);border:1px solid var(--edge);
+    box-shadow:0 20px 60px rgba(0,0,0,.7)}
+  h1{font-size:52px;letter-spacing:.22em;margin:0 0 6px;color:var(--ember);font-weight:400}
+  h2{font-size:24px;letter-spacing:.12em;margin:0 0 14px;font-weight:400;color:var(--ember)}
+  p{line-height:1.62;color:var(--dim);margin:10px 0}
+  p.lead{color:var(--ink)}
+  .keys{margin:18px 0 6px;font-size:14px;color:var(--dim);line-height:2}
+  kbd{background:#2a1c17;border:1px solid #4a332a;border-radius:3px;padding:1px 7px;color:var(--ink);
+    font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  button{margin-top:18px;background:#2a1410;color:var(--ink);border:1px solid var(--ember);
+    padding:11px 26px;font:inherit;letter-spacing:.16em;cursor:pointer}
+  button:hover{background:var(--ember);color:#1a0c07}
+  #hud{position:absolute;left:0;right:0;top:0;padding:12px 18px;pointer-events:none;
+    display:flex;gap:26px;align-items:flex-start;font-size:13px;letter-spacing:.08em}
+  .meter{width:150px}
+  .meter .lbl{color:var(--dim);font-size:11px;letter-spacing:.16em;margin-bottom:3px}
+  .bar{height:7px;background:#241713;border:1px solid #3a2620}
+  .bar>i{display:block;height:100%;transition:width .1s linear}
+  #hp>i{background:linear-gradient(90deg,#c8392b,#ff7a2f)}
+  #br>i{background:linear-gradient(90deg,#4d7d9e,#9fd0e8)}
+  #lives{margin-left:auto;text-align:right}
+  .pip{display:inline-block;width:9px;height:9px;margin-left:5px;border:1px solid #6b4a3c;
+    transform:rotate(45deg)}
+  .pip.live{background:var(--ember);border-color:var(--ember);box-shadow:0 0 8px rgba(255,122,47,.7)}
+  #toast{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);text-align:center;
+    pointer-events:none;font-size:17px;letter-spacing:.1em;color:var(--ink);
+    text-shadow:0 2px 14px #000;opacity:0;transition:opacity .35s}
+  #toast.on{opacity:1}
+  .journal{max-height:230px;overflow:auto;margin-top:8px;padding-right:8px}
+  .journal div{font-size:13px;color:var(--dim);padding:5px 0;border-bottom:1px solid #241713}
+  .journal b{color:var(--ember);font-weight:400}
+  .boon{color:#9fd0e8}
+  .small{font-size:12px;color:#6b5a4c;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="960" height="600"></canvas>
+
+  <div id="hud">
+    <div class="meter"><div class="lbl">BODY</div><div class="bar" id="hp"><i style="width:100%"></i></div></div>
+    <div class="meter"><div class="lbl">BREATH</div><div class="bar" id="br"><i style="width:100%"></i></div></div>
+    <div class="meter" style="width:auto"><div class="lbl">KITTENS HOME</div>
+      <div id="kit" style="font-size:19px">0 / 9</div></div>
+    <div id="lives"><div class="lbl" style="color:var(--dim);font-size:11px;letter-spacing:.16em">LIVES</div>
+      <div id="pips"></div></div>
+  </div>
+
+  <div id="toast"></div>
+
+  <div class="layer on" id="lTitle"><div class="card">
+    <h1>NINE LIVES</h1>
+    <p class="lead">The house is burning. Your kittens are inside it. So are you.</p>
+    <p>You have nine lives and no more. Each one you spend is spent <i>here</i> &mdash; and the
+       house keeps what it takes. Where you burn, the rooms turn to cinder. Where you drown,
+       the water stays. Where the ceiling finds you, the rubble never lifts.</p>
+    <p>You come back changed too. That is the bargain.</p>
+    <div class="keys">
+      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &nbsp;&middot;&nbsp;
+      <kbd>Shift</kbd> crawl (under the smoke) &nbsp;&middot;&nbsp;
+      <kbd>E</kbd> pick up / set down a kitten<br>
+      Carry each kitten out through the cat flap. Standing tall in smoke costs breath.
+    </div>
+    <button id="bStart">GO IN</button>
+  </div></div>
+
+  <div class="layer" id="lDeath"><div class="card">
+    <h2 id="dTitle">LIFE SPENT</h2>
+    <p class="lead" id="dLine"></p>
+    <p id="dScar"></p>
+    <p class="boon" id="dBoon"></p>
+    <div class="journal" id="dJournal"></div>
+    <button id="bAgain">GO BACK IN</button>
+  </div></div>
+
+  <div class="layer" id="lEnd"><div class="card">
+    <h2 id="eTitle">THE LAST LIFE</h2>
+    <p class="lead" id="eLine"></p>
+    <p id="eBody"></p>
+    <div class="journal" id="eJournal"></div>
+    <p class="small" id="eStats"></p>
+    <button id="bReset">BEGIN AGAIN</button>
+  </div></div>
+</div>
+
+<script>
+"use strict";
+(function(){
+
+/* ─────────────────────────  constants & helpers  ───────────────────────── */
+
+const TW = 49, TH = 34;              // tile grid (walls sit on the lines)
+const TS = 22;                       // tile size in px
+const RW = 16, RH = 11;              // room pitch
+const VW = 960, VH = 600;
+
+const WALL=0, FLOOR=1, DOOR=2, WINDOW=3, RUBBLE=4, ASH=5, WATER=6, EXIT=7, PROP=8, HOLE=9;
+const BLOCKING = {0:1, 3:1, 4:1, 8:1, 9:1};
+const FLAMMABLE = {1:2.4, 2:3.0, 8:7.0, 5:0.0, 6:0.0};
+
+const ROOMS = [
+  {n:"the Kitchen",   c:0,r:0}, {n:"the Hall",     c:1,r:0}, {n:"the Front Room", c:2,r:0},
+  {n:"the Bathroom",  c:0,r:1}, {n:"the Stairwell",c:1,r:1}, {n:"the Nursery",    c:2,r:1},
+  {n:"the Pantry",    c:0,r:2}, {n:"the Bedroom",  c:1,r:2}, {n:"the Sunroom",    c:2,r:2},
+];
+
+const PICKUP = 1.35;                 // how close you must be to lift a kitten
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+/* ─────────────────────────  persistent campaign  ───────────────────────── */
+
+const SCARS = {
+  BURN:  {tag:"cinders",  line:r=>`${cap(r)} is cinders now. Nothing left in it to burn — and nothing left to hide behind.`},
+  SMOKE: {tag:"smokelog", line:r=>`The smoke never left ${r}. It hangs there at chest height, waiting.`},
+  CRUSH: {tag:"rubble",   line:r=>`The ceiling of ${r} came down and stayed down. You will have to go around it.`},
+  DROWN: {tag:"flood",    line:r=>`The pipes burst over ${r}. It is ankle-deep and cold, and fire will not cross it.`},
+  HOLE:  {tag:"hole",     line:r=>`The floor of ${r} gave out. There is a hole in the house where a room used to be.`},
+};
+
+const BOONS = [
+  {n:"Singed Whiskers", d:"You feel heat through a wall now. It shows as a red bloom."},
+  {n:"Lungs of Ash",    d:"Half again as much breath. You have learned to hold it."},
+  {n:"Sure Paws",       d:"Twelve percent faster. Fear is efficient."},
+  {n:"Low Belly",       d:"You crawl almost as fast as you run."},
+  {n:"Wet Fur",         d:"Fire takes a third less of you than it used to."},
+  {n:"Night Eyes",      d:"You see further into the dark and the smoke."},
+  {n:"Nine Ears",       d:"You hear the kittens through walls. They glow for you."},
+  {n:"Cinder Heart",    d:"For two seconds after lifting a kitten, nothing can hurt you."},
+];
+
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+
+const camp = {
+  seed: 1,        // per-campaign, so two playthroughs are not the same house twice
+  life: 1,
+  saved: 0,
+  scars: [],      // {room:idx, kind:'BURN'}
+  boons: [],      // indices into BOONS
+  journal: [],    // strings
+  savedIds: [],   // kitten ids already home
+  bestTime: 0,
+};
+
+function resetCampaign(){
+  camp.life=1; camp.saved=0; camp.scars=[]; camp.boons=[]; camp.journal=[]; camp.savedIds=[]; camp.bestTime=0;
+  camp.seed = (Math.random()*0x7ffffff)|0;   // a different house every campaign
+}
+
+/* ─────────────────────────  world  ───────────────────────── */
+
+const W = {
+  t:null, fuel:null, heat:null, burn:null, smoke:null, room:null, propCol:null,
+  integ:null,          // per-room ceiling integrity
+  collapsed:null,
+  kittens:[], props:[], exit:{x:24,y:33},
+  time:0, tick:0, ignited:0,
+};
+
+function idx(x,y){return y*TW+x;}
+function tileAt(x,y){ if(x<0||y<0||x>=TW||y>=TH) return WALL; return W.t[idx(x,y)]; }
+function roomOf(x,y){
+  const c = Math.floor(x/RW), r = Math.floor(y/RH);
+  if(c<0||r<0||c>2||r>2) return -1;
+  return r*3+c;
+}
+function roomRect(i){ const c=i%3, r=(i/3)|0; return {x0:c*RW+1,y0:r*RH+1,x1:c*RW+RW-1,y1:r*RH+RH-1}; }
+function scarOf(i){ const s=camp.scars.find(s=>s.room===i); return s?s.kind:null; }
+
+function genHouse(seed){
+  const rng = mulberry32(seed);
+  W.t = new Uint8Array(TW*TH);
+  W.fuel = new Float32Array(TW*TH);
+  W.heat = new Float32Array(TW*TH);
+  W.burn = new Uint8Array(TW*TH);
+  W.smoke = new Float32Array(TW*TH);
+  W.room = new Int8Array(TW*TH);
+  W.propCol = new Uint8Array(TW*TH);   // palette index, so render never searches W.props
+  W.integ = new Float32Array(9).fill(100);
+  W.collapsed = new Uint8Array(9);
+  W.kittens = []; W.props = [];
+  W.time=0; W.tick=0;
+
+  // shell: walls on the room lines
+  for(let y=0;y<TH;y++) for(let x=0;x<TW;x++){
+    const wallLine = (x%RW===0)||(y%RH===0)||x===TW-1||y===TH-1;
+    W.t[idx(x,y)] = wallLine ? WALL : FLOOR;
+    W.room[idx(x,y)] = roomOf(x,y);
+  }
+
+  // doors between neighbouring rooms
+  for(let r=0;r<3;r++) for(let c=0;c<3;c++){
+    if(c<2){ const x=(c+1)*RW, y=r*RH+5; W.t[idx(x,y)]=DOOR; W.t[idx(x,y+1)]=DOOR; }
+    if(r<2){ const y=(r+1)*RH, x=c*RW+8; W.t[idx(x,y)]=DOOR; W.t[idx(x+1,y)]=DOOR; }
+  }
+  // windows on the outer shell (they blow out in heat and vent smoke)
+  const win=(x,y)=>{ if(tileAt(x,y)===WALL) W.t[idx(x,y)]=WINDOW; };
+  for(let c=0;c<3;c++){ win(c*RW+5,0); win(c*RW+11,0); win(c*RW+5,TH-1); win(c*RW+11,TH-1); }
+  for(let r=0;r<3;r++){ win(0,r*RH+4); win(0,r*RH+8); win(TW-1,r*RH+4); win(TW-1,r*RH+8); }
+
+  // the cat flap, under the bedroom
+  W.exit = {x:8+RW, y:TH-1};
+  W.t[idx(W.exit.x,W.exit.y)] = EXIT;
+  W.t[idx(W.exit.x+1,W.exit.y)] = EXIT;
+
+  // furniture: blocking, and the best fuel in the house
+  const FURN = [
+    ["counter",5,1],["table",4,2],["sofa",4,3],["bed",6,3],
+    ["shelf",5,1],["crib",4,2],["curtain",3,4],["box",3,2],
+  ];
+  for(let i=0;i<9;i++){
+    if(scarOf(i)==="BURN") continue;       // burned rooms have nothing left
+    const R = roomRect(i);
+    const n = 3 + ((rng()*3)|0);
+    for(let k=0;k<n;k++){
+      const f = FURN[(rng()*FURN.length)|0];
+      const w = 1+((rng()*3)|0), h = 1+((rng()*2)|0);
+      const x = R.x0+1+((rng()*(R.x1-R.x0-w-1))|0);
+      const y = R.y0+1+((rng()*(R.y1-R.y0-h-1))|0);
+      let ok=true;
+      for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++) if(tileAt(xx,yy)!==FLOOR) ok=false;
+      if(!ok) continue;
+      for(let yy=y;yy<y+h;yy++) for(let xx=x;xx<x+w;xx++){
+        W.t[idx(xx,yy)]=PROP; W.propCol[idx(xx,yy)]=f[2];
+      }
+    }
+  }
+
+  // fuel from tile type
+  for(let i2=0;i2<W.t.length;i2++){
+    const f = FLAMMABLE[W.t[i2]];
+    W.fuel[i2] = f===undefined?0:f;
+  }
+
+  // The bathroom has water in it before anything goes wrong — otherwise DROWN is
+  // unreachable dead content: you can only drown in a flooded room, and rooms only
+  // flood as the scar left by a drowning. Water is also the one thing fire will not
+  // cross, so there is a firebreak in the house from the first second.
+  {
+    const B = roomRect(3);
+    const bx = B.x0+2, by = B.y0+2;
+    for(let y=by;y<by+4;y++) for(let x=bx;x<bx+6;x++){
+      if(tileAt(x,y)===FLOOR||tileAt(x,y)===PROP){ W.t[idx(x,y)]=WATER; W.fuel[idx(x,y)]=0; }
+    }
+  }
+
+  applyScars(rng);
+  clearPathToExit();
+  placeKittens(rng);
+}
+
+function applyScars(rng){
+  for(const s of camp.scars){
+    const R = roomRect(s.room);
+    if(s.kind==="BURN"){
+      for(let y=R.y0;y<=R.y1;y++) for(let x=R.x0;x<=R.x1;x++)
+        if(!BLOCKING[tileAt(x,y)]||tileAt(x,y)===PROP){ W.t[idx(x,y)]=ASH; W.fuel[idx(x,y)]=0; }
+    } else if(s.kind==="SMOKE"){
+      for(let y=R.y0;y<=R.y1;y++) for(let x=R.x0;x<=R.x1;x++) W.smoke[idx(x,y)]=0.62;
+    } else if(s.kind==="CRUSH"){
+      for(let y=R.y0;y<=R.y1;y++) for(let x=R.x0;x<=R.x1;x++){
+        if(tileAt(x,y)===FLOOR||tileAt(x,y)===PROP||tileAt(x,y)===ASH){
+          if(rng()<0.36){ W.t[idx(x,y)]=RUBBLE; W.fuel[idx(x,y)]=0; }
+        }
+      }
+      W.collapsed[s.room]=1;
+    } else if(s.kind==="DROWN"){
+      for(let y=R.y0;y<=R.y1;y++) for(let x=R.x0;x<=R.x1;x++){
+        if(tileAt(x,y)===FLOOR||tileAt(x,y)===ASH){ W.t[idx(x,y)]=WATER; W.fuel[idx(x,y)]=0; }
+      }
+    } else if(s.kind==="HOLE"){
+      const cx=((R.x0+R.x1)/2)|0, cy=((R.y0+R.y1)/2)|0;
+      for(let y=cy-2;y<=cy+2;y++) for(let x=cx-3;x<=cx+3;x++){
+        if(tileAt(x,y)!==WALL){ W.t[idx(x,y)]=HOLE; W.fuel[idx(x,y)]=0; }
+      }
+    }
+  }
+}
+
+// guarantee the flap is reachable from somewhere: never let scars seal the doors
+function clearPathToExit(){
+  for(let r=0;r<3;r++) for(let c=0;c<3;c++){
+    if(c<2){ const x=(c+1)*RW,y=r*RH+5; if(W.t[idx(x,y)]!==DOOR&&W.t[idx(x,y+1)]!==DOOR){W.t[idx(x,y)]=DOOR;} }
+  }
+  const e=W.exit;
+  for(let y=e.y-1;y>e.y-4;y--){
+    for(let x=e.x;x<=e.x+1;x++){
+      const t=tileAt(x,y);
+      if(t===RUBBLE||t===HOLE||t===PROP){ W.t[idx(x,y)]=FLOOR; W.fuel[idx(x,y)]=0.4; }
+    }
+  }
+}
+
+function walkable(x,y){
+  const t=tileAt(x,y);
+  return !BLOCKING[t];
+}
+
+// every tile you can actually walk to from just inside the flap
+function reachableSet(){
+  const seen=new Uint8Array(TW*TH);
+  const sx=W.exit.x+1, sy=W.exit.y-1;
+  const stack=[[sx,sy]]; seen[idx(sx,sy)]=1;
+  while(stack.length){
+    const [x,y]=stack.pop();
+    for(let d=0;d<4;d++){
+      const nx=x+(d===0?1:d===1?-1:0), ny=y+(d===2?1:d===3?-1:0);
+      if(nx<0||ny<0||nx>=TW||ny>=TH) continue;
+      const j=idx(nx,ny);
+      if(seen[j]||!walkable(nx,ny)) continue;
+      seen[j]=1; stack.push([nx,ny]);
+    }
+  }
+  return seen;
+}
+
+function placeKittens(rng){
+  const order=[0,2,5,8,6,3,7,1,4];
+  const reach = reachableSet();
+  // fallback pool: any reachable tile, so a kitten is never sealed inside a scar
+  const pool=[];
+  for(let y=1;y<TH-1;y++) for(let x=1;x<TW-1;x++)
+    if(reach[idx(x,y)] && tileAt(x,y)!==WATER && tileAt(x,y)!==EXIT &&
+       Math.hypot(x-W.exit.x,y-W.exit.y)>4) pool.push([x,y]);
+  let id=0;
+  for(const ri of order){
+    const kid = id++;
+    if(camp.savedIds.indexOf(kid)>=0) continue;
+    const R = roomRect(ri);
+    let tries=250, px=-1, py=-1;
+    while(tries--){
+      const x=R.x0+((rng()*(R.x1-R.x0))|0), y=R.y0+((rng()*(R.y1-R.y0))|0);
+      if(reach[idx(x,y)] && tileAt(x,y)!==WATER){ px=x; py=y; break; }
+    }
+    if(px<0 && pool.length){          // that room is cut off — they got out of it on their own
+      const p=pool[(rng()*pool.length)|0]; px=p[0]; py=p[1];
+    }
+    if(px<0){ px=W.exit.x; py=W.exit.y-2; }
+    W.kittens.push({id:kid,x:px+.5,y:py+.5,held:false,home:false,cry:rng()*6, room:ri});
+  }
+}
+
+function ignite(seed){
+  const rng=mulberry32(seed^0x9e37);
+  const n = 1 + Math.floor((camp.life-1)/2);   // the house starts angrier every life
+  let placed=0, guard=400;
+  while(placed<n && guard--){
+    const ri=(rng()*9)|0;
+    if(scarOf(ri)==="DROWN") continue;
+    const R=roomRect(ri);
+    const x=R.x0+((rng()*(R.x1-R.x0))|0), y=R.y0+((rng()*(R.y1-R.y0))|0);
+    const i=idx(x,y);
+    if(W.fuel[i]<=0) continue;
+    if(Math.hypot(x-W.exit.x,y-W.exit.y)<7) continue;
+    W.burn[i]=1; W.heat[i]=1; placed++;
+  }
+  W.ignited=placed;
+}
+
+/* ─────────────────────────  the cat  ───────────────────────── */
+
+const cat = {
+  x:0,y:0, vx:0,vy:0, hp:100, breath:100, crouch:false,
+  carrying:null, alive:true, invuln:0, face:1, bob:0, lastRoom:-1, wet:0,
+};
+
+function has(name){ return camp.boons.some(b=>BOONS[b].n===name); }
+
+function spawnCat(){
+  cat.x = W.exit.x+1; cat.y = W.exit.y-1.6;
+  cat.vx=cat.vy=0; cat.hp=100; cat.breath=maxBreath(); cat.crouch=false;
+  cat.carrying=null; cat.alive=true; cat.invuln=1.2; cat.wet=0;
+  cat.lastRoom=roomOf(cat.x|0,cat.y|0);
+}
+function maxBreath(){ return has("Lungs of Ash")?150:100; }
+function baseSpeed(){ return 5.2*(has("Sure Paws")?1.12:1); }
+function crouchSpeed(){ return baseSpeed()*(has("Low Belly")?0.82:0.5); }
+function sightRadius(){ return has("Night Eyes")?10.5:7.5; }
+
+/* ─────────────────────────  simulation  ───────────────────────── */
+
+const FIRE_DT = 0.1;
+let fireAcc = 0;
+
+function fireStep(){
+  const hot=[];
+  const rate = 1 + W.time/220;                 // the fire finds its confidence
+  for(let y=1;y<TH-1;y++) for(let x=1;x<TW-1;x++){
+    const i=idx(x,y), t=W.t[i];
+    if(W.burn[i]){
+      let burnRate = 0.055*rate;
+      if(scarOf(W.room[i])==="BURN") burnRate*=1.7;
+      W.fuel[i]-=burnRate;
+      W.smoke[i]=Math.min(1.6,W.smoke[i]+0.14);
+      W.heat[i]=Math.min(1.4,W.heat[i]+0.22);
+      hot.push(i);
+      const ri=W.room[i]; if(ri>=0) W.integ[ri]-=0.012*rate;
+      if(W.fuel[i]<=0){
+        W.burn[i]=0; W.heat[i]=0.55;
+        if(t===PROP||t===FLOOR||t===DOOR) W.t[i]=ASH;
+      }
+    }
+  }
+  // heat conduction + ignition
+  for(const i of hot){
+    const x=i%TW, y=(i/TW)|0;
+    for(let d=0;d<4;d++){
+      const nx=x+(d===0?1:d===1?-1:0), ny=y+(d===2?1:d===3?-1:0);
+      const j=idx(nx,ny), tj=W.t[j];
+      if(tj===WALL) continue;
+      if(tj===WATER){ W.heat[j]=0; continue; }
+      W.heat[j]=Math.min(1.4, W.heat[j]+0.045*(1+W.time/300));
+      if(tj===WINDOW && W.heat[j]>0.9){ W.t[j]=FLOOR; W.fuel[j]=0; }  // glass blows out: a vent
+      if(!W.burn[j] && W.fuel[j]>0 && W.heat[j]>0.60) W.burn[j]=1;
+    }
+  }
+  // cooling, smoke diffusion, venting
+  const ns=new Float32Array(W.smoke.length);
+  for(let y=1;y<TH-1;y++) for(let x=1;x<TW-1;x++){
+    const i=idx(x,y);
+    if(!W.burn[i]) W.heat[i]=Math.max(0,W.heat[i]-0.018);
+    if(W.t[i]===WATER) W.heat[i]=0;
+    let s=W.smoke[i], acc=s, cnt=1;
+    for(let d=0;d<4;d++){
+      const nx=x+(d===0?1:d===1?-1:0), ny=y+(d===2?1:d===3?-1:0);
+      const j=idx(nx,ny);
+      if(W.t[j]===WALL||W.t[j]===WINDOW) continue;
+      acc+=W.smoke[j]; cnt++;
+    }
+    ns[i]=lerp(s, acc/cnt, 0.55);
+  }
+  for(let i=0;i<ns.length;i++){
+    W.smoke[i]=Math.max(0, ns[i]-0.004);
+    const ri=W.room[i];
+    if(ri>=0 && scarOf(ri)==="SMOKE") W.smoke[i]=Math.max(W.smoke[i],0.55);
+  }
+  // outer shell openings bleed smoke off
+  for(let x=1;x<TW-1;x++){ vent(x,1); vent(x,TH-2); }
+  for(let y=1;y<TH-1;y++){ vent(1,y); vent(TW-2,y); }
+  function vent(x,y){
+    const above=tileAt(x,y-1),below=tileAt(x,y+1),left=tileAt(x-1,y),right=tileAt(x+1,y);
+    const open = [above,below,left,right].some(t=>t===EXIT) ||
+      (tileAt(x,y-1)===FLOOR&&y===1)||(tileAt(x,y+1)===FLOOR&&y===TH-2);
+    if(open) W.smoke[idx(x,y)]*=0.86;
+  }
+  // ceilings give
+  for(let ri=0;ri<9;ri++){
+    if(W.integ[ri]<=0 && !W.collapsed[ri]){ collapse(ri); }
+  }
+}
+
+let shake=0;
+function collapse(ri){
+  W.collapsed[ri]=1;
+  const R=roomRect(ri);
+  const rng=mulberry32((ri+1)*7919 + (W.tick|0));
+  let onCat=false;
+  for(let y=R.y0;y<=R.y1;y++) for(let x=R.x0;x<=R.x1;x++){
+    const i=idx(x,y);
+    if(W.t[i]===WALL||W.t[i]===HOLE) continue;
+    if(rng()<0.30){
+      W.t[i]=RUBBLE; W.burn[i]=0; W.fuel[i]=0;
+      if(Math.abs(cat.x-(x+.5))<0.8 && Math.abs(cat.y-(y+.5))<0.8) onCat=true;
+      for(const k of W.kittens) if(!k.held&&!k.home&&Math.abs(k.x-(x+.5))<0.7&&Math.abs(k.y-(y+.5))<0.7){
+        // a kitten under falling ceiling scrambles clear — the house is cruel, not that cruel.
+        // it MUST land somewhere you can actually reach, or it is lost inside the rubble.
+        for(let tryN=0;tryN<24;tryN++){
+          const nx=clamp(k.x+(rng()*6-3),R.x0+.5,R.x1-.5);
+          const ny=clamp(k.y+(rng()*6-3),R.y0+.5,R.y1-.5);
+          if(walkable(nx|0,ny|0)){ k.x=nx; k.y=ny; break; }
+        }
+      }
+    }
+  }
+  // a ceiling coming down takes the pipes with it: the room floods behind you,
+  // which kills the fire there and gives you somewhere to drown
+  let burst=0;
+  for(let y=R.y0;y<=R.y1;y++) for(let x=R.x0;x<=R.x1;x++){
+    const i=idx(x,y);
+    if((W.t[i]===FLOOR||W.t[i]===ASH) && rng()<0.22){
+      W.t[i]=WATER; W.burn[i]=0; W.fuel[i]=0; W.heat[i]=0; burst++;
+    }
+  }
+  shake=Math.max(shake,0.9);
+  toast(burst>8 ? "The ceiling of "+ROOMS[ri].n+" comes down, and the pipes with it."
+                : "The ceiling of "+ROOMS[ri].n+" comes down.");
+  if(roomOf(cat.x|0,cat.y|0)===ri){
+    hurt(onCat?90:34, "CRUSH");
+    if(onCat===false && cat.hp>0) toast("Dust and beams. You are still moving.");
+  }
+}
+
+function hurt(n,cause){
+  if(cat.invuln>0 && cause!=="CRUSH") return;
+  cat.hp-=n;
+  if(cat.hp<=0 && cat.alive){ cat.hp=0; die(cause); }
+}
+
+/* ─────────────────────────  input  ───────────────────────── */
+
+const keys=Object.create(null);
+let uiState="TITLE";
+
+function onKey(e,down){
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  keys[k]=down;
+  if(down&&(k==="e")&&uiState==="PLAY") interact();
+  if(["w","a","s","d","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," ","Shift"].indexOf(k)>=0) e.preventDefault&&e.preventDefault();
+}
+
+function interact(){
+  if(cat.carrying!==null){
+    const k=W.kittens.find(k=>k.id===cat.carrying);
+    if(k){ k.held=false; k.x=cat.x; k.y=cat.y; }
+    cat.carrying=null;
+    toast("You set the kitten down.");
+    return;
+  }
+  let best=null,bd=PICKUP;
+  for(const k of W.kittens){
+    if(k.home||k.held) continue;
+    const d=Math.hypot(k.x-cat.x,k.y-cat.y);
+    if(d<bd){bd=d;best=k;}
+  }
+  if(best){
+    best.held=true; cat.carrying=best.id;
+    if(has("Cinder Heart")) cat.invuln=Math.max(cat.invuln,2.0);
+    toast("You have one of them. Get out.");
+  }
+}
+
+/* ─────────────────────────  update  ───────────────────────── */
+
+function update(dt){
+  if(uiState!=="PLAY") return;
+  W.time+=dt; W.tick+=dt;
+  shake=Math.max(0,shake-dt*1.6);
+
+  fireAcc+=dt;
+  while(fireAcc>=FIRE_DT){ fireAcc-=FIRE_DT; fireStep(); }
+
+  // after three minutes the house stops pretending
+  if(W.time>170){
+    for(let ri=0;ri<9;ri++) W.integ[ri]-=dt*(W.time-170)*0.6;
+  }
+
+  // ── movement
+  let mx=0,my=0;
+  if(keys["a"]||keys["ArrowLeft"])mx--; if(keys["d"]||keys["ArrowRight"])mx++;
+  if(keys["w"]||keys["ArrowUp"])my--;   if(keys["s"]||keys["ArrowDown"])my++;
+  if(mx||my){const m=Math.hypot(mx,my);mx/=m;my/=m;}
+  cat.crouch = !!keys["Shift"];
+
+  let sp = cat.crouch?crouchSpeed():baseSpeed();
+  if(cat.carrying!==null) sp*=0.84;
+  const here=tileAt(cat.x|0,cat.y|0);
+  if(here===WATER){ sp*=0.55; cat.wet=Math.min(1,cat.wet+dt); }
+  else cat.wet=Math.max(0,cat.wet-dt*0.15);
+  if(here===ASH) sp*=0.94;
+
+  cat.vx=lerp(cat.vx,mx*sp,1-Math.pow(0.0009,dt));
+  cat.vy=lerp(cat.vy,my*sp,1-Math.pow(0.0009,dt));
+  if(mx) cat.face=mx>0?1:-1;
+  moveAxis(cat.vx*dt,0);
+  moveAxis(0,cat.vy*dt);
+  cat.bob += Math.hypot(cat.vx,cat.vy)*dt*3.4;
+
+  // ── the house working on you
+  const i=idx(cat.x|0,cat.y|0);
+  cat.invuln=Math.max(0,cat.invuln-dt);
+  const fireMul = has("Wet Fur")?0.7:1;
+  if(W.burn[i]) hurt(48*dt*fireMul*(cat.wet>0.4?0.5:1),"BURN");
+  else if(W.heat[i]>0.55) hurt((W.heat[i]-0.55)*46*dt*fireMul,"BURN");
+
+  // Breath has exactly one owner per frame. Getting this wrong once already made
+  // drowning impossible: clean-air regen (+26/s) simply outran the water drain (-22/s).
+  const smokeHere = W.smoke[i];
+  const exposure = cat.crouch ? smokeHere*0.30 : smokeHere;
+  const submerged = (here===WATER && cat.crouch);      // face down in it
+  if(submerged){
+    cat.breath -= 40*dt;
+    if(cat.breath<=0){ cat.breath=0; hurt(30*dt,"DROWN"); }
+  } else if(exposure>0.14){
+    cat.breath -= exposure*34*dt;
+    if(cat.breath<=0){ cat.breath=0; hurt(26*dt,"SMOKE"); }
+  } else {
+    cat.breath = Math.min(maxBreath(), cat.breath + 26*dt);
+  }
+  if(tileAt(cat.x|0,cat.y|0)===HOLE && cat.alive) die("HOLE");
+
+  // ── kittens
+  for(const k of W.kittens){
+    if(k.home) continue;
+    if(k.held){ k.x=cat.x; k.y=cat.y; continue; }
+    k.cry+=dt;
+    const ki=idx(k.x|0,k.y|0);
+    if(W.burn[ki]||W.heat[ki]>0.8){
+      // they bolt from fire, badly and at random
+      const a=Math.sin(k.cry*3.1+k.id)*Math.PI;
+      const nx=k.x+Math.cos(a)*dt*2.4, ny=k.y+Math.sin(a)*dt*2.4;
+      if(walkable(nx|0,k.y|0)) k.x=nx;
+      if(walkable(k.x|0,ny|0)) k.y=ny;
+    }
+  }
+  if(cat.carrying!==null){
+    const e=W.exit;
+    if(Math.abs(cat.x-(e.x+1))<1.6 && cat.y>e.y-1.6){
+      const k=W.kittens.find(k=>k.id===cat.carrying);
+      k.home=true;k.held=false;
+      camp.savedIds.push(k.id);
+      camp.saved++;
+      cat.carrying=null;
+      cat.hp=Math.min(100,cat.hp+8);
+      cat.x=e.x+1; cat.y=e.y-2.2;
+      if(camp.saved>=9){ showVictory(); return; }     // the ninth kitten is the win
+      toast("Safe. "+camp.saved+" of 9. Go back in.");
+    }
+  }
+  syncHud();
+}
+
+function moveAxis(dx,dy){
+  const nx=cat.x+dx, ny=cat.y+dy;
+  const rad=0.34;
+  const solid=(x,y)=>{
+    for(const [ox,oy] of [[-rad,-rad],[rad,-rad],[-rad,rad],[rad,rad]]){
+      const t=tileAt((x+ox)|0,(y+oy)|0);
+      if(t===WALL||t===WINDOW||t===RUBBLE) return true;
+      if(t===PROP && !W.burn[idx((x+ox)|0,(y+oy)|0)]) return true;
+      if(t===PROP) return true;
+    }
+    return false;
+  };
+  if(!solid(nx,cat.y)&&dx) cat.x=nx; else if(dx) cat.vx=0;
+  if(!solid(cat.x,ny)&&dy) cat.y=ny; else if(dy) cat.vy=0;
+  cat.x=clamp(cat.x,0.5,TW-0.5); cat.y=clamp(cat.y,0.5,TH-0.5);
+}
+
+/* ─────────────────────────  death & consequence  ───────────────────────── */
+
+const DEATH_LINE = {
+  BURN:"The fire got a hold of you and did not let go.",
+  SMOKE:"You stood up one time too many. The air was not air any more.",
+  CRUSH:"The ceiling came down on you.",
+  DROWN:"You went under and the cold held you there.",
+  HOLE:"The floor was not floor. You fell through the house.",
+};
+const SCAR_FOR = {BURN:"BURN",SMOKE:"SMOKE",CRUSH:"CRUSH",DROWN:"DROWN",HOLE:"HOLE"};
+
+function die(cause){
+  if(!cat.alive) return;
+  cat.alive=false;
+  const ri = roomOf(cat.x|0,cat.y|0);
+  const room = ri>=0?ROOMS[ri].n:"the house";
+  // dropped kitten stays where it fell
+  if(cat.carrying!==null){
+    const k=W.kittens.find(k=>k.id===cat.carrying);
+    if(k){k.held=false;} cat.carrying=null;
+  }
+  let kind = SCAR_FOR[cause]||"BURN";
+  if(ri>=0 && scarOf(ri)){ kind = "HOLE"; }        // a twice-wounded room simply stops existing
+  if(ri>=0 && !camp.scars.some(s=>s.room===ri&&s.kind===kind)) camp.scars.push({room:ri,kind});
+
+  const boonIdx = camp.boons.length;
+  let boonTxt="";
+  if(boonIdx<BOONS.length && camp.life<9){
+    camp.boons.push(boonIdx);
+    boonTxt = BOONS[boonIdx].n+" — "+BOONS[boonIdx].d;
+  }
+
+  camp.journal.push("<b>Life "+camp.life+"</b> — "+DEATH_LINE[cause]+" In "+room+
+    ". <i>"+SCARS[kind].tag+"</i>. "+camp.saved+" home.");
+
+  const last = camp.life>=9;
+  showDeath(cause, room, kind, boonTxt, last);
+  camp.life++;
+}
+
+/* ─────────────────────────  rendering  ───────────────────────── */
+
+const cv=document.getElementById("cv"), g=cv.getContext("2d");
+let cam={x:0,y:0};
+
+const PROP_PAL = ["#5a3d2b","#5a3d2b","#6b4a30","#4a3550","#7a3a2a"];
+
+// The fire glow is the one genuinely expensive thing on screen, and there can be
+// 300 burning tiles at once. Build the radial falloff ONCE into an offscreen
+// canvas and blit it; never call createRadialGradient inside the frame loop.
+const GLOW_R = 40;
+const glowCv = document.createElement("canvas");
+glowCv.width = glowCv.height = GLOW_R*2;
+(function(){
+  const q = glowCv.getContext("2d");
+  const gr = q.createRadialGradient(GLOW_R,GLOW_R,1,GLOW_R,GLOW_R,GLOW_R);
+  gr.addColorStop(0,"rgba(255,220,140,.85)");
+  gr.addColorStop(.35,"rgba(255,120,30,.45)");
+  gr.addColorStop(1,"rgba(180,40,0,0)");
+  q.fillStyle=gr; q.fillRect(0,0,GLOW_R*2,GLOW_R*2);
+})();
+
+const COL = {
+  [WALL]:"#241a17", [FLOOR]:"#3b2c25", [DOOR]:"#4a3227", [WINDOW]:"#2c3a44",
+  [RUBBLE]:"#2a2320", [ASH]:"#191512", [WATER]:"#1c3140", [EXIT]:"#6b4a2a",
+  [PROP]:"#5a3d2b", [HOLE]:"#050404",
+};
+
+function render(){
+  const tx = cat.x*TS - VW/2, ty = cat.y*TS - VH/2;
+  cam.x = clamp(tx, 0, TW*TS-VW); cam.y = clamp(ty, 0, TH*TS-VH);
+  if(TW*TS<VW) cam.x=(TW*TS-VW)/2;
+  const sx = shake>0 ? (Math.random()-0.5)*shake*11 : 0;
+  const sy = shake>0 ? (Math.random()-0.5)*shake*11 : 0;
+
+  g.setTransform(1,0,0,1,0,0);
+  g.fillStyle="#080605"; g.fillRect(0,0,VW,VH);
+  g.translate(-Math.round(cam.x)+sx, -Math.round(cam.y)+sy);
+
+  const x0=Math.max(0,(cam.x/TS|0)-1), x1=Math.min(TW-1,((cam.x+VW)/TS|0)+1);
+  const y0=Math.max(0,(cam.y/TS|0)-1), y1=Math.min(TH-1,((cam.y+VH)/TS|0)+1);
+  const t=W.time;
+
+  // floor & structure
+  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+    const i=idx(x,y), tt=W.t[i];
+    g.fillStyle=COL[tt]||"#3b2c25";
+    g.fillRect(x*TS,y*TS,TS,TS);
+    if(tt===FLOOR||tt===ASH){
+      g.fillStyle= (x+y)%2 ? "rgba(255,255,255,.014)":"rgba(0,0,0,.05)";
+      g.fillRect(x*TS,y*TS,TS,TS);
+    }
+    if(tt===WATER){
+      const w=Math.sin(t*1.6+x*0.7+y*0.4)*0.5+0.5;
+      g.fillStyle="rgba(120,190,220,"+(0.05+w*0.06)+")";
+      g.fillRect(x*TS,y*TS,TS,TS);
+    }
+    if(tt===RUBBLE){
+      g.fillStyle="#3c332e";
+      g.fillRect(x*TS+3,y*TS+4,TS-7,TS-9);
+      g.fillStyle="#191412"; g.fillRect(x*TS+6,y*TS+9,7,4);
+    }
+    if(tt===PROP){
+      g.fillStyle=W.burn[i]?"#7a3a12":PROP_PAL[W.propCol[i]];
+      g.fillRect(x*TS+1,y*TS+1,TS-2,TS-2);
+      g.fillStyle="rgba(0,0,0,.22)"; g.fillRect(x*TS+1,y*TS+TS-5,TS-2,4);
+    }
+    if(tt===WINDOW){
+      g.fillStyle="#3d5a68"; g.fillRect(x*TS+2,y*TS+2,TS-4,TS-4);
+      g.fillStyle="rgba(200,235,255,.12)"; g.fillRect(x*TS+3,y*TS+3,TS-6,4);
+    }
+    if(tt===DOOR){ g.fillStyle="#6b4a30"; g.fillRect(x*TS+2,y*TS+2,TS-4,TS-4); }
+    if(tt===EXIT){
+      g.fillStyle="#8a5a2a"; g.fillRect(x*TS,y*TS,TS,TS);
+      g.fillStyle="#d8b070"; g.fillRect(x*TS+3,y*TS+6,TS-6,TS-10);
+    }
+    if(tt===HOLE){
+      g.fillStyle="#000"; g.fillRect(x*TS,y*TS,TS,TS);
+      g.fillStyle="rgba(255,90,20,.10)"; g.fillRect(x*TS+4,y*TS+4,TS-8,TS-8);
+    }
+  }
+
+  // heat bloom (only with the boon) then fire
+  if(has("Singed Whiskers")){
+    for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+      const h=W.heat[idx(x,y)];
+      if(h>0.25){ g.fillStyle="rgba(200,40,20,"+Math.min(.30,h*0.20)+")"; g.fillRect(x*TS,y*TS,TS,TS); }
+    }
+  }
+  g.globalCompositeOperation="lighter";
+  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+    const i=idx(x,y);
+    if(!W.burn[i]) continue;
+    if(lowFx && ((x+y)&1)){                    // struggling: half the glows, keep the flame
+      const ff=Math.sin(t*11+x*2.1+y*1.7)*0.5+0.5;
+      g.fillStyle="rgba(255,235,190,"+(0.55+ff*0.35)+")";
+      g.fillRect(x*TS+TS/2-4,y*TS+TS/2-5-ff*3,8,9+ff*4);
+      continue;
+    }
+    const f=Math.sin(t*11+x*2.1+y*1.7)*0.5+0.5;
+    const cx=x*TS+TS/2, cy=y*TS+TS/2;
+    const rad=TS*(1.6+f*0.5);
+    g.drawImage(glowCv, cx-rad, cy-rad, rad*2, rad*2);
+    g.fillStyle="rgba(255,235,190,"+(0.55+f*0.35)+")";
+    g.fillRect(cx-4,cy-5-f*3,8,9+f*4);
+  }
+  g.globalCompositeOperation="source-over";
+
+  // kittens — you can hear them, so you can always find them in the room you are in
+  let nearestK=null, nearestD=1e9, inRange=null;
+  for(const k of W.kittens){
+    if(k.home||k.held) continue;
+    const d=Math.hypot(k.x-cat.x,k.y-cat.y);
+    if(d<nearestD){ nearestD=d; nearestK=k; }
+    if(d<PICKUP) inRange=k;
+    const px=k.x*TS, py=k.y*TS;
+    const sameRoom = roomOf(k.x|0,k.y|0)===roomOf(cat.x|0,cat.y|0);
+    const seen = has("Nine Ears") || sameRoom || d<sightRadius();
+    if(!seen) continue;
+    const bob=Math.sin(t*4+k.id)*1.6;
+    // the cry: a soft ring that pulses outward, readable through smoke and dark
+    const cry=(t*0.9+k.id*0.4)%1;
+    g.strokeStyle="rgba(255,200,150,"+(0.34*(1-cry))+")";
+    g.lineWidth=2;
+    g.beginPath(); g.arc(px,py,8+cry*26,0,6.29); g.stroke();
+    g.fillStyle="rgba(255,190,130,.20)";
+    g.beginPath(); g.arc(px,py,13+Math.sin(t*3+k.id)*3,0,6.29); g.fill();
+    drawCat(px,py+bob,0.62,"#f0dcc0",1,true);
+  }
+
+  // the cat — a warm pool of light under her, or she vanishes into her own house
+  {
+    const px2=cat.x*TS, py2=cat.y*TS;
+    g.globalCompositeOperation="lighter";
+    g.drawImage(glowCv, px2-TS*1.5, py2-TS*1.5, TS*3, TS*3);
+    g.globalCompositeOperation="source-over";
+  }
+  // smoke, drawn as a ceiling you are underneath
+  for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++){
+    const s=W.smoke[idx(x,y)];
+    if(s<=0.02) continue;
+    const a = cat.crouch ? Math.min(0.72, s*0.45) : Math.min(0.93, s*0.80);
+    g.fillStyle="rgba(28,24,22,"+a+")";
+    g.fillRect(x*TS,y*TS,TS,TS);
+  }
+
+  // ...and the cat ON TOP of it. You always know where you are, even blind.
+  drawCat(cat.x*TS, cat.y*TS, cat.crouch?0.78:1,
+    cat.invuln>0&&(t*10|0)%2 ? "#fff1d6" : "#e0a865", cat.face, true);
+  if(cat.carrying!==null) drawCat(cat.x*TS+cat.face*7, cat.y*TS-7, 0.5, "#d9c3a5", cat.face, true);
+
+  // darkness with the cat's own light
+  g.setTransform(1,0,0,1,0,0);
+  const px=cat.x*TS-cam.x+sx, py=cat.y*TS-cam.y+sy;
+  const vg=g.createRadialGradient(px,py,TS*2,px,py,TS*sightRadius());
+  vg.addColorStop(0,"rgba(0,0,0,0)");
+  vg.addColorStop(1,"rgba(0,0,0,.80)");
+  g.fillStyle=vg; g.fillRect(0,0,VW,VH);
+
+  // hurt flash
+  if(cat.hp<45){
+    g.fillStyle="rgba(150,20,10,"+((45-cat.hp)/45*0.24)*(0.6+Math.sin(t*6)*0.4)+")";
+    g.fillRect(0,0,VW,VH);
+  }
+  // breath edge
+  if(cat.breath<40){
+    g.fillStyle="rgba(20,30,45,"+((40-cat.breath)/40*0.3)+")";
+    g.fillRect(0,0,VW,VH);
+  }
+
+  // "press E" prompt — never leave the player guessing whether they are close enough
+  if(inRange && cat.carrying===null){
+    const below = py<96;                       // flip under the cat rather than into the HUD
+    const oy = below ? 34 : -30;
+    g.textAlign="center";
+    g.fillStyle="rgba(10,7,5,.72)";
+    g.fillRect(px-40, py+oy-15, 80, 34);
+    g.fillStyle="rgba(255,240,210,"+(0.8+Math.sin(t*6)*0.2)+")";
+    g.font="17px ui-monospace,Consolas,monospace";
+    g.fillText("E", px, py+oy+2);
+    g.font="10px ui-monospace,Consolas,monospace";
+    g.fillStyle="rgba(255,215,170,.85)";
+    g.fillText("PICK UP", px, py+oy+15);
+    g.textAlign="left";
+  }
+  // bearing to the nearest crying kitten, when you are not already carrying one
+  else if(cat.carrying===null && nearestK && nearestD>2.2){
+    const a=Math.atan2(nearestK.y-cat.y, nearestK.x-cat.x);
+    const fade=clamp(1-(nearestD-8)/22, 0.40, 0.85);
+    const pulse=0.75+Math.sin(t*3.4)*0.25;
+    g.save(); g.translate(px,py); g.rotate(a);
+    g.fillStyle="rgba(255,210,155,"+fade*pulse+")";
+    g.beginPath(); g.moveTo(74,0); g.lineTo(58,-9); g.lineTo(58,9); g.closePath(); g.fill();
+    g.fillStyle="rgba(255,190,120,"+fade*pulse*0.5+")";
+    g.beginPath(); g.moveTo(52,0); g.lineTo(44,-5); g.lineTo(44,5); g.closePath(); g.fill();
+    g.restore();
+  }
+
+  // exit compass when carrying
+  if(cat.carrying!==null){
+    const dx=(W.exit.x+1)-cat.x, dy=(W.exit.y-1)-cat.y, a=Math.atan2(dy,dx);
+    g.save(); g.translate(px,py); g.rotate(a);
+    g.fillStyle="rgba(255,180,90,.55)";
+    g.beginPath(); g.moveTo(44,0); g.lineTo(34,-6); g.lineTo(34,6); g.closePath(); g.fill();
+    g.restore();
+  }
+
+  g.fillStyle="rgba(200,170,140,.35)";
+  g.font="12px ui-monospace,Consolas,monospace";
+  g.fillText("LIFE "+camp.life+" / 9   ·   "+Math.floor(W.time)+"s   ·   "+
+    (ROOMS[Math.max(0,roomOf(cat.x|0,cat.y|0))]||{n:""}).n, 18, VH-18);
+}
+
+function drawCat(px,py,sc,col,face,outline){
+  g.save(); g.translate(px,py); g.scale(face*sc,sc);
+  const b=Math.sin(cat.bob)*1.2;
+  if(outline){                       // dark rim so she reads against fire as well as floor
+    g.fillStyle="rgba(20,12,8,.8)";
+    g.beginPath(); g.ellipse(0,b*0.3,12.3,8.2,0,0,6.29); g.fill();
+    g.beginPath(); g.arc(8,-4+b*0.4,6.4,0,6.29); g.fill();
+  }
+  g.fillStyle=col;
+  g.beginPath(); g.ellipse(0,b*0.3,11,7,0,0,6.29); g.fill();      // body
+  g.beginPath(); g.arc(8,-4+b*0.4,5.4,0,6.29); g.fill();          // head
+  g.beginPath(); g.moveTo(5,-8); g.lineTo(7,-13); g.lineTo(10,-8); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(9,-8); g.lineTo(12,-13); g.lineTo(13,-7); g.closePath(); g.fill();
+  g.strokeStyle=col; g.lineWidth=2.4;
+  g.beginPath(); g.moveTo(-10,0); g.quadraticCurveTo(-18,-3-b*2,-16,-9-b*2); g.stroke();
+  g.fillStyle="#ffd070";
+  g.fillRect(9,-5,2,2); g.fillRect(12,-5,2,2);
+  g.restore();
+}
+
+/* ─────────────────────────  UI  ───────────────────────── */
+
+const $=id=>document.getElementById(id);
+let toastT=0;
+function toast(msg){ const el=$("toast"); el.textContent=msg; el.classList.add("on"); toastT=3.2; }
+
+function syncHud(){
+  $("hp").firstElementChild.style.width = clamp(cat.hp,0,100)+"%";
+  $("br").firstElementChild.style.width = clamp(cat.breath/maxBreath()*100,0,100)+"%";
+  $("kit").textContent = camp.saved+" / 9";
+  let p="";
+  for(let i=1;i<=9;i++) p+='<span class="pip'+(i>=camp.life?" live":"")+'"></span>';
+  $("pips").innerHTML=p;
+}
+
+function journalHtml(){ return camp.journal.map(j=>"<div>"+j+"</div>").join(""); }
+
+function showDeath(cause,room,kind,boon,last){
+  if(last){ showEnd(cause,room); return; }
+  uiState="DEAD";
+  $("dTitle").textContent = "LIFE "+camp.life+" SPENT";
+  $("dLine").textContent = DEATH_LINE[cause];
+  $("dScar").textContent = SCARS[kind].line(room);
+  $("dBoon").textContent = boon ? "You come back with something new. "+boon : "";
+  $("dJournal").innerHTML = journalHtml();
+  $("lDeath").classList.add("on");
+}
+
+// You got all nine out. This is the win, and it fires the moment the last one
+// is through the flap — not on some later death.
+function showVictory(){
+  uiState="VICTORY";
+  const spent = camp.life-1;                    // lives burned getting here
+  const left  = 9-spent;
+  $("eTitle").textContent = spent===0 ? "ALL NINE, AND NOTHING SPENT" : "ALL NINE";
+  $("eLine").textContent = spent===0
+    ? "Nine kittens on the wet grass, and you standing over them with every life still in you."
+    : "The ninth one is through the flap. You come out after her and you do not go back in.";
+  let body;
+  if(spent===0) body="You went into a burning house nine times and came out nine times, unmarked. "+
+    "The house never got to keep a single thing. It is still standing there behind you with its "+
+    "mouth open, and every room in it is exactly the room it always was. Nobody will believe this. "+
+    "The kittens will, but they cannot talk.";
+  else if(spent<=2) body="It cost you "+spent+(spent===1?" life":" lives")+". "+
+    "There "+(left===1?"is":"are")+" "+left+" left in you and nine of them out here in the cold, "+
+    "counting themselves, and "+(spent===1?"one room":spent+" rooms")+" of that house will be "+
+    "wrong forever — a scar with nobody left inside it to hurt.";
+  else if(spent<=5) body="It cost you "+spent+" lives. You know that house better than the people "+
+    "who built it now: which floor gives, which door swells, where the water sits. You learned it "+
+    "by dying in it. All nine are out. You have "+left+" "+(left===1?"life":"lives")+" left and "+
+    "nothing you need to spend "+(left===1?"it":"them")+" on.";
+  else body="It cost you "+spent+" lives. There "+(left===1?"is":"are")+" "+left+" left, and "+
+    "most of that house is a hole with the sky coming through it. But you counted them on the "+
+    "grass — one, two, three, four, five, six, seven, eight, nine — and then you sat down in the "+
+    "wet and let yourself shake.";
+  $("eBody").textContent=body;
+  $("eJournal").innerHTML = camp.journal.length ? journalHtml() :
+    "<div>You never died. There is nothing written here.</div>";
+  $("eStats").textContent="Kittens home 9/9  ·  lives spent "+spent+"/9  ·  rooms scarred "+
+    camp.scars.length+"/9  ·  longest life "+Math.floor(Math.max(camp.bestTime,W.time))+"s";
+  $("lEnd").classList.add("on");
+}
+
+function showEnd(cause,room){
+  uiState="END";
+  const s=camp.saved;
+  $("eTitle").textContent = s>=9 ? "ALL NINE" : s===0 ? "NOTHING CARRIED OUT" : "WHAT YOU CARRIED OUT";
+  $("eLine").textContent = DEATH_LINE[cause]+" There is no tenth.";
+  let body;
+  if(s>=9) body="Nine kittens on the wet grass, counting themselves. The ninth life bought the ninth kitten and that is exactly the price it was worth. The house folds in on nothing at all.";
+  else if(s>=6) body="Most of them made it. "+(9-s)+" did not, and you knew their names, and you spent every life you had trying. The neighbours will say the cat went back in. They will not say how many times.";
+  else if(s>=3) body="You got "+s+" of them out. The house took the rest and then it took you, room by room, exactly as much as you let it. Some of the doors you burned shut yourself.";
+  else if(s>0) body="One or two, out of nine. You learned the house too slowly and it learned you fast. It is a small pile of survivors and it is not nothing.";
+  else body="Nine lives, nine deaths, and not one of them carried out through the flap. The house kept everything, including you.";
+  $("eBody").textContent=body;
+  $("eJournal").innerHTML=journalHtml();
+  $("eStats").textContent="Kittens home "+s+"/9  ·  rooms scarred "+camp.scars.length+"/9  ·  longest life "+Math.floor(camp.bestTime)+"s";
+  $("lEnd").classList.add("on");
+}
+
+function startRun(){
+  camp.bestTime = Math.max(camp.bestTime, W.time||0);
+  $("lTitle").classList.remove("on"); $("lDeath").classList.remove("on"); $("lEnd").classList.remove("on");
+  genHouse(camp.seed + camp.life*7919);
+  spawnCat();
+  ignite(camp.seed*3 + camp.life*104729);
+  fireAcc=0; uiState="PLAY";
+  syncHud();
+  const scarNote = camp.scars.length? "The house remembers." : "";
+  toast(camp.life===1 ? "Nine of them. Nine of you." : "Life "+camp.life+". "+scarNote);
+}
+
+$("bStart").onclick=startRun;
+$("bAgain").onclick=()=>{ camp.bestTime=Math.max(camp.bestTime,W.time); startRun(); };
+$("bReset").onclick=()=>{ resetCampaign(); startRun(); };
+window.addEventListener("keydown",e=>onKey(e,true));
+window.addEventListener("keyup",e=>onKey(e,false));
+window.addEventListener("keydown",e=>{
+  if(e.key==="Enter"){
+    if(uiState==="TITLE") startRun();
+    else if(uiState==="DEAD"){camp.bestTime=Math.max(camp.bestTime,W.time);startRun();}
+    else if(uiState==="END"||uiState==="VICTORY"){resetCampaign();startRun();}
+  }
+});
+
+/* ─────────────────────────  loop  ───────────────────────── */
+
+let last=0, lowFx=false, avgMs=16, menuAcc=0;
+function frame(ts){
+  const dt=Math.min(0.05,(ts-last)/1000||0); last=ts;
+  const t0=performance.now();
+
+  update(dt);
+  if(toastT>0){ toastT-=dt; if(toastT<=0) $("toast").classList.remove("on"); }
+
+  // menus don't need 60fps of a burning house behind them
+  if(uiState==="PLAY"){ render(); }
+  else { menuAcc+=dt; if(menuAcc>0.1){ menuAcc=0; render(); } }
+
+  // shed effects rather than thrash a machine that can't keep up
+  avgMs = avgMs*0.94 + (performance.now()-t0)*0.06;
+  if(!lowFx && avgMs>19) lowFx=true;
+  else if(lowFx && avgMs<11) lowFx=false;
+
+  requestAnimationFrame(frame);
+}
+
+genHouse(0xC0FFEE);
+spawnCat();
+syncHud();
+render();
+if(!window.__NINE_TEST) requestAnimationFrame(frame);
+
+window.NINE = {W,cat,camp,update,render,genHouse,spawnCat,ignite,startRun,die,fireStep,
+  tileAt,roomOf,roomRect,walkable,idx,keys,
+  get state(){return uiState;}, set state(v){uiState=v;},
+  consts:{TW,TH,TS,RW,RH,WALL,FLOOR,DOOR,WINDOW,RUBBLE,ASH,WATER,EXIT,PROP,HOLE},
+  BOONS, ROOMS};
+
+})();
+</script>
+</body>
+</html>

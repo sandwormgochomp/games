@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spellbound</title>
+<style>
+  :root{
+    --ink:#0b0d18; --ink2:#121629; --line:#2a3050;
+    --text:#e9e7f3; --dim:#9aa0c0; --gold:#f2c45a; --gold-d:#c99a2e;
+    --good:#5ad39a; --bad:#f2708a; --cool:#7aa7ff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    background:radial-gradient(1200px 800px at 50% -10%,#1b2140 0%,var(--ink) 60%) fixed;
+    color:var(--text); display:flex; align-items:flex-start; justify-content:center;
+    padding:22px 16px; -webkit-font-smoothing:antialiased;
+  }
+  #app{width:100%; max-width:780px}
+  .card{
+    background:linear-gradient(180deg,rgba(24,29,53,.92),rgba(14,17,32,.92));
+    border:1px solid var(--line); border-radius:18px; padding:26px 24px;
+    box-shadow:0 24px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  h1{
+    margin:0 0 4px; font-size:44px; letter-spacing:.06em; text-align:center;
+    background:linear-gradient(180deg,#fff3d0,var(--gold) 55%,var(--gold-d));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .tag{text-align:center; color:var(--dim); font-size:13px; letter-spacing:.22em; text-transform:uppercase; margin-bottom:20px}
+  p.lede{color:var(--dim); line-height:1.6; text-align:center; margin:0 auto 20px; max-width:54ch}
+  button{font:inherit; cursor:pointer; border-radius:11px; transition:.14s}
+  button:disabled{opacity:.4; cursor:default}
+  .btn{
+    background:linear-gradient(180deg,#242b4d,#1a2039); color:var(--text);
+    border:1px solid var(--line); padding:11px 16px; font-size:15px;
+  }
+  .btn:hover:not(:disabled){border-color:var(--gold); color:#fff5dd; transform:translateY(-1px)}
+  .btn.primary{background:linear-gradient(180deg,var(--gold),var(--gold-d)); color:#241c05; border-color:#e6b954; font-weight:700}
+  .btn.primary:hover{color:#120e02}
+  .btn.sm{padding:7px 12px; font-size:13px; font-family:system-ui,sans-serif}
+  .row{display:flex; gap:10px; justify-content:center; flex-wrap:wrap}
+
+  /* map */
+  .chapters{display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-bottom:16px}
+  .chip{
+    background:rgba(255,255,255,.04); border:1px solid var(--line); color:var(--dim);
+    border-radius:999px; padding:7px 13px; font-size:13px; font-family:system-ui,sans-serif; letter-spacing:.03em;
+  }
+  .chip.on{color:#241c05; font-weight:700}
+  .chip.lock{opacity:.35}
+  .chhead{text-align:center; margin-bottom:14px}
+  .chhead .nm{font-size:26px; letter-spacing:.05em}
+  .chhead .ds{color:var(--dim); font-size:13px; font-family:system-ui,sans-serif; margin-top:3px}
+  .grid{display:grid; grid-template-columns:repeat(10,1fr); gap:6px}
+  @media(max-width:640px){ .grid{grid-template-columns:repeat(5,1fr)} }
+  .cell{
+    aspect-ratio:1; border-radius:9px; border:1px solid var(--line); background:rgba(255,255,255,.03);
+    color:var(--text); font-family:system-ui,sans-serif; font-size:12px; display:flex;
+    flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:0;
+  }
+  .cell:hover:not(:disabled){border-color:var(--gold); background:rgba(242,196,90,.1)}
+  .cell.done{background:rgba(90,211,154,.08); border-color:#2f6b52}
+  .cell.boss{border-color:#7a3550; background:rgba(242,112,138,.09)}
+  .cell.next{border-color:var(--gold); box-shadow:0 0 0 2px rgba(242,196,90,.22)}
+  .cell.locked{opacity:.28}
+  .cell .st{font-size:8px; letter-spacing:1px; color:var(--gold); height:9px}
+  .cell .mk{position:absolute}
+  .legend{display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-top:14px; color:var(--dim); font-size:12px; font-family:system-ui,sans-serif}
+
+  /* hud */
+  .hud{display:flex; align-items:center; gap:9px; margin-bottom:14px; font-family:system-ui,sans-serif; font-size:13px; flex-wrap:wrap}
+  .pill{background:rgba(255,255,255,.045); border:1px solid var(--line); border-radius:999px; padding:6px 13px; letter-spacing:.04em}
+  .pill b{color:var(--gold); font-weight:700}
+  .pill.mod{border-color:#5a4a86; background:rgba(140,110,220,.14); color:#d6c9ff}
+  .hearts{margin-left:auto; letter-spacing:2px; font-size:16px}
+  .bar{height:5px; background:rgba(255,255,255,.07); border-radius:4px; overflow:hidden; margin-bottom:8px}
+  .bar>i{display:block; height:100%; background:linear-gradient(90deg,var(--gold-d),var(--gold)); width:0; transition:width .35s}
+  .bar.time{margin-bottom:20px}
+  .bar.time>i{background:linear-gradient(90deg,#f2708a,#f2c45a); transition:width .12s linear}
+
+  .speaker{text-align:center; margin:4px 0 14px}
+  .orb{
+    width:96px; height:96px; border-radius:50%; margin:0 auto; display:grid; place-items:center;
+    font-size:40px; border:1px solid #3a4370; cursor:pointer; user-select:none;
+    background:radial-gradient(circle at 35% 30%,#2f3866,#161a30);
+    box-shadow:0 0 0 0 rgba(242,196,90,.35); transition:.2s;
+  }
+  .orb:hover{border-color:var(--gold)}
+  .orb.on{animation:pulse 1.1s ease-out infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(242,196,90,.4)}100%{box-shadow:0 0 0 26px rgba(242,196,90,0)}}
+  .flashword{font-size:38px; letter-spacing:.14em; min-height:50px; color:#fff6de; transition:opacity .35s}
+  .scram{font-size:26px; letter-spacing:.4em; color:#c58bff; min-height:34px; font-family:ui-monospace,Menlo,Consolas,monospace}
+
+  .clue{min-height:56px; text-align:center; color:var(--dim); font-size:16px; line-height:1.6; margin:0 auto 12px; max-width:56ch}
+  .clue .lbl{color:var(--gold); font-size:11px; letter-spacing:.2em; text-transform:uppercase; font-family:system-ui,sans-serif; display:block; margin-bottom:4px}
+  .clue .blank{color:var(--gold); letter-spacing:.1em}
+  .reveal{text-align:center; font-size:24px; letter-spacing:.35em; min-height:32px; margin-bottom:8px; color:var(--gold); font-family:ui-monospace,Menlo,Consolas,monospace}
+
+  input[type=text]{
+    width:100%; font:inherit; font-size:30px; letter-spacing:.14em; text-align:center;
+    background:rgba(255,255,255,.05); border:1px solid var(--line); border-bottom:2px solid var(--gold-d);
+    border-radius:12px; color:var(--text); padding:13px 12px; outline:none;
+  }
+  input[type=text]:focus{border-color:var(--gold); background:rgba(242,196,90,.06)}
+  input.good{border-color:var(--good); background:rgba(90,211,154,.1)}
+  input.bad{border-color:var(--bad); background:rgba(242,112,138,.1); animation:shake .32s}
+  @keyframes shake{25%{transform:translateX(-9px)}50%{transform:translateX(9px)}75%{transform:translateX(-5px)}}
+
+  .tools{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:14px 0 4px}
+  .go{display:flex; justify-content:center; margin-top:14px}
+  .go .btn{padding:12px 34px; font-size:17px}
+  .verdict{text-align:center; min-height:92px; margin-top:12px}
+  .verdict .head{font-size:22px; letter-spacing:.05em}
+  .verdict .word{font-size:32px; letter-spacing:.2em; margin:8px 0 4px; font-family:ui-monospace,Menlo,Consolas,monospace}
+  .verdict .word .c{color:var(--good)} .verdict .word .x{color:var(--bad); text-decoration:underline wavy}
+  .verdict .yours{color:var(--dim); font-size:14px; font-family:system-ui,sans-serif}
+  .verdict .pts{color:var(--gold); font-size:15px; font-family:system-ui,sans-serif; margin-top:6px}
+
+  .misses{margin:16px 0; max-height:220px; overflow:auto; border:1px solid var(--line); border-radius:12px}
+  .miss{display:flex; gap:12px; align-items:baseline; padding:9px 14px; border-bottom:1px solid rgba(255,255,255,.05); font-size:15px}
+  .miss:last-child{border-bottom:0}
+  .miss .w{color:var(--gold); letter-spacing:.08em; min-width:190px; font-family:ui-monospace,Menlo,Consolas,monospace}
+  .miss .y{color:var(--bad); font-size:13px; font-family:system-ui,sans-serif; text-decoration:line-through}
+  .miss .d{color:var(--dim); font-size:13px; font-family:system-ui,sans-serif; margin-left:auto; text-align:right}
+  .stats{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin:16px 0}
+  .stat{background:rgba(255,255,255,.04); border:1px solid var(--line); border-radius:12px; padding:11px 18px; text-align:center; min-width:100px}
+  .stat b{display:block; font-size:26px; color:var(--gold)}
+  .stat span{font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--dim); font-family:system-ui,sans-serif}
+  .starline{text-align:center; font-size:34px; letter-spacing:.18em; color:var(--gold); margin:6px 0 2px}
+  .starline .off{color:#3a4060}
+  /* saves */
+  .slot{border:1px solid var(--line); border-radius:13px; padding:14px 16px; margin-bottom:10px; background:rgba(255,255,255,.03)}
+  .slot.on{border-color:var(--gold); background:rgba(242,196,90,.07)}
+  .slothead{display:flex; align-items:center; gap:10px; font-size:19px; letter-spacing:.06em; margin-bottom:5px}
+  .slothead b{font-weight:400; color:var(--gold)}
+  .inuse{font-family:system-ui,sans-serif; font-size:10px; letter-spacing:.18em; text-transform:uppercase;
+    color:#241c05; background:var(--gold); border-radius:999px; padding:3px 9px}
+  .slotstats{font-family:system-ui,sans-serif; font-size:13px; color:var(--text); line-height:1.7}
+  .dimline{color:var(--dim)}
+  .foot{text-align:center; color:var(--dim); font-size:12px; font-family:system-ui,sans-serif; margin-top:16px; opacity:.75}
+  .hide{display:none !important}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+"use strict";
+
+/* ══════════════════════════════════════════════════════════════════
+   WORD BANK — 10 bands of increasing difficulty.
+   w = word · d = definition · s = sentence ("~" marks the word)
+   ══════════════════════════════════════════════════════════════════ */
+const BANDS = [];
+function band(name, color, desc, words){ BANDS.push({name, color, desc, words}); }
+
+band("Seedling", "#5ad39a", "Short everyday words with quiet little traps.", [
+ {w:"friend",d:"a person you like and trust",s:"She waved to her ~ from across the street."},
+ {w:"because",d:"for the reason that",s:"We stayed inside ~ it was raining."},
+ {w:"school",d:"a place where children go to learn",s:"The bus drops us at ~ by eight."},
+ {w:"people",d:"human beings in general",s:"A crowd of ~ filled the square."},
+ {w:"really",d:"truly, or very much",s:"That was a ~ good sandwich."},
+ {w:"monkey",d:"a long-tailed climbing primate",s:"A ~ stole the mango."},
+ {w:"eight",d:"the number after seven",s:"There were ~ ducks on the pond."},
+ {w:"build",d:"to make something by joining parts",s:"They plan to ~ a treehouse."},
+ {w:"cousin",d:"the child of your aunt or uncle",s:"My ~ visits every summer."},
+ {w:"money",d:"coins and bills used to buy things",s:"He saved his ~ in a jar."},
+ {w:"thought",d:"an idea, or the past tense of think",s:"I ~ the movie started at six."},
+ {w:"answer",d:"a reply to a question",s:"Raise your hand if you know the ~."},
+ {w:"island",d:"land surrounded by water",s:"A small ~ sat in the lake."},
+ {w:"finally",d:"after a long wait",s:"The rain ~ stopped at noon."},
+ {w:"often",d:"many times",s:"We ~ walk home the long way."},
+ {w:"onion",d:"a strong-flavored bulb vegetable",s:"Chop one ~ finely."},
+ {w:"write",d:"to form letters or words",s:"Please ~ your name at the top."},
+ {w:"laugh",d:"to make sounds of amusement",s:"His jokes always make me ~."},
+ {w:"climb",d:"to go up using hands and feet",s:"We watched the cat ~ the fence."},
+ {w:"knife",d:"a tool with a blade for cutting",s:"He sliced the bread with a ~."},
+ {w:"juice",d:"liquid squeezed from fruit",s:"She poured a glass of orange ~."},
+ {w:"tongue",d:"the movable organ inside the mouth",s:"The ice cream numbed my ~."},
+ {w:"enough",d:"as much as needed",s:"We have ~ chairs for everyone."},
+ {w:"weird",d:"strange or unusual",s:"A ~ noise came from the attic."},
+ {w:"piece",d:"a part of something",s:"May I have a ~ of cake?"},
+ {w:"once",d:"one single time",s:"I have only been there ~."},
+ {w:"young",d:"not old",s:"The ~ pup chewed everything."},
+ {w:"whole",d:"complete, with nothing missing",s:"He ate the ~ pizza himself."},
+ {w:"guess",d:"to answer without being sure",s:"Take a ~ at the number."},
+ {w:"listen",d:"to pay attention to sound",s:"Stop and ~ to the birds."},
+ {w:"castle",d:"a large fortified building",s:"The ~ had a stone tower."},
+ {w:"honest",d:"truthful and fair",s:"Give me an ~ opinion."},
+ {w:"hour",d:"a period of sixty minutes",s:"The train leaves in an ~."},
+ {w:"wrist",d:"the joint between hand and arm",s:"He wore a watch on his ~."},
+ {w:"crumb",d:"a tiny piece of bread or cake",s:"A ~ fell onto the rug."},
+ {w:"ghost",d:"the spirit of a dead person",s:"She dressed as a ~."},
+ {w:"salmon",d:"a pink-fleshed river and sea fish",s:"We grilled the ~ with lemon."},
+ {w:"chief",d:"the leader of a group",s:"The fire ~ gave a speech."},
+ {w:"field",d:"an open area of land",s:"Cows grazed in the ~."},
+ {w:"beard",d:"hair grown on a man's chin",s:"His ~ had turned grey."},
+ {w:"eager",d:"keen and excited",s:"The pups were ~ to run."},
+ {w:"early",d:"before the usual time",s:"We woke up ~ to hike."},
+ {w:"heavy",d:"weighing a lot",s:"That box is far too ~."},
+ {w:"pencil",d:"a wooden tool for writing",s:"Sharpen your ~ before the test."},
+ {w:"orange",d:"a round citrus fruit; a colour",s:"She peeled an ~ at lunch."},
+ {w:"purple",d:"a color between red and blue",s:"The sky turned ~ at dusk."},
+ {w:"secret",d:"something kept hidden",s:"Can you keep a ~?"},
+ {w:"sugar",d:"a sweet substance used in food",s:"Add a spoon of ~."},
+ {w:"circle",d:"a perfectly round shape",s:"Draw a ~ on the board."},
+ {w:"double",d:"twice as much",s:"Order a ~ portion."},
+ {w:"trouble",d:"difficulty or bother",s:"That dog is nothing but ~."},
+ {w:"clothes",d:"garments worn on the body",s:"Fold your ~ neatly."},
+ {w:"stomach",d:"the organ that digests food",s:"My ~ growled loudly."},
+ {w:"minute",d:"sixty seconds",s:"Wait here one ~."},
+ {w:"pretty",d:"pleasant to look at",s:"What a ~ garden."},
+ {w:"which",d:"asking about a choice",s:"~ road leads to town?"},
+ {w:"where",d:"in what place",s:"Tell me ~ you left it."},
+ {w:"knock",d:"to strike a door to be let in",s:"Please ~ before entering."},
+ {w:"scissors",d:"a tool with two blades for cutting",s:"Cut the paper with ~."},
+ {w:"bicycle",d:"a two-wheeled vehicle you pedal",s:"He rode his ~ to school."},
+ {w:"shoulder",d:"the joint where arm meets body",s:"She tapped my ~."},
+ {w:"cough",d:"to expel air noisily from the lungs",s:"A dry ~ kept him awake."},
+ {w:"rough",d:"not smooth",s:"The bark felt ~."},
+ {w:"visit",d:"to go and see someone",s:"We ~ grandma on Sundays."},
+ {w:"quarter",d:"one of four equal parts",s:"Cut the apple into a ~."},
+ {w:"straight",d:"without a bend",s:"Draw a ~ line."},
+ {w:"biscuit",d:"a small baked bread or cookie",s:"He buttered a warm ~."},
+ {w:"chocolate",d:"a sweet food made from cacao",s:"She melted the ~ slowly."},
+ {w:"tomorrow",d:"the day after today",s:"The results arrive ~ morning."},
+]);
+
+band("Sprout", "#6fd0a8", "Silent letters and the words that hide them.", [
+ {w:"wrinkle",d:"a small crease or fold",s:"Iron out that ~."},
+ {w:"knuckle",d:"a joint of the finger",s:"He cracked every ~."},
+ {w:"plumber",d:"a person who fixes pipes",s:"The ~ replaced the tap."},
+ {w:"solemn",d:"serious and dignified",s:"He made a ~ promise."},
+ {w:"column",d:"an upright pillar; a vertical list",s:"Add the numbers in that ~."},
+ {w:"autumn",d:"the season after summer",s:"Leaves turn red in ~."},
+ {w:"scene",d:"a place where something happens",s:"Police reached the ~ quickly."},
+ {w:"scent",d:"a smell, often pleasant",s:"The ~ of pine filled the room."},
+ {w:"muscle",d:"tissue that moves the body",s:"He pulled a ~ running."},
+ {w:"whistle",d:"to make a shrill sound with your lips",s:"The referee blew his ~."},
+ {w:"thistle",d:"a prickly wild plant",s:"A purple ~ grew by the path."},
+ {w:"rhyme",d:"words with matching end sounds",s:"Find a ~ for orange."},
+ {w:"rhino",d:"a large horned African mammal",s:"The ~ dozed in the shade."},
+ {w:"gnaw",d:"to bite at something repeatedly",s:"Mice ~ through the sack."},
+ {w:"gnome",d:"a small mythical garden creature",s:"A stone ~ guarded the path."},
+ {w:"wrestle",d:"to grapple with someone",s:"The cubs ~ in the grass."},
+ {w:"debt",d:"money that is owed",s:"She paid off the ~."},
+ {w:"doubt",d:"a feeling of uncertainty",s:"I have no ~ about it."},
+ {w:"subtle",d:"delicate and not obvious",s:"A ~ change in tone."},
+ {w:"soften",d:"to make less hard",s:"Let the butter ~."},
+ {w:"fasten",d:"to fix or close securely",s:"Please ~ your seatbelt."},
+ {w:"hasten",d:"to hurry",s:"We must ~ home."},
+ {w:"aisle",d:"a passage between rows of seats",s:"She walked down the ~."},
+ {w:"yacht",d:"a light sailing or motor boat",s:"A white ~ left the harbor."},
+ {w:"guitar",d:"a stringed instrument you strum",s:"He tuned his ~."},
+ {w:"circuit",d:"a closed loop, especially electrical",s:"The ~ blew a fuse."},
+ {w:"receipt",d:"a written proof of payment",s:"Keep the ~ for returns."},
+ {w:"conquer",d:"to overcome or defeat",s:"He set out to ~ his fear."},
+ {w:"foreign",d:"from another country",s:"She studies a ~ language."},
+ {w:"sovereign",d:"a supreme ruler; fully independent",s:"The ~ signed the treaty."},
+ {w:"campaign",d:"an organized effort toward a goal",s:"They ran a quiet ~."},
+ {w:"design",d:"a plan or pattern",s:"The ~ used bold stripes."},
+ {w:"resign",d:"to quit a position",s:"He chose to ~ in spring."},
+ {w:"pigeon",d:"a common grey city bird",s:"A ~ landed on the rail."},
+ {w:"surgeon",d:"a doctor who performs operations",s:"The ~ scrubbed in."},
+ {w:"luggage",d:"the bags you travel with",s:"Our ~ never arrived."},
+ {w:"village",d:"a small settlement",s:"The ~ had one shop."},
+ {w:"sausage",d:"seasoned meat in a casing",s:"He grilled a ~."},
+ {w:"cabbage",d:"a leafy green vegetable",s:"Shred the ~ finely."},
+ {w:"language",d:"a system of words for communicating",s:"Sign ~ is beautiful."},
+ {w:"knowledge",d:"facts and skills you have learned",s:"Her ~ of birds is deep."},
+ {w:"courage",d:"bravery in the face of fear",s:"It took ~ to speak."},
+ {w:"journey",d:"a trip from one place to another",s:"The ~ took two days."},
+ {w:"nephew",d:"the son of your brother or sister",s:"My ~ turned nine."},
+ {w:"ceiling",d:"the upper surface of a room",s:"A fan spun on the ~."},
+ {w:"neither",d:"not one and not the other",s:"~ answer was right."},
+ {w:"leisure",d:"free time",s:"He reads at his ~."},
+ {w:"caught",d:"the past tense of catch",s:"She ~ the ball cleanly."},
+ {w:"taught",d:"the past tense of teach",s:"He ~ us to swim."},
+ {w:"bought",d:"the past tense of buy",s:"They ~ a used van."},
+ {w:"height",d:"how tall something is",s:"Measure the ~ of the door."},
+ {w:"weigh",d:"to measure how heavy something is",s:"Please ~ the flour."},
+ {w:"neighbor",d:"a person living next door",s:"Our ~ mows at dawn."},
+ {w:"ancient",d:"very old",s:"An ~ oak shaded the yard."},
+ {w:"science",d:"the study of the natural world",s:"~ class starts at ten."},
+ {w:"patient",d:"calmly enduring; a person under care",s:"Be ~ with the puppy."},
+ {w:"special",d:"better or different from usual",s:"Tonight is a ~ occasion."},
+ {w:"official",d:"approved by an authority",s:"That is the ~ result."},
+ {w:"delicious",d:"very pleasant to taste",s:"The stew was ~."},
+ {w:"suspicious",d:"causing or feeling distrust",s:"A ~ van circled twice."},
+ {w:"precious",d:"of great value",s:"That locket is ~ to her."},
+ {w:"gorgeous",d:"strikingly beautiful",s:"What a ~ sunset."},
+ {w:"nervous",d:"anxious or uneasy",s:"He felt ~ before the play."},
+ {w:"famous",d:"known by many people",s:"The chef became ~."},
+ {w:"jealous",d:"envious of another",s:"Don't be ~ of her prize."},
+ {w:"curious",d:"eager to learn or know",s:"The ~ fox crept closer."},
+ {w:"February",d:"the second month of the year",s:"Her birthday is in ~."},
+ {w:"Wednesday",d:"the day between Tuesday and Thursday",s:"Practice is every ~."},
+]);
+
+band("Sapling", "#7cc8d8", "Sound-alikes and the classroom regulars.", [
+ {w:"weather",d:"the state of the atmosphere",s:"The ~ turned cold."},
+ {w:"whether",d:"expressing a doubt between choices",s:"Ask ~ they are coming."},
+ {w:"principal",d:"the head of a school; most important",s:"The ~ called an assembly."},
+ {w:"principle",d:"a basic rule or belief",s:"He acted on ~."},
+ {w:"stationery",d:"paper and writing materials",s:"She bought ~ for the term."},
+ {w:"stationary",d:"not moving",s:"The bus stayed ~."},
+ {w:"complement",d:"something that completes",s:"The sauce is a fine ~."},
+ {w:"compliment",d:"a polite expression of praise",s:"He paid her a ~."},
+ {w:"desert",d:"a dry barren region; to abandon",s:"Camels crossed the ~."},
+ {w:"dessert",d:"the sweet course after a meal",s:"We shared a ~."},
+ {w:"altar",d:"a raised table used in worship",s:"Candles lined the ~."},
+ {w:"alter",d:"to change something",s:"Please ~ the hem."},
+ {w:"aloud",d:"out loud, so others hear",s:"Read the poem ~."},
+ {w:"allowed",d:"permitted",s:"Dogs are not ~ inside."},
+ {w:"capital",d:"a chief city; wealth; an upper-case letter",s:"Paris is the ~ of France."},
+ {w:"capitol",d:"the building where a legislature meets",s:"They toured the ~."},
+ {w:"council",d:"a group that governs or advises",s:"The town ~ voted."},
+ {w:"counsel",d:"advice, or to advise",s:"She sought legal ~."},
+ {w:"discreet",d:"careful not to attract attention",s:"He was ~ about the news."},
+ {w:"discrete",d:"separate and distinct",s:"Sort them into ~ groups."},
+ {w:"elicit",d:"to draw out a response",s:"The ad tried to ~ pity."},
+ {w:"illicit",d:"forbidden by law",s:"They seized the ~ goods."},
+ {w:"peddle",d:"to sell goods door to door",s:"He used to ~ brushes."},
+ {w:"pedal",d:"a foot lever on a bike or piano",s:"Press the left ~."},
+ {w:"morning",d:"the early part of the day",s:"Frost coated the ~ grass."},
+ {w:"mourning",d:"grief for someone who has died",s:"The town was in ~."},
+ {w:"cereal",d:"a breakfast grain food",s:"He poured a bowl of ~."},
+ {w:"serial",d:"arranged in a series",s:"Note the ~ number."},
+ {w:"vain",d:"conceited; without success",s:"They searched in ~."},
+ {w:"vein",d:"a vessel carrying blood to the heart",s:"A ~ stood out on his arm."},
+ {w:"waist",d:"the middle of the body",s:"The belt cinched her ~."},
+ {w:"waste",d:"to use carelessly; rubbish",s:"Don't ~ the water."},
+ {w:"medal",d:"a metal disc awarded for merit",s:"She won a bronze ~."},
+ {w:"meddle",d:"to interfere in others' affairs",s:"Try not to ~."},
+ {w:"cite",d:"to quote as evidence",s:"Please ~ your sources."},
+ {w:"site",d:"a location",s:"The building ~ was fenced."},
+ {w:"bare",d:"uncovered",s:"He walked on ~ feet."},
+ {w:"bear",d:"a large mammal; to carry or endure",s:"A black ~ crossed the road."},
+ {w:"borne",d:"carried, in the past sense",s:"The cost was ~ by the club."},
+ {w:"break",d:"to shatter or pause",s:"Let's take a short ~."},
+ {w:"brake",d:"the device that slows a vehicle",s:"He hit the ~ hard."},
+ {w:"choose",d:"to pick from options",s:"You may ~ one."},
+ {w:"chose",d:"the past tense of choose",s:"She ~ the blue one."},
+ {w:"loose",d:"not tight",s:"The knot came ~."},
+ {w:"lose",d:"to misplace, or to be defeated",s:"Don't ~ your keys."},
+ {w:"advice",d:"a suggestion about what to do",s:"He gave sound ~."},
+ {w:"advise",d:"to give guidance",s:"I ~ you to wait."},
+ {w:"device",d:"a piece of equipment",s:"A small ~ tracks steps."},
+ {w:"devise",d:"to invent or plan",s:"They must ~ a route."},
+ {w:"affect",d:"to influence something",s:"Rain will ~ the crowd."},
+ {w:"effect",d:"a result or consequence",s:"The ~ was immediate."},
+ {w:"accept",d:"to receive willingly",s:"Please ~ our thanks."},
+ {w:"except",d:"other than",s:"Everyone came ~ Sam."},
+ {w:"emigrate",d:"to leave one's country to settle elsewhere",s:"They plan to ~ in June."},
+ {w:"immigrate",d:"to come into a country to settle",s:"His family ~ in 1910."},
+ {w:"quiet",d:"free from noise",s:"Keep the hall ~."},
+ {w:"quite",d:"fairly, or completely",s:"That was ~ good."},
+ {w:"threw",d:"the past tense of throw",s:"He ~ the ball high."},
+ {w:"through",d:"from end to end of",s:"We drove ~ the tunnel."},
+ {w:"thorough",d:"complete in every detail",s:"Give it a ~ clean."},
+ {w:"forth",d:"forward, onward",s:"He set ~ at dawn."},
+ {w:"fourth",d:"next after third",s:"This is her ~ try."},
+ {w:"heroes",d:"more than one hero",s:"The rescue crew were ~."},
+ {w:"tomatoes",d:"more than one tomato",s:"Slice the ~ thinly."},
+ {w:"knives",d:"more than one knife",s:"Sharpen the ~."},
+ {w:"scarves",d:"more than one scarf",s:"Wool ~ hung by the door."},
+ {w:"beautiful",d:"pleasing to the senses",s:"What a ~ morning."},
+ {w:"restaurant",d:"a place where meals are served",s:"We ate at a small ~."},
+]);
+
+band("Scholar", "#7aa7ff", "The words adults still get wrong on forms.", [
+ {w:"receive",d:"to get something given or sent",s:"You should ~ the letter tomorrow."},
+ {w:"believe",d:"to accept as true",s:"I ~ every word she said."},
+ {w:"achieve",d:"to reach a goal by effort",s:"They hope to ~ a record."},
+ {w:"separate",d:"to move apart; not joined",s:"Keep the socks ~ from the shirts."},
+ {w:"definitely",d:"without any doubt",s:"That is ~ the right answer."},
+ {w:"necessary",d:"needed or required",s:"A ticket is ~ to enter."},
+ {w:"business",d:"a company; work done for money",s:"Her ~ sells handmade lamps."},
+ {w:"calendar",d:"a chart of days and months",s:"Mark the date on the ~."},
+ {w:"embarrass",d:"to make someone feel awkward",s:"Please don't ~ me."},
+ {w:"occasion",d:"a special event or time",s:"She saved the dress for a big ~."},
+ {w:"beginning",d:"the start of something",s:"Read it from the ~."},
+ {w:"government",d:"the group that runs a country",s:"The ~ announced a rule."},
+ {w:"surprise",d:"something unexpected",s:"The party was a complete ~."},
+ {w:"familiar",d:"well known or easily recognized",s:"Her face looked oddly ~."},
+ {w:"license",d:"official permission or its document",s:"He passed and got his ~."},
+ {w:"medicine",d:"a substance taken to treat illness",s:"Take the ~ with food."},
+ {w:"similar",d:"alike but not identical",s:"The twins wore ~ jackets."},
+ {w:"temperature",d:"how hot or cold something is",s:"The ~ dropped below freezing."},
+ {w:"vegetable",d:"a plant grown to be eaten",s:"Pick one green ~ for dinner."},
+ {w:"especially",d:"particularly; more than usually",s:"He loves fruit, ~ peaches."},
+ {w:"opposite",d:"completely different; facing away",s:"They walked the ~ way."},
+ {w:"athlete",d:"a person trained in sports",s:"The ~ stretched before the race."},
+ {w:"library",d:"a place where books are kept",s:"Return the book to the ~."},
+ {w:"jewelry",d:"rings, necklaces and ornaments",s:"She kept her ~ in a box."},
+ {w:"mischief",d:"playful trouble-making",s:"The kittens were up to ~."},
+ {w:"ninety",d:"the number after eighty-nine",s:"Grandpa turns ~ this spring."},
+ {w:"guarantee",d:"a firm promise about a result",s:"They ~ delivery by Friday."},
+ {w:"argument",d:"a disagreement or a reason given",s:"They had a brief ~."},
+ {w:"awkward",d:"clumsy or uncomfortable",s:"An ~ silence followed."},
+ {w:"category",d:"a class or group of things",s:"File it under that ~."},
+ {w:"atmosphere",d:"the air around a planet; a mood",s:"The ~ turned tense."},
+ {w:"decision",d:"a choice that has been made",s:"It was a hard ~."},
+ {w:"difference",d:"the way things are unlike",s:"Spot the ~."},
+ {w:"disappear",d:"to vanish from sight",s:"The fog will ~ by noon."},
+ {w:"disappoint",d:"to fail someone's hopes",s:"I hate to ~ you."},
+ {w:"environment",d:"the surroundings or natural world",s:"Protect the ~."},
+ {w:"equipment",d:"tools needed for a purpose",s:"Load the camping ~."},
+ {w:"exaggerate",d:"to overstate something",s:"Don't ~ the danger."},
+ {w:"existence",d:"the state of being",s:"He doubted its ~."},
+ {w:"experience",d:"knowledge gained by doing",s:"She has years of ~."},
+ {w:"opportunity",d:"a favorable chance to do something",s:"A rare ~ arose."},
+ {w:"grateful",d:"thankful",s:"We are ~ for the help."},
+ {w:"immediately",d:"at once, without delay",s:"Call me ~."},
+ {w:"independent",d:"not controlled by others",s:"She runs an ~ shop."},
+ {w:"interrupt",d:"to break into someone's speech",s:"Try not to ~."},
+ {w:"knowledgeable",d:"well informed",s:"He is ~ about trains."},
+ {w:"marriage",d:"the union of two spouses",s:"Their ~ lasted fifty years."},
+ {w:"neighborhood",d:"a district and the people in it",s:"The ~ held a picnic."},
+ {w:"occasionally",d:"now and then",s:"We ~ eat out."},
+ {w:"parallel",d:"side by side, never meeting",s:"Draw two ~ lines."},
+ {w:"performance",d:"an act done for an audience",s:"The ~ sold out."},
+ {w:"permanent",d:"lasting indefinitely",s:"Use ~ ink."},
+ {w:"personnel",d:"the people employed somewhere",s:"~ meet at nine."},
+ {w:"possession",d:"something owned",s:"The watch is his prized ~."},
+ {w:"preferred",d:"liked better than another",s:"Window seats are ~."},
+ {w:"pronunciation",d:"the way a word is said",s:"Check the ~ in the entry."},
+ {w:"realize",d:"to become aware of",s:"I didn't ~ the time."},
+ {w:"twelfth",d:"next after eleventh",s:"This is her ~ attempt."},
+ {w:"recognize",d:"to identify from before",s:"I ~ that tune."},
+ {w:"relevant",d:"closely connected to the matter",s:"Only ~ facts, please."},
+ {w:"responsibility",d:"a duty one is accountable for",s:"The ~ fell to her."},
+ {w:"schedule",d:"a plan of times and events",s:"The ~ shifted again."},
+ {w:"secretary",d:"a person who handles office work",s:"Ask the ~ to book it."},
+ {w:"sincerely",d:"in an honest, genuine way",s:"He apologized ~."},
+ {w:"successful",d:"achieving the aim",s:"The launch was ~."},
+ {w:"sufficient",d:"enough for the purpose",s:"One coat is ~."},
+ {w:"tendency",d:"an inclination to act a certain way",s:"He has a ~ to rush."},
+ {w:"acknowledge",d:"to admit or accept the truth of",s:"Please ~ receipt of this."},
+ {w:"unfortunately",d:"sadly; by bad luck",s:"~, the shop had closed."},
+ {w:"until",d:"up to the time that",s:"Wait ~ the bell rings."},
+ {w:"usually",d:"in most cases",s:"We ~ walk to work."},
+ {w:"villain",d:"a wicked character",s:"Every story needs a ~."},
+]);
+
+band("Adept", "#f2c45a", "Double letters, split hairs, and quiet endings.", [
+ {w:"accommodate",d:"to provide room for; to adapt",s:"The hall can ~ four hundred."},
+ {w:"conscience",d:"the inner sense of right and wrong",s:"His ~ kept him awake."},
+ {w:"conscientious",d:"careful and thorough in one's work",s:"He is a ~ note-taker."},
+ {w:"conscious",d:"awake and aware",s:"She stayed ~ throughout."},
+ {w:"maintenance",d:"work that keeps something in repair",s:"The lift is closed for ~."},
+ {w:"privilege",d:"a special right or advantage",s:"It was a ~ to hear her play."},
+ {w:"recommend",d:"to suggest as good",s:"I ~ the soup."},
+ {w:"occurrence",d:"an event; something that happens",s:"Snow in April is a rare ~."},
+ {w:"harass",d:"to pressure or bother repeatedly",s:"Reporters continued to ~ him."},
+ {w:"liaison",d:"a link between two groups",s:"She serves as ~ between teams."},
+ {w:"millennium",d:"a period of a thousand years",s:"The abbey stood a ~."},
+ {w:"perseverance",d:"steady effort despite difficulty",s:"Her ~ paid off."},
+ {w:"questionnaire",d:"a printed set of questions",s:"Complete the ~ before leaving."},
+ {w:"acquaintance",d:"a person you know slightly",s:"He is an ~ from work."},
+ {w:"acquire",d:"to gain or obtain",s:"They hope to ~ the land."},
+ {w:"broccoli",d:"a green vegetable with dense heads",s:"Steam the ~ four minutes."},
+ {w:"cemetery",d:"a burial ground",s:"Old oaks shaded the ~."},
+ {w:"committee",d:"a group appointed to a task",s:"The ~ meets Thursdays."},
+ {w:"dilemma",d:"a hard choice between options",s:"She faced a real ~."},
+ {w:"exhilarate",d:"to make lively and cheerful",s:"Cold air can ~ you."},
+ {w:"fluorescent",d:"glowing when energized",s:"A ~ tube buzzed overhead."},
+ {w:"gauge",d:"a measuring instrument; to estimate",s:"Check the fuel ~."},
+ {w:"hierarchy",d:"a ranking by level",s:"The office had a strict ~."},
+ {w:"indispensable",d:"absolutely necessary",s:"A map was ~ on the hike."},
+ {w:"inoculate",d:"to protect by introducing a vaccine",s:"The clinic will ~ the herd."},
+ {w:"memento",d:"an object kept as a reminder",s:"She kept the shell as a ~."},
+ {w:"noticeable",d:"easily seen or detected",s:"A ~ crack ran up the wall."},
+ {w:"pastime",d:"an activity done for pleasure",s:"Fishing is his favorite ~."},
+ {w:"playwright",d:"a person who writes plays",s:"The ~ watched from the balcony."},
+ {w:"publicly",d:"in a way open to everyone",s:"He apologized ~."},
+ {w:"threshold",d:"a doorway strip; a starting point",s:"She paused at the ~."},
+ {w:"vacuum",d:"a space empty of matter",s:"Please ~ the hallway."},
+ {w:"abundance",d:"a very large quantity",s:"There was an ~ of fruit."},
+ {w:"adolescent",d:"a young person growing into adulthood",s:"The ~ shot up a foot."},
+ {w:"aggressive",d:"forceful or hostile",s:"An ~ gull took the chip."},
+ {w:"allegiance",d:"loyalty to a person or cause",s:"They swore ~."},
+ {w:"amateur",d:"doing something for love, not pay",s:"He is an ~ astronomer."},
+ {w:"ambiguous",d:"open to more than one meaning",s:"The note was ~."},
+ {w:"analysis",d:"a detailed examination",s:"The ~ took a week."},
+ {w:"apparent",d:"clearly visible or obvious",s:"The flaw became ~."},
+ {w:"appropriate",d:"suitable for the occasion",s:"Wear ~ shoes."},
+ {w:"assassin",d:"a person who murders a public figure",s:"The ~ was caught."},
+ {w:"bizarre",d:"very strange",s:"A ~ shape loomed ahead."},
+ {w:"calligraphy",d:"decorative handwriting",s:"She studied ~."},
+ {w:"colleague",d:"a person you work with",s:"My ~ handled the call."},
+ {w:"commemorate",d:"to honor the memory of",s:"The plaque will ~ the flight."},
+ {w:"competent",d:"having the needed skill",s:"A ~ mechanic fixed it."},
+ {w:"correspondence",d:"letters exchanged; agreement between things",s:"Their ~ filled a box."},
+ {w:"criticism",d:"the analysis or disapproval of something",s:"He took the ~ well."},
+ {w:"curiosity",d:"a desire to know",s:"~ led her down the path."},
+ {w:"deceive",d:"to mislead deliberately",s:"Don't let looks ~ you."},
+ {w:"descendant",d:"a person descended from another",s:"He is a ~ of settlers."},
+ {w:"desperate",d:"having lost hope; reckless",s:"A ~ plan, but it worked."},
+ {w:"deteriorate",d:"to grow worse",s:"The roof began to ~."},
+ {w:"discipline",d:"training and control; a field of study",s:"Running takes ~."},
+ {w:"eligible",d:"qualified to be chosen",s:"Only members are ~."},
+ {w:"eliminate",d:"to remove completely",s:"~ the weakest option."},
+ {w:"embarrassment",d:"the feeling of awkward shame",s:"His face flushed with ~."},
+ {w:"exceed",d:"to go beyond a limit",s:"Do not ~ the speed."},
+ {w:"exercise",d:"physical activity; to use a power",s:"Daily ~ helps."},
+ {w:"guidance",d:"advice or direction",s:"She offered gentle ~."},
+ {w:"hypocrisy",d:"pretending to have virtues you lack",s:"He hated ~."},
+ {w:"ignorance",d:"a lack of knowledge",s:"~ is no excuse."},
+ {w:"immediate",d:"happening at once",s:"An ~ reply came."},
+ {w:"inevitable",d:"certain to happen",s:"The change was ~."},
+ {w:"intelligence",d:"the ability to learn and reason",s:"Crows show real ~."},
+ {w:"interference",d:"unwanted involvement or noise",s:"Radio ~ ruined the call."},
+ {w:"irresistible",d:"too tempting to refuse",s:"The smell was ~."},
+ {w:"jeopardy",d:"danger of loss or harm",s:"The bridge put them in ~."},
+ {w:"legitimate",d:"lawful or genuine",s:"A ~ concern was raised."},
+ {w:"maneuver",d:"a skillful movement",s:"A tight ~ into the bay."},
+ {w:"negligence",d:"failure to take proper care",s:"The fire was blamed on ~."},
+ {w:"occurred",d:"happened",s:"The fault ~ at dawn."},
+ {w:"parliament",d:"a national law-making assembly",s:"~ debated for hours."},
+ {w:"perceive",d:"to become aware of; to interpret",s:"We ~ depth with two eyes."},
+ {w:"persistent",d:"continuing firmly",s:"A ~ knock at the door."},
+ {w:"prejudice",d:"an unfair opinion formed in advance",s:"~ blinded the panel."},
+ {w:"resilience",d:"the ability to recover quickly",s:"Her ~ impressed them."},
+ {w:"rhythm",d:"a regular repeated pattern of sound",s:"Clap to the ~."},
+ {w:"sergeant",d:"a rank in the army or police",s:"The ~ called the roll."},
+ {w:"souvenir",d:"a keepsake from a place",s:"She bought a tiny ~ bell."},
+ {w:"succeed",d:"to achieve an aim; to follow after",s:"They will ~ this time."},
+ {w:"tyranny",d:"cruel and oppressive rule",s:"The play condemns ~."},
+ {w:"vengeance",d:"punishment inflicted in retaliation",s:"He swore ~."},
+ {w:"withhold",d:"to refuse to give",s:"They may ~ the funds."},
+]);
+
+band("Savant", "#c58bff", "Borrowed words, mostly French, all elegant landmines.", [
+ {w:"bureaucracy",d:"government by many offices and officials",s:"The permit was lost in the ~."},
+ {w:"camaraderie",d:"warm friendship within a group",s:"The crew's ~ carried them."},
+ {w:"chauffeur",d:"a person employed to drive a car",s:"The ~ waited by the curb."},
+ {w:"connoisseur",d:"an expert judge of taste",s:"She is a ~ of old maps."},
+ {w:"entrepreneur",d:"a person who starts a business",s:"The young ~ raised a fund."},
+ {w:"idiosyncrasy",d:"a peculiar habit of one person",s:"Humming while reading was his ~."},
+ {w:"kaleidoscope",d:"a mirrored tube of shifting patterns",s:"The market was a ~ of color."},
+ {w:"minuscule",d:"extremely tiny",s:"The print was ~."},
+ {w:"obsequious",d:"fawning; trying too hard to please",s:"The clerk's ~ smile grated."},
+ {w:"paraphernalia",d:"the assorted gear for an activity",s:"Camping ~ filled the trunk."},
+ {w:"pharaoh",d:"a ruler of ancient Egypt",s:"The ~ was buried with gold."},
+ {w:"plagiarism",d:"passing off another's work as yours",s:"The essay was flagged for ~."},
+ {w:"pneumonia",d:"an infection inflaming the lungs",s:"He was hospitalized with ~."},
+ {w:"prerogative",d:"a right belonging to someone",s:"Changing her mind is her ~."},
+ {w:"quixotic",d:"idealistic and wildly impractical",s:"His plan was noble but ~."},
+ {w:"renaissance",d:"a revival or rebirth",s:"The district enjoyed a ~."},
+ {w:"sacrilegious",d:"disrespecting something sacred",s:"Chatter in the chapel felt ~."},
+ {w:"silhouette",d:"a dark outline against light",s:"His ~ filled the doorway."},
+ {w:"supersede",d:"to replace with something newer",s:"New rules ~ the old."},
+ {w:"surveillance",d:"close watch kept over someone",s:"The lot was under ~."},
+ {w:"ubiquitous",d:"seeming to be everywhere",s:"Coffee shops are ~ here."},
+ {w:"vacillate",d:"to waver between choices",s:"Don't ~ — pick one."},
+ {w:"zephyr",d:"a soft gentle breeze",s:"A ~ stirred the curtains."},
+ {w:"bourgeois",d:"middle-class; conventional in taste",s:"He mocked their ~ taste."},
+ {w:"chrysanthemum",d:"a showy autumn flower",s:"A yellow ~ bloomed by the gate."},
+ {w:"hemorrhage",d:"a heavy escape of blood; a rapid loss",s:"The firm began to ~ money."},
+ {w:"mischievous",d:"playfully causing trouble",s:"A ~ grin crossed his face."},
+ {w:"rendezvous",d:"an arranged meeting or place",s:"They set a ~ at the bridge."},
+ {w:"juxtaposition",d:"placing two things side by side",s:"The ~ was striking."},
+ {w:"aesthetic",d:"concerned with beauty",s:"The room has a spare ~."},
+ {w:"apparatus",d:"equipment for a particular use",s:"The lab ~ hissed."},
+ {w:"archipelago",d:"a chain or cluster of islands",s:"They sailed the ~."},
+ {w:"camouflage",d:"disguise that blends with surroundings",s:"The moth's ~ is perfect."},
+ {w:"belligerent",d:"hostile and aggressive",s:"A ~ crowd gathered."},
+ {w:"boutique",d:"a small fashionable shop",s:"A ~ opened on the corner."},
+ {w:"brochure",d:"a small informative booklet",s:"Take a ~ at the desk."},
+ {w:"bouquet",d:"a bunch of cut flowers",s:"He handed her a ~."},
+ {w:"cliche",d:"an overused phrase or idea",s:"Avoid that tired ~."},
+ {w:"colossal",d:"enormous",s:"A ~ wave broke offshore."},
+ {w:"chandelier",d:"a hanging branched light fixture",s:"A crystal ~ lit the hall."},
+ {w:"croissant",d:"a flaky crescent-shaped pastry",s:"She ordered a warm ~."},
+ {w:"debris",d:"scattered broken remains",s:"Storm ~ blocked the road."},
+ {w:"debut",d:"a first public appearance",s:"The band's ~ sold out."},
+ {w:"decadent",d:"luxurious to the point of excess",s:"A ~ chocolate cake."},
+ {w:"delicatessen",d:"a shop selling fine prepared foods",s:"The ~ slices its own ham."},
+ {w:"eccentric",d:"unconventional and slightly odd",s:"Their ~ aunt kept goats."},
+ {w:"echelon",d:"a level or rank in an organization",s:"He reached the top ~."},
+ {w:"elite",d:"a select superior group",s:"An ~ squad was sent."},
+ {w:"ennui",d:"listless boredom",s:"A summer of pure ~."},
+ {w:"espionage",d:"the practice of spying",s:"The case involved ~."},
+ {w:"etiquette",d:"the rules of polite behavior",s:"Table ~ was strict."},
+ {w:"euphemism",d:"a mild word used for a harsh one",s:"'Let go' is a ~."},
+ {w:"exquisite",d:"extremely beautiful and delicate",s:"An ~ silver clasp."},
+ {w:"facade",d:"the front of a building; a false front",s:"The ~ was newly painted."},
+ {w:"fatigue",d:"extreme tiredness",s:"~ set in by mile twenty."},
+ {w:"finesse",d:"skillful delicacy of handling",s:"He parked with ~."},
+ {w:"gauche",d:"socially awkward; tactless",s:"The remark was ~."},
+ {w:"genre",d:"a category of art or writing",s:"Horror is her favorite ~."},
+ {w:"gourmet",d:"a connoisseur of fine food",s:"A ~ meal was served."},
+ {w:"grandeur",d:"impressive greatness",s:"The hall's ~ hushed them."},
+ {w:"guillotine",d:"a machine for beheading; a paper cutter",s:"The ~ trimmed the sheets."},
+ {w:"entourage",d:"the group attending an important person",s:"Her ~ filled the lobby."},
+ {w:"iridescent",d:"showing rainbow colors that shift",s:"An ~ beetle shell."},
+ {w:"lieutenant",d:"a deputy or junior officer",s:"The ~ took command."},
+ {w:"macabre",d:"disturbing, concerned with death",s:"A ~ little tale."},
+ {w:"masquerade",d:"a costumed ball; a false show",s:"They met at a ~."},
+ {w:"mediocre",d:"only average; not very good",s:"A ~ performance."},
+ {w:"naive",d:"innocently simple; lacking experience",s:"That was a ~ hope."},
+ {w:"nonchalant",d:"casually calm and unconcerned",s:"He gave a ~ wave."},
+ {w:"nuance",d:"a subtle shade of meaning",s:"Every ~ mattered."},
+ {w:"panache",d:"flamboyant confidence of style",s:"She writes with ~."},
+ {w:"penchant",d:"a strong liking for something",s:"A ~ for old records."},
+ {w:"physique",d:"the form of a person's body",s:"A swimmer's ~."},
+ {w:"plateau",d:"a level high area; a period of no change",s:"Sales hit a ~."},
+ {w:"protege",d:"a person guided by a mentor",s:"She is his ~."},
+ {w:"repertoire",d:"the works a performer can present",s:"A wide ~ of songs."},
+ {w:"restaurateur",d:"a person who runs a restaurant",s:"The ~ greeted us."},
+ {w:"reservoir",d:"a store of water or supply",s:"The ~ ran low."},
+ {w:"silhouetted",d:"shown as a dark outline",s:"Trees stood ~ at dusk."},
+ {w:"soliloquy",d:"a speech made alone on stage",s:"His ~ closed the act."},
+ {w:"sommelier",d:"a wine steward",s:"The ~ suggested a red."},
+ {w:"marquee",d:"a canopy or sign over a theater entrance",s:"Her name lit the ~."},
+ {w:"tableau",d:"a striking motionless scene",s:"They froze into a ~."},
+ {w:"vignette",d:"a brief evocative scene or description",s:"The novel opens with a ~."},
+ {w:"virtuoso",d:"a highly skilled performer",s:"A ~ on the cello."},
+]);
+
+band("Virtuoso", "#ff9d6e", "The vocabulary of laboratories and law courts.", [
+ {w:"anesthesia",d:"loss of sensation induced for surgery",s:"He woke from ~ slowly."},
+ {w:"antihistamine",d:"a drug that counters allergic reactions",s:"An ~ eased the rash."},
+ {w:"asphyxiation",d:"death or harm from lack of oxygen",s:"The report ruled out ~."},
+ {w:"bacterium",d:"a single microscopic organism",s:"One ~ divided rapidly."},
+ {w:"barometer",d:"an instrument measuring air pressure",s:"The ~ fell all night."},
+ {w:"bioluminescence",d:"light produced by living organisms",s:"The bay glowed with ~."},
+ {w:"cartilage",d:"firm flexible tissue in the body",s:"The ~ in his knee wore thin."},
+ {w:"catalyst",d:"something that speeds a reaction or change",s:"The strike was a ~."},
+ {w:"centrifuge",d:"a machine that spins to separate substances",s:"Load the ~ evenly."},
+ {w:"chlorophyll",d:"the green pigment in plants",s:"~ absorbs sunlight."},
+ {w:"circumference",d:"the distance around a circle",s:"Measure the ~ of the trunk."},
+ {w:"coefficient",d:"a multiplying factor in an expression",s:"Solve for the ~."},
+ {w:"colloquial",d:"used in ordinary conversation",s:"That phrase is ~."},
+ {w:"combustion",d:"the process of burning",s:"~ engines need fuel and air."},
+ {w:"condensation",d:"water forming from vapor",s:"~ beaded on the glass."},
+ {w:"crustacean",d:"a shelled animal such as a crab",s:"The tide pool held a ~."},
+ {w:"cylindrical",d:"shaped like a cylinder",s:"A ~ tank stood by the shed."},
+ {w:"deficiency",d:"a lack or shortage",s:"An iron ~ caused fatigue."},
+ {w:"diaphragm",d:"the muscle below the lungs",s:"Breathe from the ~."},
+ {w:"dissonance",d:"harsh discord; a clash",s:"The chord ended in ~."},
+ {w:"electrolyte",d:"a substance that conducts ions in solution",s:"Sweat depletes ~ levels."},
+ {w:"epidemiology",d:"the study of how disease spreads",s:"She teaches ~."},
+ {w:"equilibrium",d:"a state of balance",s:"The market found ~."},
+ {w:"escarpment",d:"a long steep slope at a plateau's edge",s:"They camped below the ~."},
+ {w:"exponential",d:"increasing ever more rapidly",s:"The growth was ~."},
+ {w:"filament",d:"a fine thread or wire",s:"The bulb's ~ burned out."},
+ {w:"fulcrum",d:"the point a lever pivots on",s:"Move the ~ closer."},
+ {w:"gaseous",d:"in the form of gas",s:"The ~ layer cooled."},
+ {w:"gigantism",d:"abnormal excessive growth",s:"The specimen showed ~."},
+ {w:"gyroscope",d:"a spinning device that resists tilting",s:"A ~ steadies the camera."},
+ {w:"corpuscle",d:"a small body or blood cell",s:"Each red ~ carries oxygen."},
+ {w:"homogeneous",d:"uniform throughout",s:"Stir until ~."},
+ {w:"hydraulic",d:"operated by liquid pressure",s:"The ~ lift groaned."},
+ {w:"hypothesis",d:"a proposed explanation to be tested",s:"Her ~ held up."},
+ {w:"incandescent",d:"glowing with heat; brilliant",s:"An ~ filament flickered."},
+ {w:"inertia",d:"resistance to change in motion",s:"~ carried the cart on."},
+ {w:"inflammation",d:"redness and swelling from injury",s:"~ reduced by morning."},
+ {w:"iridium",d:"a very hard dense metallic element",s:"The layer contained ~."},
+ {w:"jurisprudence",d:"the theory or philosophy of law",s:"He lectures on ~."},
+ {w:"lymphatic",d:"relating to the system draining body fluid",s:"The ~ vessels swelled."},
+ {w:"latitude",d:"distance north or south of the equator",s:"Note the ~ on the chart."},
+ {w:"litigation",d:"the process of taking legal action",s:"~ dragged on for years."},
+ {w:"logarithm",d:"the power to which a base is raised",s:"Take the ~ of both sides."},
+ {w:"luminescence",d:"light emitted without heat",s:"The dial showed faint ~."},
+ {w:"malleable",d:"able to be hammered into shape",s:"Gold is highly ~."},
+ {w:"membrane",d:"a thin pliable sheet of tissue",s:"The ~ tore easily."},
+ {w:"metamorphosis",d:"a complete change of form",s:"The larva's ~ took days."},
+ {w:"meteorology",d:"the study of weather",s:"He studied ~ at sea."},
+ {w:"molecule",d:"the smallest unit of a compound",s:"A water ~ has three atoms."},
+ {w:"nomenclature",d:"a system of naming",s:"Botanical ~ is precise."},
+ {w:"nucleus",d:"the central core of an atom or cell",s:"The ~ holds the charge."},
+ {w:"oscillate",d:"to swing back and forth",s:"The needle began to ~."},
+ {w:"paleontology",d:"the study of fossils",s:"~ opened the field."},
+ {w:"parasitic",d:"living off another organism",s:"A ~ vine choked the oak."},
+ {w:"pendulum",d:"a weight swinging from a fixed point",s:"The ~ slowed to a stop."},
+ {w:"perimeter",d:"the boundary of an area",s:"Guards walked the ~."},
+ {w:"pharmaceutical",d:"relating to medicinal drugs",s:"A ~ firm funded it."},
+ {w:"phenomenon",d:"a remarkable observed fact",s:"The aurora is a ~."},
+ {w:"photosynthesis",d:"how plants make food from light",s:"Leaves perform ~."},
+ {w:"physiology",d:"the study of how bodies function",s:"She lectures in ~."},
+ {w:"precipitation",d:"rain, snow, or hail falling",s:"Heavy ~ is expected."},
+ {w:"proboscis",d:"a long flexible snout or mouthpart",s:"The moth uncurled its ~."},
+ {w:"quotient",d:"the result of a division",s:"Round the ~ to two places."},
+ {w:"reciprocal",d:"given in return; an inverse value",s:"Take the ~ of the fraction."},
+ {w:"refraction",d:"the bending of light through a medium",s:"~ splits the beam."},
+ {w:"sedimentary",d:"formed from settled particles",s:"~ rock lined the cliff."},
+ {w:"seismograph",d:"an instrument recording earthquakes",s:"The ~ jumped at dawn."},
+ {w:"solstice",d:"the longest or shortest day of the year",s:"They gathered at the ~."},
+ {w:"spectroscopy",d:"the study of light spectra",s:"~ revealed the gas."},
+ {w:"stalactite",d:"a mineral spike hanging from a cave roof",s:"A ~ dripped above them."},
+ {w:"subpoena",d:"a legal order to appear in court",s:"He was served a ~."},
+ {w:"symbiosis",d:"a close relationship between two species",s:"Their ~ benefits both."},
+ {w:"synapse",d:"the junction between two nerve cells",s:"Each ~ fired in turn."},
+ {w:"tectonic",d:"relating to the earth's crust plates",s:"~ shifts built the range."},
+ {w:"thermodynamics",d:"the science of heat and energy",s:"~ forbids that engine."},
+ {w:"trajectory",d:"the curved path of a moving object",s:"Plot the ~ of the shot."},
+ {w:"tuberculosis",d:"an infectious lung disease",s:"The ward treated ~."},
+ {w:"turbulence",d:"violent irregular motion of air or water",s:"~ shook the cabin."},
+ {w:"ultraviolet",d:"light beyond the violet end of the spectrum",s:"~ rays cause burns."},
+ {w:"vertebrae",d:"the bones of the spine",s:"Two ~ were fractured."},
+ {w:"viscosity",d:"a fluid's resistance to flowing",s:"Cold raises the oil's ~."},
+]);
+
+band("Oracle", "#ffd166", "Literary words that reward a good ear and punish a lazy one.", [
+ {w:"abnegation",d:"the renouncing of a comfort or right",s:"His ~ of luxury was total."},
+ {w:"abstemious",d:"sparing in eating and drinking",s:"An ~ old scholar."},
+ {w:"acquiesce",d:"to accept reluctantly without protest",s:"She chose to ~."},
+ {w:"admonition",d:"a firm warning or reproof",s:"He ignored the ~."},
+ {w:"alacrity",d:"brisk cheerful readiness",s:"He agreed with ~."},
+ {w:"anachronism",d:"something out of its proper time",s:"The clock is an ~."},
+ {w:"antediluvian",d:"extremely old; before the flood",s:"An ~ filing system."},
+ {w:"apocryphal",d:"widely told but probably untrue",s:"The tale is ~."},
+ {w:"approbation",d:"formal approval or praise",s:"He sought her ~."},
+ {w:"assiduous",d:"showing great care and persistence",s:"An ~ researcher."},
+ {w:"beleaguered",d:"besieged; beset with difficulties",s:"The ~ crew held on."},
+ {w:"bellicose",d:"eager to fight",s:"A ~ speech followed."},
+ {w:"blandishment",d:"flattery meant to persuade",s:"He resisted every ~."},
+ {w:"cacophony",d:"a harsh discordant mixture of sounds",s:"A ~ of horns."},
+ {w:"circumlocution",d:"the use of many words to avoid a point",s:"Cut the ~."},
+ {w:"clandestine",d:"kept secret, often improperly",s:"A ~ meeting at dusk."},
+ {w:"coalesce",d:"to come together and form one mass",s:"The groups will ~."},
+ {w:"cognizant",d:"aware of something",s:"He was ~ of the risk."},
+ {w:"commiserate",d:"to express sympathy",s:"They met to ~."},
+ {w:"conflagration",d:"a large destructive fire",s:"The ~ took the block."},
+ {w:"contumacious",d:"stubbornly disobedient to authority",s:"A ~ witness."},
+ {w:"corroborate",d:"to confirm with evidence",s:"Two logs ~ the story."},
+ {w:"deleterious",d:"causing harm or damage",s:"A ~ effect on sleep."},
+ {w:"demagogue",d:"a leader who exploits popular fears",s:"The ~ drew crowds."},
+ {w:"desultory",d:"lacking purpose; jumping about",s:"A ~ conversation."},
+ {w:"diaphanous",d:"light, delicate and translucent",s:"A ~ curtain stirred."},
+ {w:"disparage",d:"to belittle or speak slightingly of",s:"Don't ~ their work."},
+ {w:"ebullient",d:"cheerful and full of energy",s:"An ~ welcome."},
+ {w:"effervescent",d:"bubbling; vivacious",s:"An ~ host greeted us."},
+ {w:"egregious",d:"outstandingly bad",s:"An ~ error slipped through."},
+ {w:"elucidate",d:"to make clear; to explain",s:"Please ~ the second point."},
+ {w:"ephemeral",d:"lasting a very short time",s:"Fame can be ~."},
+ {w:"equanimity",d:"calmness under strain",s:"She bore it with ~."},
+ {w:"equivocate",d:"to speak ambiguously to mislead",s:"Do not ~ with me."},
+ {w:"esoteric",d:"understood by only a few",s:"An ~ branch of math."},
+ {w:"euphonious",d:"pleasing to the ear",s:"A ~ name."},
+ {w:"excoriate",d:"to criticize severely; to strip skin",s:"Critics ~ the film."},
+ {w:"expurgate",d:"to remove objectionable matter from a text",s:"Editors ~ the letters."},
+ {w:"fastidious",d:"very attentive to detail; hard to please",s:"A ~ housekeeper."},
+ {w:"garrulous",d:"excessively talkative",s:"A ~ neighbor cornered him."},
+ {w:"grandiloquent",d:"pompous in language",s:"A ~ toast."},
+ {w:"harangue",d:"a lengthy aggressive speech",s:"He delivered a ~."},
+ {w:"iconoclast",d:"one who attacks cherished beliefs",s:"She was an ~."},
+ {w:"ignominious",d:"deserving public shame",s:"An ~ retreat."},
+ {w:"imbroglio",d:"a confused and embarrassing situation",s:"The ~ cost him the post."},
+ {w:"impecunious",d:"having little money",s:"An ~ young poet."},
+ {w:"inchoate",d:"just begun and not fully formed",s:"An ~ plan."},
+ {w:"incorrigible",d:"impossible to correct or reform",s:"An ~ prankster."},
+ {w:"indefatigable",d:"never tiring",s:"An ~ campaigner."},
+ {w:"ineffable",d:"too great to be expressed in words",s:"An ~ sadness."},
+ {w:"ingenuous",d:"innocent and unsuspecting",s:"An ~ smile."},
+ {w:"inimitable",d:"impossible to imitate",s:"Her ~ style."},
+ {w:"insidious",d:"proceeding harmfully but unnoticed",s:"An ~ rot in the beam."},
+ {w:"intransigent",d:"refusing to compromise",s:"An ~ minority blocked it."},
+ {w:"inveigle",d:"to persuade by flattery or trickery",s:"He tried to ~ his way in."},
+ {w:"irascible",d:"easily angered",s:"An ~ old captain."},
+ {w:"lachrymose",d:"tearful or given to weeping",s:"A ~ farewell."},
+ {w:"largesse",d:"generosity in giving",s:"Public ~ funded the wing."},
+ {w:"licentious",d:"lacking moral restraint",s:"A ~ court."},
+ {w:"machination",d:"a scheming plot",s:"Their ~ came to light."},
+ {w:"magnanimous",d:"generous, especially toward a rival",s:"A ~ concession."},
+ {w:"mellifluous",d:"sweet and smooth to hear",s:"A ~ voice."},
+ {w:"mendacious",d:"untruthful",s:"A ~ account of the night."},
+ {w:"nefarious",d:"wicked and criminal",s:"A ~ scheme."},
+ {w:"obfuscate",d:"to make deliberately unclear",s:"The report seemed to ~."},
+ {w:"obstreperous",d:"noisy and difficult to control",s:"An ~ crowd."},
+ {w:"panegyric",d:"a speech of high praise",s:"He wrote a ~."},
+ {w:"pellucid",d:"transparently clear",s:"~ mountain water."},
+ {w:"perfidious",d:"deceitful and untrustworthy",s:"A ~ ally."},
+ {w:"perspicacious",d:"having keen insight",s:"A ~ reader."},
+ {w:"pertinacious",d:"holding firmly to an opinion",s:"A ~ campaigner."},
+ {w:"phlegmatic",d:"calm and unemotional",s:"A ~ goalkeeper."},
+ {w:"precocious",d:"developed earlier than usual",s:"A ~ young pianist."},
+ {w:"prevaricate",d:"to avoid telling the truth directly",s:"Stop trying to ~."},
+ {w:"pusillanimous",d:"timid and cowardly",s:"A ~ retreat."},
+ {w:"quiescent",d:"in a state of inactivity",s:"The volcano stayed ~."},
+ {w:"recalcitrant",d:"stubbornly resistant to authority",s:"A ~ mule."},
+ {w:"recondite",d:"obscure and hard to understand",s:"A ~ footnote."},
+ {w:"refractory",d:"resisting control or treatment",s:"A ~ fever."},
+ {w:"reprehensible",d:"deserving strong condemnation",s:"~ conduct."},
+ {w:"sagacious",d:"showing keen judgment",s:"A ~ old lawyer."},
+ {w:"salubrious",d:"health-giving; pleasant",s:"A ~ sea air."},
+ {w:"sanguine",d:"cheerfully optimistic",s:"He stayed ~ about it."},
+ {w:"soporific",d:"tending to cause sleep",s:"A ~ lecture."},
+ {w:"specious",d:"seeming right but actually wrong",s:"A ~ argument."},
+ {w:"surreptitious",d:"done secretly to avoid notice",s:"A ~ glance."},
+ {w:"temerity",d:"excessive boldness",s:"He had the ~ to ask."},
+ {w:"truculent",d:"eager to argue or fight",s:"A ~ reply."},
+ {w:"vituperative",d:"bitterly abusive in language",s:"A ~ review."},
+ {w:"voracious",d:"wanting great quantities; ravenous",s:"A ~ reader."},
+]);
+
+band("Luminary", "#f2708a", "Championship stumpers. Ask for the definition.", [
+ {w:"appoggiatura",d:"a grace note that delays the main note",s:"The singer added an ~."},
+ {w:"autochthonous",d:"originating where it is found; native",s:"The ferns are ~ here."},
+ {w:"chiaroscuro",d:"the artistic use of strong light and shade",s:"His portraits use ~."},
+ {w:"denouement",d:"the final unraveling of a plot",s:"The ~ ties every thread."},
+ {w:"eleemosynary",d:"relating to charity or almsgiving",s:"A purely ~ trust."},
+ {w:"guerdon",d:"a reward or recompense",s:"He asked no ~."},
+ {w:"insouciant",d:"casually unconcerned",s:"She gave an ~ shrug."},
+ {w:"laodicean",d:"lukewarm or indifferent in belief",s:"His ~ attitude annoyed them."},
+ {w:"logorrhea",d:"excessive incoherent talkativeness",s:"The talk became ~."},
+ {w:"milieu",d:"a person's social surroundings",s:"She thrived in that ~."},
+ {w:"mnemonic",d:"a device that aids memory",s:"Use a ~ for the order."},
+ {w:"onomatopoeia",d:"a word imitating the sound it names",s:"Buzz is ~."},
+ {w:"oubliette",d:"a dungeon reached only from above",s:"The keep hid an ~."},
+ {w:"prestidigitation",d:"sleight of hand; conjuring",s:"His ~ fooled the front row."},
+ {w:"prosciutto",d:"a dry-cured Italian ham",s:"Wrap the melon in ~."},
+ {w:"psoriasis",d:"a skin condition of red scaly patches",s:"Cold worsens her ~."},
+ {w:"pterodactyl",d:"an extinct flying reptile",s:"A ~ hung in the atrium."},
+ {w:"rambunctious",d:"boisterous and hard to control",s:"A ~ crowd filled the gym."},
+ {w:"sarcophagus",d:"a stone coffin, often carved",s:"The ~ bore faded paint."},
+ {w:"schadenfreude",d:"pleasure at another's misfortune",s:"He felt a twinge of ~."},
+ {w:"scherzo",d:"a lively playful piece of music",s:"They closed with a ~."},
+ {w:"serendipity",d:"the luck of finding good things by chance",s:"Their meeting was pure ~."},
+ {w:"sobriquet",d:"an affectionate nickname",s:"The city earned the ~."},
+ {w:"staphylococci",d:"round bacteria growing in clusters",s:"The culture grew ~."},
+ {w:"succedaneum",d:"a substitute, especially in medicine",s:"Chicory served as a coffee ~."},
+ {w:"synecdoche",d:"using a part to mean the whole",s:"Calling a car 'wheels' is ~."},
+ {w:"tchotchke",d:"a small trinket or knickknack",s:"One dusty ~ sat on the shelf."},
+ {w:"xanthosis",d:"a yellowish discoloration of the skin",s:"He noted mild ~."},
+ {w:"zeitgeist",d:"the defining spirit of an era",s:"The song caught the ~."},
+ {w:"myrrh",d:"a fragrant resin used in incense",s:"The chest held gold and ~."},
+ {w:"abecedarian",d:"a beginner; arranged alphabetically",s:"An ~ list of terms."},
+ {w:"apotheosis",d:"the highest point of development",s:"The ~ of the form."},
+ {w:"bibliophile",d:"a lover of books",s:"A ~ haunted the stalls."},
+ {w:"bougainvillea",d:"a climbing plant with bright bracts",s:"~ covered the wall."},
+ {w:"cappuccino",d:"espresso with steamed milk foam",s:"He ordered a ~."},
+ {w:"catamaran",d:"a boat with twin parallel hulls",s:"The ~ skimmed the bay."},
+ {w:"chinoiserie",d:"European art in a Chinese style",s:"The room was full of ~."},
+ {w:"chrysalis",d:"the hard case of a pupating butterfly",s:"The ~ split open."},
+ {w:"convalescence",d:"the period of recovery after illness",s:"A slow ~ followed."},
+ {w:"crescendo",d:"a gradual increase in loudness",s:"The strings built to a ~."},
+ {w:"cynosure",d:"a center of attention",s:"She was the ~ of the room."},
+ {w:"dachshund",d:"a short-legged long-bodied dog",s:"A ~ waddled past."},
+ {w:"daguerreotype",d:"an early photograph on a silver plate",s:"A ~ of his grandfather."},
+ {w:"diphtheria",d:"a serious bacterial throat infection",s:"~ closed the school."},
+ {w:"dirigible",d:"a steerable airship",s:"A ~ crossed the field."},
+ {w:"vermilion",d:"a brilliant red pigment",s:"~ streaked the sky."},
+ {w:"effluvium",d:"an unpleasant outflow or smell",s:"An ~ rose from the drain."},
+ {w:"epistolary",d:"written in the form of letters",s:"An ~ novel."},
+ {w:"escritoire",d:"a small writing desk",s:"Papers covered the ~."},
+ {w:"eucalyptus",d:"an aromatic Australian tree",s:"~ scented the air."},
+ {w:"exiguous",d:"very small in amount; meager",s:"An ~ ration."},
+ {w:"fandango",d:"a lively Spanish dance",s:"They danced a ~."},
+ {w:"flibbertigibbet",d:"a frivolous, flighty person",s:"That ~ forgot again."},
+ {w:"gesundheit",d:"an exclamation after a sneeze",s:"Someone muttered ~."},
+ {w:"gubernatorial",d:"relating to a governor",s:"The ~ race tightened."},
+ {w:"halcyon",d:"idyllically calm and peaceful",s:"Those ~ summers."},
+ {w:"hegemony",d:"dominance of one group over others",s:"Naval ~ shifted."},
+ {w:"hemorrhagic",d:"marked by heavy bleeding",s:"A ~ fever spread."},
+ {w:"hippopotamus",d:"a large African river mammal",s:"A ~ surfaced slowly."},
+ {w:"hyperbole",d:"deliberate exaggeration for effect",s:"That is pure ~."},
+ {w:"impresario",d:"an organizer of public entertainments",s:"The ~ booked the hall."},
+ {w:"interlocutor",d:"a person taking part in a dialogue",s:"His ~ said nothing."},
+ {w:"jodhpurs",d:"riding trousers tight below the knee",s:"She wore dusty ~."},
+ {w:"kohlrabi",d:"a cabbage with a swollen edible stem",s:"He roasted the ~."},
+ {w:"labyrinthine",d:"like a maze; intricate",s:"~ corridors ran below."},
+ {w:"legerdemain",d:"skillful trickery or sleight of hand",s:"Financial ~ hid the loss."},
+ {w:"maelstrom",d:"a powerful whirlpool; turbulent situation",s:"A ~ of rumor."},
+ {w:"smorgasbord",d:"a buffet of many dishes; a varied mixture",s:"A ~ of desserts."},
+ {w:"mausoleum",d:"a grand tomb building",s:"The ~ stood on the hill."},
+ {w:"meerschaum",d:"a soft white mineral used for pipes",s:"He filled his ~."},
+ {w:"sphygmomanometer",d:"the cuff device that measures blood pressure",s:"He wrapped the ~."},
+ {w:"nonagenarian",d:"a person in their nineties",s:"The ~ still gardened."},
+ {w:"obeisance",d:"a gesture of respect or submission",s:"He made a low ~."},
+ {w:"paradigm",d:"a typical pattern or model",s:"A new ~ took hold."},
+ {w:"paroxysm",d:"a sudden violent attack of emotion",s:"A ~ of coughing."},
+ {w:"pastiche",d:"a work imitating another's style",s:"The song is a ~."},
+ {w:"peripatetic",d:"traveling from place to place",s:"A ~ tutor."},
+ {w:"pharmacopoeia",d:"an official book of medicines",s:"Listed in the ~."},
+ {w:"picayune",d:"of little value; petty",s:"~ objections delayed it."},
+ {w:"pirouette",d:"a spin on one foot in ballet",s:"She held the ~."},
+ {w:"pneumatic",d:"operated by air pressure",s:"A ~ drill hammered on."},
+ {w:"potpourri",d:"a mixture of dried petals; a medley",s:"A bowl of ~ by the door."},
+ {w:"quintessential",d:"the purest example of its kind",s:"The ~ village pub."},
+ {w:"rapprochement",d:"the renewal of friendly relations",s:"A slow ~ began."},
+ {w:"reveille",d:"a morning bugle call to wake troops",s:"~ sounded at five."},
+ {w:"rococo",d:"an ornate eighteenth-century style",s:"A ~ mirror hung there."},
+ {w:"sacerdotal",d:"relating to priests",s:"~ robes filled the aisle."},
+ {w:"sesquipedalian",d:"given to using long words",s:"A ~ essayist."},
+ {w:"soubrette",d:"a pert young woman in a comedy role",s:"She played the ~."},
+ {w:"squirearchy",d:"rule by country landowners",s:"The old ~ faded."},
+ {w:"symbiotic",d:"living together to mutual benefit",s:"A ~ pairing."},
+ {w:"vicissitude",d:"a change of circumstance, usually unwelcome",s:"The ~ of fortune."},
+]);
+
+band("Apotheosis", "#ff5f8f", "The last hundred levels. No mercy, no easy words.", [
+ {w:"acquiescence",d:"silent acceptance without protest",s:"Her ~ surprised them."},
+ {w:"aficionado",d:"an ardent enthusiast",s:"A jazz ~ ran the shop."},
+ {w:"amanuensis",d:"a literary assistant who writes to dictation",s:"His ~ kept the pages."},
+ {w:"anemone",d:"a windflower, or a sea creature",s:"A ~ closed its arms."},
+ {w:"antipodean",d:"relating to the opposite side of the earth",s:"An ~ summer."},
+ {w:"apocalypse",d:"a catastrophic end; a revelation",s:"They wrote of the ~."},
+ {w:"archaeopteryx",d:"an early feathered dinosaur",s:"The ~ fossil drew crowds."},
+ {w:"arrondissement",d:"an administrative district of a French city",s:"She lives in the fifth ~."},
+ {w:"asafoetida",d:"a pungent resin used as a spice",s:"A pinch of ~ went in."},
+ {w:"asseveration",d:"a solemn earnest declaration",s:"His ~ convinced no one."},
+ {w:"borborygmus",d:"a rumbling noise made by the intestines",s:"A loud ~ broke the hush."},
+ {w:"bouillabaisse",d:"a Provencal fish stew",s:"The ~ arrived steaming."},
+ {w:"brobdingnagian",d:"gigantic",s:"A ~ appetite."},
+ {w:"cacoethes",d:"an irresistible urge to do something inadvisable",s:"A ~ for writing."},
+ {w:"chalcedony",d:"a milky quartz mineral",s:"A band of ~ ran through it."},
+ {w:"obsequies",d:"funeral rites",s:"The ~ lasted an hour."},
+ {w:"chthonic",d:"dwelling beneath the earth",s:"A ~ god of the old myths."},
+ {w:"colloquium",d:"an academic conference or seminar",s:"The ~ ran three days."},
+ {w:"concomitant",d:"occurring alongside something else",s:"A ~ rise in costs."},
+ {w:"consanguineous",d:"related by blood",s:"A ~ line of heirs."},
+ {w:"contretemps",d:"an unfortunate minor dispute",s:"A ~ over seating."},
+ {w:"coruscate",d:"to flash or sparkle",s:"The chandeliers ~."},
+ {w:"crepuscular",d:"active at twilight",s:"Deer are ~."},
+ {w:"defenestration",d:"the act of throwing someone out a window",s:"The ~ began a war."},
+ {w:"deipnosophist",d:"a skilled dinner conversationalist",s:"A true ~ held the table."},
+ {w:"dolorous",d:"expressing great sorrow",s:"A ~ hymn."},
+ {w:"eleutheromania",d:"an intense longing for freedom",s:"A fit of ~ took him."},
+ {w:"epexegesis",d:"added words that clarify a meaning",s:"The clause is mere ~."},
+ {w:"ergasiophobia",d:"an aversion to work",s:"He joked about his ~."},
+ {w:"erysipelas",d:"an acute skin infection with red patches",s:"The ward treated ~."},
+ {w:"eschatology",d:"the study of final things or the end times",s:"A course in ~."},
+ {w:"euonym",d:"a well-suited or fitting name",s:"'Swift' is a fine ~."},
+ {w:"exsanguinate",d:"to drain of blood",s:"The wound would ~ him."},
+ {w:"farrago",d:"a confused mixture",s:"A ~ of half-truths."},
+ {w:"floccinaucinihilipilification",d:"the act of judging something worthless",s:"Sheer ~."},
+ {w:"fuliginous",d:"sooty; dusky",s:"A ~ sky over the mill."},
+ {w:"gallimaufry",d:"a jumbled medley",s:"A ~ of odd chairs."},
+ {w:"gnathonic",d:"fawning or sycophantic",s:"A ~ courtier."},
+ {w:"halieutics",d:"the art or study of fishing",s:"He wrote on ~."},
+ {w:"hierophant",d:"an interpreter of sacred mysteries",s:"The ~ opened the rite."},
+ {w:"hippocampus",d:"a brain region shaping memory; a sea horse",s:"The ~ lit on the scan."},
+ {w:"syzygy",d:"an alignment of three celestial bodies",s:"The eclipse required a ~."},
+ {w:"hypnagogic",d:"relating to the drowsy state before sleep",s:"A ~ image flickered."},
+ {w:"idiopathic",d:"of unknown cause, medically",s:"An ~ tremor."},
+ {w:"psephology",d:"the statistical study of elections",s:"A night of ~ on air."},
+ {w:"imprimatur",d:"official approval to publish",s:"It carried her ~."},
+ {w:"inspissate",d:"to thicken by evaporation",s:"Let the syrup ~."},
+ {w:"kakistocracy",d:"government by the worst people",s:"He called it a ~."},
+ {w:"lagniappe",d:"a small gift given with a purchase",s:"The baker added a ~."},
+ {w:"limacine",d:"resembling a slug",s:"A ~ trail crossed the step."},
+ {w:"logomachy",d:"a dispute about words",s:"The debate sank into ~."},
+ {w:"lycanthropy",d:"the supposed transformation into a wolf",s:"Old tales of ~."},
+ {w:"macilent",d:"lean or thin",s:"A ~ hound trotted by."},
+ {w:"maieutic",d:"drawing out ideas by questioning",s:"A ~ method of teaching."},
+ {w:"metempsychosis",d:"the passing of a soul into another body",s:"Belief in ~."},
+ {w:"anfractuous",d:"winding and full of twists",s:"An ~ mountain road."},
+ {w:"mucilaginous",d:"sticky and gluey",s:"A ~ sap oozed out."},
+ {w:"nyctalopia",d:"poor vision in dim light",s:"~ ended his night driving."},
+ {w:"obnubilate",d:"to darken or obscure",s:"Clouds ~ the ridge."},
+ {w:"omphaloskepsis",d:"contemplation of one's navel",s:"An evening of ~."},
+ {w:"opsimath",d:"a person who learns late in life",s:"A cheerful ~ at seventy."},
+ {w:"otiose",d:"serving no useful purpose",s:"An ~ clause."},
+ {w:"palimpsest",d:"a manuscript reused after erasing",s:"The ~ held two texts."},
+ {w:"panjandrum",d:"a self-important official",s:"Some ~ blocked the permit."},
+ {w:"pellucidity",d:"transparent clarity",s:"The ~ of her prose."},
+ {w:"peristalsis",d:"the muscular waves that move food along",s:"~ carries it downward."},
+ {w:"philately",d:"the collecting of postage stamps",s:"He took up ~."},
+ {w:"pleonasm",d:"the use of more words than needed",s:"'Free gift' is a ~."},
+ {w:"pococurante",d:"careless or indifferent",s:"A ~ shrug."},
+ {w:"prolegomenon",d:"a formal introduction to a work",s:"The ~ ran forty pages."},
+ {w:"propaedeutic",d:"serving as a preliminary instruction",s:"A ~ course."},
+ {w:"pulchritudinous",d:"physically beautiful",s:"A ~ portrait."},
+ {w:"quadrivium",d:"the medieval higher four liberal arts",s:"He mastered the ~."},
+ {w:"quotidian",d:"occurring daily; ordinary",s:"The ~ business of living."},
+ {w:"ratiocination",d:"the process of logical reasoning",s:"Pure ~ solved it."},
+ {w:"rhathymia",d:"cheerful light-heartedness",s:"A summer of ~."},
+ {w:"rodomontade",d:"boastful blustering talk",s:"His speech was ~."},
+ {w:"saponaceous",d:"soapy; slippery in manner",s:"A ~ salesman."},
+ {w:"scaramouch",d:"a boastful cowardly character",s:"He played the ~."},
+ {w:"sesquicentennial",d:"a hundred-and-fiftieth anniversary",s:"The town's ~ parade."},
+ {w:"sibilance",d:"a hissing quality in speech",s:"The mic caught the ~."},
+ {w:"skulduggery",d:"underhanded scheming",s:"Election ~ was alleged."},
+ {w:"stichomythia",d:"dialogue in alternating single lines",s:"The scene is pure ~."},
+ {w:"susurration",d:"a soft whispering sound",s:"The ~ of dry leaves."},
+ {w:"sycophantic",d:"servilely flattering",s:"A ~ memo."},
+ {w:"thaumaturgy",d:"the working of wonders or magic",s:"Tales of ~."},
+ {w:"triskaidekaphobia",d:"fear of the number thirteen",s:"His ~ skipped the floor."},
+ {w:"tergiversation",d:"the abandoning of a cause; evasion",s:"Years of ~."},
+ {w:"ultracrepidarian",d:"giving opinions beyond one's knowledge",s:"An ~ pundit."},
+ {w:"usufruct",d:"the right to use another's property",s:"They hold the ~."},
+ {w:"velleity",d:"a wish too weak to act on",s:"A mere ~ to travel."},
+ {w:"verisimilitude",d:"the appearance of being true",s:"The set had real ~."},
+ {w:"vermicular",d:"resembling a worm or its tracks",s:"A ~ pattern in the stone."},
+ {w:"widdershins",d:"in a counterclockwise direction",s:"They circled ~."},
+ {w:"xenodochial",d:"friendly to strangers",s:"A ~ innkeeper."},
+ {w:"zugzwang",d:"a chess position where any move worsens things",s:"Black was in ~."},
+ {w:"zwieback",d:"a crisp twice-baked bread",s:"He dunked the ~."},
+]);
+
+//__BANDS__
+
+/* ══════════════════════════════════════════════════════════════════
+   LEVEL GENERATION — 1000 deterministic levels, 10 chapters of 100.
+   ══════════════════════════════════════════════════════════════════ */
+const LEVELS = 1000, PER_CHAPTER = 100;
+
+const MODS = {
+  flash:    {icon:"👁", name:"Flash",       desc:"The word appears for a moment instead of being spoken."},
+  blind:    {icon:"🚫", name:"Blind",       desc:"No definition. The sentence is all you get."},
+  rapid:    {icon:"⏱", name:"Rapid",       desc:"Fifteen seconds per word."},
+  ironman:  {icon:"💀", name:"Sudden Death",desc:"One life. One mistake ends the level."},
+  marathon: {icon:"🏃", name:"Marathon",    desc:"Twelve words instead of the usual set."},
+  scramble: {icon:"🔀", name:"Scramble",    desc:"The word is never spoken — you get its letters, jumbled, and nothing else. No hints."},
+  gauntlet: {icon:"🌪", name:"Gauntlet",   desc:"Words drawn from every band you've faced."},
+  echo:     {icon:"🔇", name:"Echo",        desc:"You may hear each word only twice."}
+};
+const MOD_UNLOCK = [ /*ch0*/[], /*1*/["flash"], /*2*/["flash","blind"], /*3*/["flash","blind","rapid"],
+  /*4*/["flash","blind","rapid","ironman"], /*5*/["flash","blind","rapid","ironman","marathon"],
+  /*6*/["flash","blind","rapid","ironman","marathon","scramble"],
+  /*7*/["flash","blind","rapid","ironman","marathon","scramble","gauntlet"],
+  /*8*/["flash","blind","rapid","ironman","marathon","scramble","gauntlet","echo"],
+  /*9*/["flash","blind","rapid","ironman","marathon","scramble","gauntlet","echo"] ];
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function specFor(n){
+  const rnd = mulberry32(Math.imul(n, 2654435761) >>> 0);
+  const ch  = Math.floor((n-1)/PER_CHAPTER);
+  const pos = (n-1) % PER_CHAPTER;
+  const boss = pos % 10 === 9;
+  const mods = [];
+
+  if((boss && ch >= 3) || (!boss && pos % 5 === 4 && MOD_UNLOCK[ch].length)){
+    const allowed = MOD_UNLOCK[ch];
+    /* Lean toward the newest unlock — otherwise "flash", available since chapter 2,
+       swamps late arrivals like "gauntlet" and they'd show up once in a thousand levels. */
+    mods.push(allowed[Math.floor(Math.max(rnd(), rnd()) * allowed.length)]);
+  }
+
+  let count = 6 + Math.floor(ch/3);            // 6 → 9
+  if(boss) count = 10;
+  if(mods.includes("marathon")) count = 12;
+  let lives = boss ? 3 : 3;
+  if(mods.includes("ironman")) lives = 1;
+
+  // ── word pool ──────────────────────────────────────────────
+  const bandIdx = boss ? Math.min(BANDS.length-1, ch+1) : ch;
+  let pool;
+  if(mods.includes("gauntlet")){
+    pool = [];
+    for(let b=0; b<=Math.min(BANDS.length-1, ch); b++) pool = pool.concat(BANDS[b].words);
+  }else{
+    pool = BANDS[Math.min(bandIdx, BANDS.length-1)].words.slice();
+    if(ch > 0 && !boss){                       // season with one easier + one harder word
+      const lo = BANDS[Math.max(0, ch-1)].words;
+      pool = pool.concat(lo.slice(0, Math.floor(lo.length/2)));
+    }
+  }
+  const picked = [], seen = new Set(), guard = pool.length * 4;
+  for(let i=0; picked.length < count && i < guard; i++){
+    const c = pool[Math.floor(rnd()*pool.length)];
+    if(!c || seen.has(c.w)) continue;
+    seen.add(c.w); picked.push(c);
+  }
+  while(picked.length < count) picked.push(pool[picked.length % pool.length]);
+
+  return {n, ch, pos, boss, mods, count, lives, words:picked,
+          bandName: BANDS[Math.min(bandIdx, BANDS.length-1)].name};
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SAVE
+   ══════════════════════════════════════════════════════════════════ */
+const SAVE_KEY = "spellbound.save.v2";     // the original single save; kept in step as a mirror
+const SLOT_KEY = "spellbound.slots.v1";
+const SLOTS = 3;
+const blankSave = () => ({max:1, stars:{}, score:0, spelled:0, missed:0, stamp:0});
+let SAVE = blankSave();
+let BOOK = {active:0, slots:[null, null, null]};
+
+function loadBook(){
+  try{
+    const raw = localStorage.getItem(SLOT_KEY);
+    if(raw){
+      const b = JSON.parse(raw);
+      if(b && Array.isArray(b.slots)){
+        BOOK = b;
+        while(BOOK.slots.length < SLOTS) BOOK.slots.push(null);
+        if(!(BOOK.active >= 0 && BOOK.active < SLOTS)) BOOK.active = 0;
+      }
+    }else{
+      const old = localStorage.getItem(SAVE_KEY);   // carry over a save made before slots existed
+      if(old){ BOOK.slots[0] = Object.assign(blankSave(), JSON.parse(old)); BOOK.active = 0; }
+    }
+  }catch(e){}
+  if(!BOOK.slots[BOOK.active]) BOOK.slots[BOOK.active] = blankSave();
+  SAVE = BOOK.slots[BOOK.active];
+}
+function persist(){
+  SAVE.stamp = Date.now();
+  BOOK.slots[BOOK.active] = SAVE;
+  try{
+    localStorage.setItem(SLOT_KEY, JSON.stringify(BOOK));
+    localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE));
+  }catch(e){}
+}
+function useSlot(i){
+  if(i < 0 || i >= SLOTS) return;
+  BOOK.active = i;
+  if(!BOOK.slots[i]) BOOK.slots[i] = blankSave();
+  SAVE = BOOK.slots[i];
+  persist();
+}
+function eraseSlot(i){
+  BOOK.slots[i] = null;
+  if(BOOK.active === i){ BOOK.slots[i] = blankSave(); SAVE = BOOK.slots[i]; }
+  persist();
+}
+function totalStars(save){ const s = save || SAVE; let t = 0; for(const k in s.stars) t += s.stars[k]; return t; }
+
+/* ── export / import ─────────────────────────────────────────
+   localStorage is easily wiped, and a save is a few hundred levels of work.
+   A slot can be written out as a file and read back on any machine. */
+function slotPayload(i){
+  return JSON.stringify({game:"spellbound", format:1, slot:i+1, save:BOOK.slots[i] || blankSave()}, null, 1);
+}
+function exportSlot(i){
+  const text = slotPayload(i), name = "spellbound-book" + (i+1) + ".json";
+  let url = "data:application/json;charset=utf-8," + encodeURIComponent(text), revoke = null;
+  try{                                    // a Blob is the reliable route from a file:// page
+    const b = new Blob([text], {type:"application/json"});
+    url = URL.createObjectURL(b);
+    revoke = () => URL.revokeObjectURL(url);
+  }catch(e){}
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  if(document.body) document.body.appendChild(a);
+  a.click();
+  if(a.remove) a.remove();
+  if(revoke) setTimeout(revoke, 4000);
+  return name;
+}
+/* Never trust the file: a hand-edited or truncated save must not corrupt the game. */
+function applyImport(text, slot){
+  let o;
+  try{ o = JSON.parse(text); }catch(e){ return false; }
+  const s = o && (o.save || o);
+  if(!s || typeof s !== "object" || typeof s.max !== "number" || !s.stars || typeof s.stars !== "object") return false;
+  const clean = blankSave();
+  clean.max     = Math.max(1, Math.min(LEVELS, Math.floor(s.max) || 1));
+  clean.score   = Math.max(0, Math.floor(+s.score)   || 0);
+  clean.spelled = Math.max(0, Math.floor(+s.spelled) || 0);
+  clean.missed  = Math.max(0, Math.floor(+s.missed)  || 0);
+  for(const k in s.stars){
+    const n = Math.floor(+k), v = Math.floor(+s.stars[k]);
+    if(n >= 1 && n <= LEVELS && v >= 1 && v <= 3) clean.stars[n] = v;
+  }
+  BOOK.slots[slot] = clean;
+  BOOK.active = slot;
+  SAVE = clean;
+  persist();
+  return true;
+}
+loadBook();
+
+/* ══════════════════════════════════════════════════════════════════
+   RUNTIME STATE
+   ══════════════════════════════════════════════════════════════════ */
+const S = {
+  spec:null, idx:0, cur:null, lives:3, score:0, streak:0,
+  hints:0, revealed:0, answered:false, t0:0, misses:[], correct:0,
+  silent:false, plays:0, timer:null, deadline:0, drill:null, viewCh:0
+};
+try{ S.silent = localStorage.getItem("spellbound.silent") === "1"; }catch(e){}
+
+const app = document.getElementById("app");
+const el = h => { const d = document.createElement("div"); d.innerHTML = h.trim(); return d.firstElementChild; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ── speech ───────────────────────────────────────────────────── */
+const synth = window.speechSynthesis || null;
+let voice = null;
+function pickVoice(){
+  if(!synth) return;
+  const vs = synth.getVoices(); if(!vs.length) return;
+  voice = vs.find(v => /en[-_]US/i.test(v.lang) && /natural|premium|enhanced/i.test(v.name))
+       || vs.find(v => /en[-_](US|GB)/i.test(v.lang))
+       || vs.find(v => /^en/i.test(v.lang)) || vs[0];
+}
+if(synth){ pickVoice(); synth.onvoiceschanged = pickVoice; }
+function say(text, rate){
+  if(!synth || S.silent) return false;
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  if(voice) u.voice = voice;
+  u.rate = rate || .92;
+  u.onstart = () => { const o = document.getElementById("orb"); if(o) o.classList.add("on"); };
+  u.onend = u.onerror = () => { const o = document.getElementById("orb"); if(o) o.classList.remove("on"); };
+  synth.speak(u);
+  return true;
+}
+let actx = null;
+function beep(freqs, dur, type){
+  try{
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    freqs.forEach((f,i) => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type || "sine"; o.frequency.value = f;
+      const t = actx.currentTime + i*0.075;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.16, t+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+      o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t+dur+0.02);
+    });
+  }catch(e){}
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   TITLE
+   ══════════════════════════════════════════════════════════════════ */
+function title(){
+  if(synth) synth.cancel(); stopTimer();
+  const words = BANDS.reduce((a,b) => a + b.words.length, 0);
+  app.innerHTML = "";
+  const c = el(`<div class="card">
+    <h1>Spellbound</h1>
+    <div class="tag">one thousand levels · ${words} words</div>
+    <p class="lede">Listen to the word, then spell it. Ask for the definition, a sentence, or a hint —
+    but hints cost you. Ten chapters, each meaner than the last.</p>
+    <div class="stats">
+      <div class="stat"><b>${SAVE.max > LEVELS ? LEVELS : SAVE.max}</b><span>level</span></div>
+      <div class="stat"><b>${totalStars()}</b><span>of 3000 stars</span></div>
+      <div class="stat"><b>${SAVE.score.toLocaleString()}</b><span>total score</span></div>
+      <div class="stat"><b>${SAVE.spelled.toLocaleString()}</b><span>words spelled</span></div>
+    </div>
+    <div class="row" style="margin-top:18px">
+      <button class="btn primary" id="go">${SAVE.max > 1 ? "Continue — level " + Math.min(SAVE.max, LEVELS) : "Begin"}</button>
+      <button class="btn" id="map">Level map</button>
+      <button class="btn" id="saves">Saves — book ${BOOK.active+1}</button>
+      <button class="btn" id="silent">${S.silent ? "🔇 Silent mode" : "🔊 Audio mode"}</button>
+    </div>
+    <div class="foot">Enter submits · Alt+R repeat · Alt+D definition · Alt+S sentence · Alt+H hint · Esc quits</div>
+  </div>`);
+  app.appendChild(c);
+  c.querySelector("#go").onclick = () => startLevel(Math.min(SAVE.max, LEVELS));
+  c.querySelector("#map").onclick = () => { S.viewCh = Math.floor((Math.min(SAVE.max, LEVELS)-1)/PER_CHAPTER); map(); };
+  c.querySelector("#saves").onclick = saves;
+  c.querySelector("#silent").onclick = () => {
+    S.silent = !S.silent;
+    try{ localStorage.setItem("spellbound.silent", S.silent ? "1" : "0"); }catch(e){}
+    title();
+  };
+  if(!synth) S.silent = true;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SAVES — three books, plus export/import
+   ══════════════════════════════════════════════════════════════════ */
+function stamp(t){
+  if(!t) return "never played";
+  try{
+    const d = new Date(t);
+    return d.toLocaleDateString() + " · " + d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  }catch(e){ return "saved"; }
+}
+
+function saves(msg){
+  if(synth) synth.cancel(); stopTimer();
+  app.innerHTML = "";
+  const roman = ["I","II","III"];
+  const cards = BOOK.slots.map((raw,i) => {
+    const s = raw || blankSave(), on = i === BOOK.active, fresh = s.max <= 1 && !totalStars(s);
+    return `<div class="slot ${on ? "on" : ""}">
+      <div class="slothead"><b>Book ${roman[i]}</b>${on ? '<span class="inuse">in use</span>' : ""}</div>
+      <div class="slotstats">${fresh
+        ? '<span class="dimline">empty — a fresh start</span>'
+        : `Level ${Math.min(s.max, LEVELS)} · ${totalStars(s)}★ · ${s.score.toLocaleString()} pts · ${s.spelled.toLocaleString()} words
+           <br><span class="dimline">${stamp(s.stamp)}</span>`}</div>
+      <div class="row" style="justify-content:flex-start; margin-top:10px">
+        <button class="btn sm ${on ? "primary" : ""}" id="use${i}">${on ? "Continue" : (fresh ? "Start here" : "Open this book")}</button>
+        <button class="btn sm" id="exp${i}" ${fresh ? "disabled" : ""}>Export</button>
+        <button class="btn sm" id="imp${i}">Import</button>
+        <button class="btn sm" id="del${i}" ${fresh ? "disabled" : ""}>Erase</button>
+      </div></div>`;
+  }).join("");
+
+  const c = el(`<div class="card">
+    <div class="row" style="justify-content:space-between; margin-bottom:14px">
+      <button class="btn sm" id="home">← Menu</button>
+      <span class="chip">progress saves itself after every level</span>
+    </div>
+    <h1 style="font-size:32px">Saves</h1>
+    <p class="lede">Three separate books of progress. Export one to a file before clearing your browser —
+    that file is the only copy that survives it.</p>
+    ${msg ? `<p class="lede" style="color:var(--gold)">${esc(msg)}</p>` : ""}
+    ${cards}
+    <div class="row" style="margin-top:16px">
+      <button class="btn sm" id="paste">Paste a save code</button>
+    </div>
+    <div class="foot">Export writes spellbound-book&lt;n&gt;.json to your downloads. Import replaces that book.</div>
+  </div>`);
+  app.appendChild(c);
+  c.querySelector("#home").onclick = title;
+
+  BOOK.slots.forEach((raw,i) => {
+    c.querySelector("#use" + i).onclick = () => { useSlot(i); title(); };
+    const ex = c.querySelector("#exp" + i);
+    if(ex) ex.onclick = () => { exportSlot(i); saves("Book " + roman[i] + " exported."); };
+    c.querySelector("#imp" + i).onclick = () => pickFile(i);
+    const del = c.querySelector("#del" + i);
+    if(del) del.onclick = () => {
+      if(confirm("Erase Book " + roman[i] + " — every level, star and point in it?")){ eraseSlot(i); saves("Book " + roman[i] + " erased."); }
+    };
+  });
+  c.querySelector("#paste").onclick = () => {
+    const text = prompt("Paste the contents of an exported save file:");
+    if(text == null) return;
+    saves(applyImport(text, BOOK.active) ? "Imported into Book " + roman[BOOK.active] + "." : "That doesn't look like a Spellbound save.");
+  };
+}
+
+function pickFile(i){
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "application/json,.json";
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0];
+    if(!f) return;
+    const r = new FileReader();
+    r.onload = () => saves(applyImport(String(r.result), i)
+      ? "Imported into Book " + ["I","II","III"][i] + "."
+      : "That file isn't a Spellbound save.");
+    r.onerror = () => saves("Could not read that file.");
+    r.readAsText(f);
+  };
+  inp.click();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LEVEL MAP
+   ══════════════════════════════════════════════════════════════════ */
+function map(){
+  if(synth) synth.cancel(); stopTimer();
+  const ch = S.viewCh, b = BANDS[Math.min(ch, BANDS.length-1)];
+  app.innerHTML = "";
+  const c = el(`<div class="card">
+    <div class="row" style="justify-content:space-between; margin-bottom:14px">
+      <button class="btn sm" id="home">← Menu</button>
+      <span class="chip">${totalStars()} ★ · ${SAVE.score.toLocaleString()} pts</span>
+    </div>
+    <div class="chapters" id="chs"></div>
+    <div class="chhead">
+      <div class="nm" style="color:${b.color}">Chapter ${ch+1} — ${b.name}</div>
+      <div class="ds">${b.desc}</div>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="legend">
+      <span>★ perfect · no misses, no hints</span><span style="color:var(--bad)">◆ boss level</span>
+      <span>levels ${ch*PER_CHAPTER+1}–${(ch+1)*PER_CHAPTER}</span>
+    </div>
+  </div>`);
+  app.appendChild(c);
+  c.querySelector("#home").onclick = title;
+
+  const chs = c.querySelector("#chs");
+  BANDS.forEach((bb,i) => {
+    const unlocked = SAVE.max > i*PER_CHAPTER;
+    const chip = el(`<button class="chip ${i===ch?"on":""} ${unlocked?"":"lock"}"
+      ${unlocked?"":"disabled"} style="${i===ch?`background:${bb.color}; border-color:${bb.color}`:""}">${i+1}. ${bb.name}</button>`);
+    chip.onclick = () => { S.viewCh = i; map(); };
+    chs.appendChild(chip);
+  });
+
+  const grid = c.querySelector("#grid");
+  for(let i=0;i<PER_CHAPTER;i++){
+    const n = ch*PER_CHAPTER + i + 1;
+    const stars = SAVE.stars[n] || 0;
+    const locked = n > SAVE.max;
+    const boss = i % 10 === 9;
+    const cls = [ "cell", locked?"locked":"", stars?"done":"", boss?"boss":"", n===SAVE.max?"next":"" ].join(" ");
+    const cell = el(`<button class="${cls}" ${locked?"disabled":""} title="Level ${n}">
+      <span>${locked ? "🔒" : n}</span>
+      <span class="st">${stars ? "★".repeat(stars) : (boss ? "◆" : "")}</span></button>`);
+    if(!locked) cell.onclick = () => startLevel(n);
+    grid.appendChild(cell);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   PLAY
+   ══════════════════════════════════════════════════════════════════ */
+function startLevel(n, drillWords){
+  S.spec = drillWords
+    ? {n:0, ch:S.spec ? S.spec.ch : 0, pos:0, boss:false, mods:[], count:drillWords.length,
+       lives:3, words:drillWords, bandName:"Drill"}
+    : specFor(n);
+  S.drill = drillWords ? true : null;
+  S.idx = 0; S.lives = S.spec.lives; S.score = 0; S.streak = 0;
+  S.misses = []; S.correct = 0; S.hintsTotal = 0;
+  nextWord();
+}
+
+function hasMod(m){ return S.spec.mods.indexOf(m) >= 0; }
+
+/* Words you cannot tell apart by ear alone. These always arrive with their
+   definition already showing — even on Blind levels — or the level is a coin flip. */
+const HOMOPHONES = new Set(("weather whether principal principle stationery stationary " +
+ "complement compliment desert dessert altar alter aloud allowed capital capitol council counsel " +
+ "discreet discrete elicit illicit peddle pedal morning mourning cereal serial vain vein " +
+ "waist waste medal meddle cite site bare bear borne brake break threw through forth fourth " +
+ "emigrate immigrate affect effect accept except palate palette pallet rain reign rein " +
+ "canvas canvass currant current discus discuss ordinance ordnance " +
+ "censor sensor censure hoard horde troop troupe carat caret " +
+ "cannon canon miner minor mantel mantle metal mettle " +
+ "gilt guilt idle idol wreak reek yoke yolk").split(" "));
+
+/* The bank is American throughout, so a British speller shouldn't lose a heart over
+   "neighbour" or "realise". The leniency is generated from the TARGET word only and
+   compared exactly. An earlier version folded BOTH sides through the same rewrite
+   rules, which quietly accepted "promize" for "promise", "for" for "four" and
+   "filed" for "filled" — two unrelated words can fold to the same string, but a
+   variant generated from one word cannot silently swallow another. */
+const ALT_SPELLINGS = {
+  anesthesia:["anaesthesia"], hemorrhage:["haemorrhage"], hemorrhagic:["haemorrhagic"],
+  aesthetic:["esthetic"], paleontology:["palaeontology"], maneuver:["manoeuvre"],
+  jewelry:["jewellery"], license:["licence"], skulduggery:["skullduggery"],
+  vermilion:["vermillion"], neighborhood:["neighbourhood"], gray:["grey"],
+  /* -re and a few one-offs are a closed class — safer listed than derived */
+  center:["centre"], theater:["theatre"], meter:["metre"], liter:["litre"],
+  fiber:["fibre"], somber:["sombre"], specter:["spectre"], luster:["lustre"],
+  defense:["defence"], offense:["offence"], catalog:["catalogue"], dialog:["dialogue"],
+  mold:["mould"], plow:["plough"], mustache:["moustache"], pajamas:["pyjamas"]
+};
+function variantsOf(word){
+  const v = new Set(ALT_SPELLINGS[word] || []);
+  if(/ization$/.test(word))                      v.add(word.replace(/ization$/, "isation"));
+  else if(/ize$/.test(word)  && word.length > 4) v.add(word.replace(/ize$/,  "ise"));
+  if(/yze$/.test(word)       && word.length > 4) v.add(word.replace(/yze$/,  "yse"));
+  /* -or → -our, but not on "for"/"nor"; note "four" and "hour" already end in -our
+     and so are never touched, which is exactly what the old fold() got wrong. */
+  if(/[^u]or$/.test(word)    && word.length >= 5) v.add(word.replace(/or$/, "our"));
+  /* British doubles the l: traveled → travelled. Only fires on a SINGLE l after a
+     vowel, so "filled" generates nothing and "filed" can never pass for it. */
+  if(/[aeiou]l(ed|ing|er)$/.test(word)) v.add(word.replace(/l(ed|ing|er)$/, "ll$1"));
+  v.delete(word);
+  return v;
+}
+
+function nextWord(){
+  stopTimer();
+  if(S.idx >= S.spec.words.length) return levelDone(true);
+  S.cur = S.spec.words[S.idx];
+  S.hints = 0; S.revealed = 0; S.answered = false; S.plays = 0; S.t0 = Date.now();
+  render();
+  if(HOMOPHONES.has(S.cur.w)){
+    const box = document.getElementById("clue");
+    box.innerHTML = `<span class="lbl">Sound-alike — definition given</span>${esc(S.cur.d)}.`;
+  }
+  setTimeout(() => { promptWord(true); if(hasMod("rapid")) startTimer(); }, 340);
+}
+
+function promptWord(auto){
+  if(hasMod("scramble")) return;          // the jumbled letters ARE the clue; no voice
+  if(hasMod("echo") && S.plays >= 2) return;
+  S.plays++;
+  if(S.silent || hasMod("flash")){
+    const f = document.getElementById("flash");
+    if(f){
+      f.textContent = S.cur.w.toUpperCase(); f.style.opacity = "1";
+      clearTimeout(promptWord._t);
+      promptWord._t = setTimeout(() => { f.style.opacity = "0"; }, 1300);
+    }
+    if(!S.silent && hasMod("flash")) return;
+    return;
+  }
+  say(S.cur.w + (HOMOPHONES.has(S.cur.w) ? ". " + S.cur.d + "." : ""), auto ? .88 : .8);
+}
+
+function startTimer(){
+  S.deadline = Date.now() + 15000;
+  const bar = document.getElementById("tbar");
+  S.timer = setInterval(() => {
+    const left = S.deadline - Date.now();
+    if(bar) bar.style.width = Math.max(0, left/15000*100) + "%";
+    if(left <= 0){ stopTimer(); if(!S.answered) submit(true); }
+  }, 80);
+}
+function stopTimer(){ if(S.timer){ clearInterval(S.timer); S.timer = null; } }
+
+function render(){
+  const sp = S.spec, prog = Math.round(S.idx/sp.words.length*100);
+  const flashy = S.silent || hasMod("flash");
+  const modPills = sp.mods.map(m => `<span class="pill mod" title="${MODS[m].desc}">${MODS[m].icon} ${MODS[m].name}</span>`).join("");
+  app.innerHTML = "";
+  const c = el(`<div class="card">
+    <div class="hud">
+      <span class="pill">${S.drill ? "Drill" : (sp.boss ? "◆ Level " : "Level ") + sp.n}</span>
+      <span class="pill">${sp.bandName}</span>
+      ${modPills}
+      <span class="pill">Word <b>${S.idx+1}</b>/${sp.words.length}</span>
+      <span class="pill" title="Words spelled correctly — this level, and across every level you've played">Spelled <b id="spelled">${S.correct}</b> · <b id="spelledAll">${SAVE.spelled.toLocaleString()}</b> all time</span>
+      <span class="pill">Score <b id="score">${S.score.toLocaleString()}</b></span>
+      <span class="hearts">${"❤".repeat(S.lives)}<span style="opacity:.2">${"❤".repeat(Math.max(0, sp.lives - S.lives))}</span></span>
+    </div>
+    <div class="bar"><i style="width:${prog}%"></i></div>
+    ${hasMod("rapid") ? `<div class="bar time"><i id="tbar" style="width:100%"></i></div>` : ""}
+
+    <div class="speaker">
+      ${hasMod("scramble") ? `<div class="scram">${scrambled(S.cur.w)}</div>`
+        : flashy ? `<div class="flashword" id="flash" style="opacity:0"></div>`
+                 : `<div class="orb" id="orb" title="Hear it again">🔊</div>`}
+    </div>
+
+    <div class="reveal" id="reveal"></div>
+    <div class="clue" id="clue"></div>
+
+    <input type="text" id="answer" autocomplete="off" autocorrect="off" autocapitalize="off"
+           spellcheck="false" placeholder="spell it" aria-label="Your spelling">
+
+    <div class="tools">
+      <button class="btn sm" id="b-rep" ${hasMod("scramble") ? "disabled title='Scramble level — the word is never spoken'" : ""}>${
+        hasMod("scramble") ? "🔀 Letters only" : flashy ? "👁 Flash again" : "🔊 Hear again"}</button>
+      ${flashy || hasMod("scramble") ? "" : `<button class="btn sm" id="b-slow">🐢 Letter by letter</button>`}
+      <button class="btn sm" id="b-def" ${hasMod("blind") ? "disabled title='Blind level — no definition'" : ""}>📖 Definition</button>
+      <button class="btn sm" id="b-sen">💬 Sentence</button>
+      <button class="btn sm" id="b-hint" ${hasMod("scramble") ? "disabled title='Scramble level — no hints'" : ""}>💡 Hint</button>
+    </div>
+    <div class="go"><button class="btn primary" id="b-go">Spell it</button></div>
+    <div class="verdict" id="verdict"></div>
+    <div class="foot">Esc to leave the level</div>
+  </div>`);
+  app.appendChild(c);
+
+  const inp = c.querySelector("#answer");
+  inp.focus();
+  const orb = c.querySelector("#orb");
+  if(orb) orb.onclick = () => promptWord(false);
+  c.querySelector("#b-rep").onclick = () => { promptWord(false); inp.focus(); };
+  const slow = c.querySelector("#b-slow");
+  if(slow) slow.onclick = () => {
+    if(hasMod("echo") && S.plays >= 2) return;
+    S.plays++; say(S.cur.w.split("").join(", "), .7); inp.focus();
+  };
+  c.querySelector("#b-def").onclick  = () => showClue("definition");
+  c.querySelector("#b-sen").onclick  = () => showClue("sentence");
+  c.querySelector("#b-hint").onclick = () => hint();
+  c.querySelector("#b-go").onclick   = () => submit();
+  inp.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); submit(); } });
+}
+
+function scrambled(w){
+  const up = w.toUpperCase(), a = up.split("");
+  const rnd = mulberry32(w.length * 7919 + w.charCodeAt(0));
+  /* A shuffle is allowed to land back on the original — "KNIFE" and "KNOCK" both
+     did, handing the player the answer in order. Reshuffle until it moves. */
+  for(let pass = 0; pass < 8; pass++){
+    for(let i=a.length-1;i>0;i--){ const j = Math.floor(rnd()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; }
+    if(a.join("") !== up) break;
+  }
+  return a.join(" ");
+}
+
+function showClue(kind){
+  const box = document.getElementById("clue");
+  if(kind === "definition"){
+    if(hasMod("blind")) return;
+    box.innerHTML = `<span class="lbl">Definition</span>${esc(S.cur.d)}.`;
+    say("Definition. " + S.cur.d);
+  }else{
+    const blank = `<span class="blank">${"—".repeat(Math.max(4, Math.min(12, S.cur.w.length)))}</span>`;
+    box.innerHTML = `<span class="lbl">Used in a sentence</span>${esc(S.cur.s).replace("~", blank)}`;
+    /* The sentence says the word out loud, so on Echo levels it spends a play —
+       otherwise the two-play limit is bypassed by pressing Sentence repeatedly. */
+    let spoken = S.cur.s.replace("~", S.cur.w);
+    if(hasMod("scramble")) spoken = S.cur.s.replace("~", "blank");
+    else if(hasMod("echo")){
+      if(S.plays >= 2) spoken = S.cur.s.replace("~", "blank");
+      else S.plays++;
+    }
+    say(spoken);
+  }
+  const inp = document.getElementById("answer"); if(inp) inp.focus();
+}
+
+function hint(){
+  if(S.answered || hasMod("scramble")) return;
+  const w = S.cur.w, box = document.getElementById("reveal");
+  S.hints++; S.hintsTotal++;
+  if(S.hints === 1){
+    box.textContent = "_".repeat(w.length);
+    box.title = w.length + " letters";
+  }else{
+    S.revealed = Math.min(w.length-1, S.revealed+1);
+    box.textContent = (w.slice(0, S.revealed) + "_".repeat(w.length - S.revealed)).toUpperCase();
+    if(S.revealed >= w.length-1) document.getElementById("b-hint").disabled = true;
+  }
+  beep([620], .09, "triangle");
+  document.getElementById("answer").focus();
+}
+
+function submit(timedOut){
+  if(S.answered) return;
+  const inp = document.getElementById("answer");
+  const given = (inp.value || "").trim().toLowerCase().replace(/\s+/g, "");
+  if(!given && !timedOut){ inp.focus(); return; }
+  S.answered = true; stopTimer();
+  if(synth) synth.cancel();
+
+  const word = S.cur.w.toLowerCase();
+  const variant = !timedOut && given !== word && variantsOf(word).has(given);
+  const ok = !timedOut && (given === word || variant);
+  const v = document.getElementById("verdict");
+  inp.classList.add(ok ? "good" : "bad");
+  inp.disabled = true;
+  ["b-hint","b-go"].forEach(id => { const b = document.getElementById(id); if(b) b.disabled = true; });
+
+  if(ok){
+    S.correct++; S.streak++; SAVE.spelled++;
+    const secs = (Date.now() - S.t0)/1000;
+    const base = 10*(S.spec.ch+1) + 6*word.length;
+    const streakMult = Math.min(3, 1 + S.streak*0.12);
+    const hintMult = Math.pow(0.5, S.hints);
+    const speed = (S.hints === 0 && secs < 9) ? 25 : 0;
+    const modBonus = 1 + S.spec.mods.length*0.35 + (S.spec.boss ? 0.5 : 0);
+    const pts = Math.round(base * streakMult * hintMult * modBonus) + speed;
+    S.score += pts;
+    beep([660,880,1180], .16, "sine");
+    const praise = ["Correct.","Well spelled.","Exactly right.","Clean.","That's the one.","Flawless."];
+    v.innerHTML = `<div class="head" style="color:var(--good)">${praise[S.correct % praise.length]}</div>
+      <div class="word">${word.toUpperCase().split("").map(ch => `<span class="c">${ch}</span>`).join("")}</div>
+      ${variant ? `<div class="yours">accepted as a spelling variant</div>` : ""}
+      <div class="pts">+${pts}${speed ? " (quick +25)" : ""}${S.hints ? ` · ${S.hints} hint${S.hints>1?"s":""}` : ""}${S.streak>=3 ? ` · streak ×${streakMult.toFixed(2)}` : ""}</div>`;
+  }else{
+    S.streak = 0; S.lives--; SAVE.missed++;
+    S.misses.push({w:word, given: given || "—", d:S.cur.d, ref:S.cur});
+    beep([300,190], .24, "sawtooth");
+    let marked = "";
+    for(let i=0;i<word.length;i++) marked += `<span class="${given[i] === word[i] ? "c" : "x"}">${word[i].toUpperCase()}</span>`;
+    v.innerHTML = `<div class="head" style="color:var(--bad)">${timedOut ? "Time." : "Not quite."}</div>
+      <div class="word">${marked}</div>
+      <div class="yours">${given ? "you spelled &ldquo;" + esc(given) + "&rdquo;" : "no answer given"}</div>
+      <div class="pts" style="color:var(--dim)">${esc(S.cur.d)}.</div>`;
+    say(word + ". " + word.split("").join(", ") + ". " + word, .78);
+  }
+
+  const sc = document.getElementById("score"); if(sc) sc.textContent = S.score.toLocaleString();
+  /* The counters live in the HUD, which isn't re-rendered until the next word,
+     so tick them here rather than waiting for nextWord(). */
+  const sp2 = document.getElementById("spelled");    if(sp2) sp2.textContent = S.correct;
+  const sa  = document.getElementById("spelledAll"); if(sa)  sa.textContent = SAVE.spelled.toLocaleString();
+  const go = document.getElementById("b-go");
+  go.disabled = false;
+  go.textContent = S.lives <= 0 ? "Level failed →" : (S.idx+1 >= S.spec.words.length ? "Finish level →" : "Next word →");
+  go.onclick = advance;
+  go.focus();
+}
+
+function advance(){
+  S.idx++;
+  if(S.lives <= 0) return levelDone(false);
+  nextWord();
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LEVEL RESULTS
+   ══════════════════════════════════════════════════════════════════ */
+function levelDone(cleared){
+  if(synth) synth.cancel(); stopTimer();
+  const sp = S.spec;
+  /* Three stars is a clean sheet: nothing missed and nothing revealed. */
+  let stars = 0;
+  if(cleared) stars = (S.misses.length === 0 && S.hintsTotal === 0) ? 3
+                    : (S.misses.length <= 1) ? 2 : 1;
+
+  let newBest = false, unlocked = false;
+  if(cleared && !S.drill){
+    if(stars > (SAVE.stars[sp.n] || 0)){ SAVE.stars[sp.n] = stars; newBest = true; }
+    if(sp.n >= SAVE.max && sp.n < LEVELS){ SAVE.max = sp.n + 1; unlocked = true; }
+    SAVE.score += S.score;
+    persist();
+  }else if(!S.drill){ SAVE.score += S.score; persist(); }
+
+  const finale = cleared && !S.drill && sp.n === LEVELS;
+  const head = finale ? "Spellbound."
+             : cleared ? (S.drill ? "Drill complete." : (sp.boss ? "Boss cleared." : "Level cleared."))
+             : "Out of lives.";
+  const sub  = finale ? "One thousand levels. Every chapter, every boss. There is nothing left to spell."
+             : cleared ? (stars === 3 ? "Perfect — not a miss, not a hint."
+                        : stars === 2 ? (S.misses.length ? "One away from perfect." : "Cleared — but the hints cost you a star.")
+                        : "Cleared, but the words fought back.")
+             : "The level resets — but the words that beat you are listed below.";
+
+  app.innerHTML = "";
+  const c = el(`<div class="card">
+    <h1 style="font-size:34px">${head}</h1>
+    ${S.drill ? "" : `<div class="starline">${[1,2,3].map(i => i <= stars ? "★" : '<span class="off">★</span>').join("")}</div>`}
+    <p class="lede">${sub}</p>
+    <div class="stats">
+      <div class="stat"><b>${S.score.toLocaleString()}</b><span>level score</span></div>
+      <div class="stat"><b>${S.correct}/${S.spec.words.length}</b><span>spelled</span></div>
+      <div class="stat"><b>${totalStars()}</b><span>total stars</span></div>
+      <div class="stat"><b>${SAVE.score.toLocaleString()}</b><span>lifetime</span></div>
+    </div>
+    ${unlocked && !finale ? `<p class="lede" style="color:var(--gold)">Level ${sp.n+1} unlocked${(sp.n)%PER_CHAPTER === 0 ? " — a new chapter opens." : ""}.</p>` : ""}
+    ${S.misses.length ? `<div class="tag" style="margin:16px 0 8px">words that got away</div>
+      <div class="misses">${S.misses.map(m => `<div class="miss">
+        <span class="w">${esc(m.w)}</span><span class="y">${esc(m.given)}</span><span class="d">${esc(m.d)}</span></div>`).join("")}</div>` : ""}
+    <div class="row" style="margin-top:18px">
+      ${cleared && !finale && !S.drill && sp.n < LEVELS ? `<button class="btn primary" id="next">Level ${sp.n+1} →</button>` : ""}
+      ${!cleared ? `<button class="btn primary" id="retry">${S.drill ? "Run the drill again" : "Try level " + sp.n + " again"}</button>` : ""}
+      ${S.misses.length ? `<button class="btn" id="drill">Drill the ${S.misses.length} miss${S.misses.length>1?"es":""}</button>` : ""}
+      <button class="btn" id="map">Level map</button>
+      <button class="btn" id="menu">Menu</button>
+    </div>
+  </div>`);
+  app.appendChild(c);
+  const nx = c.querySelector("#next");
+  if(nx){ nx.onclick = () => startLevel(sp.n + 1); nx.focus(); }
+  /* A drill has no level number — sp.n is 0, and startLevel(0) would ask specFor()
+     for chapter -1 and die on BANDS[-1]. Replay the same words instead. */
+  const rt = c.querySelector("#retry"), againWords = S.drill ? sp.words.slice() : null;
+  if(rt){ rt.onclick = () => (againWords ? startLevel(0, againWords) : startLevel(sp.n)); rt.focus(); }
+  const dr = c.querySelector("#drill");
+  if(dr) dr.onclick = () => startLevel(0, S.misses.map(m => m.ref));
+  c.querySelector("#map").onclick = () => { S.viewCh = Math.min(BANDS.length-1, sp.ch); map(); };
+  c.querySelector("#menu").onclick = title;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   HOTKEYS
+   ══════════════════════════════════════════════════════════════════ */
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape"){ if(synth) synth.cancel(); stopTimer(); S.cur = null; title(); return; }
+  if(!e.altKey || !S.cur || !document.getElementById("answer")) return;
+  const k = e.key.toLowerCase();
+  if(k === "r"){ e.preventDefault(); promptWord(false); }
+  else if(k === "d"){ e.preventDefault(); showClue("definition"); }
+  else if(k === "s"){ e.preventDefault(); showClue("sentence"); }
+  else if(k === "h"){ e.preventDefault(); if(!S.answered) hint(); }
+});
+
+title();
+</script>
+</body>
+</html>

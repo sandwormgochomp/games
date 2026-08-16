@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Lighthouse Keeper's Last Night</title>
+<style>
+  html,body{margin:0;padding:0;background:#04070c;color:#cfe3f0;
+    font-family:"Georgia","Times New Roman",serif;overflow:hidden;height:100%}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{image-rendering:auto;background:#04070c;box-shadow:0 0 80px #000 inset}
+  #ui{position:fixed;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center}
+  .card{pointer-events:auto;max-width:640px;background:rgba(4,8,14,.93);
+    border:1px solid #23485e;padding:26px 32px;line-height:1.55;
+    box-shadow:0 0 60px rgba(0,0,0,.9);text-align:center}
+  .card h1{font-size:30px;margin:0 0 4px;letter-spacing:2px;color:#ffdca8;font-weight:normal}
+  .card h2{font-size:19px;margin:0 0 14px;letter-spacing:3px;color:#7fb3cc;font-weight:normal}
+  .card p{margin:9px 0;font-size:15px;color:#a9c3d4}
+  .card .quiet{color:#5e7a8c;font-size:13px;font-style:italic}
+  .keys{margin:16px 0 6px;font-size:14px;color:#cfe3f0;text-align:left;display:inline-block}
+  .keys b{color:#ffdca8;font-weight:normal}
+  .btn{margin-top:16px;display:inline-block;border:1px solid #ffdca8;color:#ffdca8;
+    padding:9px 26px;letter-spacing:3px;cursor:pointer;font-size:14px;background:none}
+  .btn:hover{background:#ffdca8;color:#04070c}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv" width="960" height="640"></canvas></div>
+<div id="ui">
+  <div id="card" class="card">
+    <h2>THE LIGHTHOUSE KEEPER'S</h2>
+    <h1>LAST NIGHT</h1>
+    <p>Six hours until dawn, twenty-six hulls still out on the water, and the
+       rocks of Carrick Sound waiting under every one of them.</p>
+    <p>Hold a ship in the beam and it will find the channel. Let it go dark and it will not.</p>
+    <p class="quiet">Your father kept this light for thirty years. On his last night
+       he wrote one line in the log: <i>it comes up the stairs when the lamp is cold.</i></p>
+    <div class="keys">
+      <b>MOUSE</b> &nbsp;aim the beam<br>
+      <b>A / D</b> &nbsp;or &nbsp;<b>&larr; &rarr;</b> &nbsp;turn the lamp<br>
+      <b>SHIFT</b> &nbsp;focus the lens &mdash; narrow, burning, thirsty<br>
+      <b>SPACE</b> &nbsp;close the shutter &mdash; saves oil, hides you, blinds them<br>
+      <b>M</b> &nbsp;sound on / off
+    </div>
+    <p class="quiet">Smacks are quick and take a course almost at once. Coasters are
+      steady. A packet boat is slow, sluggish on the helm, carries people, and counts
+      double against you if you lose her.</p>
+    <div class="btn" id="go">LIGHT THE LAMP</div>
+  </div>
+</div>
+<script>
+"use strict";
+(function(){
+const HEADLESS = (typeof window === 'undefined') || !!(typeof window!=='undefined' && window.__HEADLESS);
+const W = 960, H = 640, CX = 480, CY = 332;
+const TAU = Math.PI*2;
+
+const CFG = {
+  rockR: 152,          // radius of the reef ring
+  harborR: 74,         // inside this, a ship is home
+  spawnR: 452,
+  hourLen: 46,         // seconds per hour of night
+  hours: 6,
+  beamReach: 520,
+  beamHalf: 0.165,
+  focusReach: 640,
+  focusHalf: 0.078,
+  turnRate: 2.3,
+  oilMax: 100,
+  oilBurn: 0.92,
+  oilFocus: 2.5,
+  fearMax: 100,
+  fearDark: 2.4,
+  fearCalm: 2.8,
+  fearWreck: 9,
+  integrity: 100,
+  courseGain: 1/1.10,  // per second while lit
+  courseDecay: 1/7.0,   // a hull that has found the channel holds it for a while
+  maxWrecks: 4,
+  burnDPS: 74,
+  burnRange: 265,
+  climbDPS: 3.6,
+  folkCap: 10,
+  wraithHour: 4,       // he first walks in during the fifth hour
+  wraithFlee: 430,     // driven out past this and he sinks
+  wraithCool: 22,      // ...and stays under this long
+};
+
+// three gaps in the reef, in canvas angle space (y down)
+const CHANNELS = [
+  {a: Math.PI*0.50, w: 0.17},
+  {a: Math.PI*1.17, w: 0.16},
+  {a: Math.PI*1.83, w: 0.16},
+];
+
+// ship schedule: [hour, count] — 24 hulls across the night
+const SCHEDULE = [3,4,4,5,5,5];
+
+const HOUR_TEXT = [
+  ["ELEVEN O'CLOCK", "The wind gets up. Three sets of running lights out past the bar."],
+  ["MIDNIGHT", "The gulls have gone quiet. All of them, at once."],
+  ["ONE O'CLOCK", "Something in the water keeps pace with the beam. You tell yourself it is spray."],
+  ["TWO O'CLOCK", "There are wet marks on the gallery rail. Outside the glass. Sixty feet up."],
+  ["THREE O'CLOCK", "You know that walk. You buried that walk four winters ago."],
+  ["FOUR O'CLOCK", "Hold the light. Hold it. Dawn is a thing that happens to people who last."],
+];
+
+let cv, ctx, card, cardEl, rafId=0;
+const keys = Object.create(null);
+let mouse = {x: CX, y: CY-200, has:false};
+
+const S = {  // game state
+  phase: 'menu',       // menu | play | inter | over
+  t: 0, hour: 0, hourT: 0,
+  beam: 0, focus: false, shutter: false,
+  oil: CFG.oilMax, fear: 0, integrity: CFG.integrity,
+  saved: 0, wrecked: 0,
+  ships: [], folk: [], parts: [], wraith: null,
+  queue: [], folkTimer: 6, wraithCool: 0, hornT: 8, shake: 0, flash: 0,
+  msg: '', msgT: 0, endTitle:'', endBody:'', endWin:false, log:null,
+  rocks: [],
+};
+
+/* ------------------------------------------------------------------ sound
+   All of it is synthesised — no asset files, and every entry point is a no-op
+   when there is no AudioContext (the Node harness) or before the first click. */
+const AU = {ok:false, ctx:null, master:null, windGain:null, humGain:null, dreadGain:null};
+function audioInit(){
+  if(AU.ok || HEADLESS) return;
+  const AC = (typeof window!=='undefined') && (window.AudioContext||window.webkitAudioContext);
+  if(!AC) return;
+  try{
+    const c = new AC();
+    const master = c.createGain(); master.gain.value = 0.55; master.connect(c.destination);
+
+    // wind: filtered noise, forever
+    const n = c.createBufferSource();
+    const buf = c.createBuffer(1, c.sampleRate*3, c.sampleRate);
+    const d = buf.getChannelData(0);
+    let last=0;
+    for(let i=0;i<d.length;i++){ const w=Math.random()*2-1; last=(last*0.96+w*0.04); d[i]=last*3.2; }
+    n.buffer=buf; n.loop=true;
+    const bp = c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=420; bp.Q.value=0.6;
+    const wg = c.createGain(); wg.gain.value=0.16;
+    n.connect(bp); bp.connect(wg); wg.connect(master); n.start();
+
+    // the lamp itself: a low hum that dies with the shutter
+    const o = c.createOscillator(); o.type='triangle'; o.frequency.value=58;
+    const o2 = c.createOscillator(); o2.type='sine'; o2.frequency.value=87;
+    const hg = c.createGain(); hg.gain.value=0.0;
+    o.connect(hg); o2.connect(hg); hg.connect(master); o.start(); o2.start();
+
+    // dread: a detuned pair that swells as he gets close
+    const p1=c.createOscillator(), p2=c.createOscillator();
+    p1.type='sawtooth'; p1.frequency.value=41; p2.type='sawtooth'; p2.frequency.value=41.7;
+    const lp=c.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=200;
+    const dg=c.createGain(); dg.gain.value=0;
+    p1.connect(lp); p2.connect(lp); lp.connect(dg); dg.connect(master); p1.start(); p2.start();
+
+    Object.assign(AU,{ok:true, ctx:c, master, windGain:wg, humGain:hg, dreadGain:dg});
+  }catch(e){ /* no audio, no problem */ }
+}
+function tone(freq, dur, type, vol, slideTo){
+  if(!AU.ok) return;
+  const c=AU.ctx, o=c.createOscillator(), g=c.createGain();
+  o.type=type||'sine'; o.frequency.setValueAtTime(freq, c.currentTime);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, c.currentTime+dur);
+  g.gain.setValueAtTime(0, c.currentTime);
+  g.gain.linearRampToValueAtTime(vol||0.2, c.currentTime+0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime+dur);
+  o.connect(g); g.connect(AU.master); o.start(); o.stop(c.currentTime+dur+0.05);
+}
+function noiseHit(dur, vol, freq){
+  if(!AU.ok) return;
+  const c=AU.ctx, len=Math.floor(c.sampleRate*dur);
+  const b=c.createBuffer(1,len,c.sampleRate), d=b.getChannelData(0);
+  for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2);
+  const s=c.createBufferSource(); s.buffer=b;
+  const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.value=freq||900;
+  const g=c.createGain(); g.gain.value=vol||0.3;
+  s.connect(f); f.connect(g); g.connect(AU.master); s.start();
+}
+function sfx(what){
+  if(!AU.ok) return;
+  switch(what){
+    case 'wreck':   noiseHit(1.4, 0.5, 700); tone(70, 1.1, 'sawtooth', 0.22, 32); break;
+    case 'saved':   tone(392, 0.5, 'sine', 0.13); setTimeout(()=>tone(587,0.6,'sine',0.11),110); break;
+    case 'horn':    tone(104, 2.4, 'sawtooth', 0.10, 96); break;
+    case 'burn':    noiseHit(0.35, 0.16, 2600); break;
+    case 'wraith':  tone(52, 2.0, 'sawtooth', 0.16, 40); break;
+    case 'sink':    tone(150, 1.2, 'sine', 0.13, 44); break;
+    case 'shutter': noiseHit(0.16, 0.22, 1800); break;
+    case 'climb':   noiseHit(0.5, 0.10, 350); break;
+  }
+}
+let muted=false;
+function toggleMute(){
+  muted=!muted;
+  if(AU.ok) AU.master.gain.value = muted?0:0.55;
+  say(muted?'[sound off]':'[sound on]');
+}
+/* the running mix, driven from update() */
+function audioMix(dt){
+  if(!AU.ok) return;
+  const burning = !S.shutter && S.oil>0;
+  const hum = burning ? (S.focus?0.055:0.035) : 0;
+  AU.humGain.gain.value += (hum - AU.humGain.gain.value)*Math.min(1,dt*5);
+  const wind = 0.12 + S.hour*0.014 + (S.fear/CFG.fearMax)*0.06;
+  AU.windGain.gain.value += (wind - AU.windGain.gain.value)*Math.min(1,dt*2);
+  let dread = S.fear/CFG.fearMax*0.05;
+  if(S.wraith){
+    const wd = Math.hypot(S.wraith.x-CX, S.wraith.y-CY);
+    dread += clamp((520-wd)/520,0,1)*0.13;
+  }
+  AU.dreadGain.gain.value += (dread - AU.dreadGain.gain.value)*Math.min(1,dt*3);
+}
+
+/* ---------------------------------------------------------------- helpers */
+const rnd = (a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+function angDiff(a,b){let d=(a-b)%TAU; if(d>Math.PI)d-=TAU; if(d<-Math.PI)d+=TAU; return d;}
+function inChannel(a){
+  for(const c of CHANNELS) if(Math.abs(angDiff(a,c.a))<c.w) return c;
+  return null;
+}
+function nearestChannel(a){
+  let best=CHANNELS[0], bd=1e9;
+  for(const c of CHANNELS){const d=Math.abs(angDiff(a,c.a)); if(d<bd){bd=d;best=c;}}
+  return best;
+}
+function say(m){ S.msg=m; S.msgT=3.4; }
+
+/* the sound never sits the same way twice: rotate the whole reef and jitter the
+   gaps, keeping three of them and never letting two crowd together */
+function shuffleReef(){
+  const base = rnd(0,TAU);
+  const spread = TAU/3;
+  for(let i=0;i<CHANNELS.length;i++){
+    CHANNELS[i].a = (base + i*spread + rnd(-0.30,0.30) + TAU) % TAU;
+    CHANNELS[i].w = rnd(0.145, 0.195);
+  }
+}
+
+/* the reef: a ring of jagged teeth with gaps at the channels */
+function buildRocks(){
+  S.rocks.length=0;
+  for(let i=0;i<128;i++){
+    const a = i/128*TAU;
+    if(inChannel(a)) continue;
+    S.rocks.push({a, r: CFG.rockR + Math.sin(i*2.3)*9 + Math.cos(i*0.7)*6,
+                  s: 7+Math.abs(Math.sin(i*1.9))*11});
+  }
+}
+
+/* ------------------------------------------------------------ beam maths */
+function beamHalf(){ return S.focus?CFG.focusHalf:CFG.beamHalf; }
+function beamReach(){ return S.focus?CFG.focusReach:CFG.beamReach; }
+function litAmount(x,y){          // 0..1 how strongly a point is illuminated
+  if(S.shutter || S.oil<=0) return 0;
+  const dx=x-CX, dy=y-CY, d=Math.hypot(dx,dy);
+  if(d>beamReach()) return 0;
+  const ad=Math.abs(angDiff(Math.atan2(dy,dx), S.beam));
+  const hw=beamHalf();
+  if(ad>hw) return 0;
+  const edge = 1 - (ad/hw)*(ad/hw);
+  const fall = 1 - (d/beamReach())*0.55;
+  return clamp(edge*fall,0,1);
+}
+
+/* --------------------------------------------------------------- spawning */
+/* three things come off the water, and they do not want the same amount of light.
+   gain  — how fast she takes a course under the beam
+   turn  — how hard she can put the helm over
+   oil   — what her master gives you from his own stores for getting him in
+   cost  — hulls counted against you if she goes on the reef */
+const HULLS = [
+  {id:'smack',   label:'fishing smack', sp:[31,38], gain:1.35, turn:1.25, oil:5,  cost:1, size:0.8,
+   weight:[4,3,3,2,2,2]},
+  {id:'coaster', label:'coaster',       sp:[25,32], gain:1.00, turn:1.00, oil:7,  cost:1, size:1.0,
+   weight:[3,4,4,4,3,3]},
+  {id:'packet',  label:'packet boat',   sp:[20,25], gain:0.75, turn:0.88, oil:13, cost:2, size:1.35,
+   weight:[0,1,2,3,4,4]},
+];
+function pickHull(hour){
+  let tot=0; for(const h of HULLS) tot += h.weight[hour];
+  let r = Math.random()*tot;
+  for(const h of HULLS){ r -= h.weight[hour]; if(r<=0) return h; }
+  return HULLS[1];
+}
+function spawnShip(hour, forceId){
+  const a = rnd(0,TAU);
+  const k = forceId ? HULLS.find(h=>h.id===forceId) : pickHull(hour);
+  const sp = rnd(k.sp[0],k.sp[1]) + hour*1.1;
+  S.ships.push({
+    x: CX+Math.cos(a)*CFG.spawnR, y: CY+Math.sin(a)*CFG.spawnR,
+    h: a+Math.PI+rnd(-0.45,0.45), sp, course:0, through:false,
+    ch: nearestChannel(a),          // the gap this hull will be steered to
+    kind: k, dead:false, wob: rnd(0,TAU), name: hour,
+  });
+}
+function spawnFolk(hour){
+  const a = rnd(0,TAU), r = rnd(CFG.spawnR-40, CFG.spawnR+60);
+  S.folk.push({
+    x: CX+Math.cos(a)*r, y: CY+Math.sin(a)*r,
+    vx:0, vy:0, hp: 42+hour*7, climb:0, lit:0, wander: rnd(0,TAU),
+    sp: rnd(20,30)+hour*1.6, seen:0,
+  });
+}
+function spawnWraith(){
+  const a = rnd(0,TAU);
+  S.wraith = {x: CX+Math.cos(a)*(CFG.spawnR+120), y: CY+Math.sin(a)*(CFG.spawnR+120),
+              lit:0, held:0};
+  sfx('wraith');
+  say("Someone is walking on the water.");
+}
+function burst(x,y,n,col,spd){
+  for(let i=0;i<n;i++){
+    const a=rnd(0,TAU), s=rnd(spd*0.3,spd);
+    S.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:rnd(0.4,1.1),m:1,col});
+  }
+}
+
+/* ------------------------------------------------------------------ start */
+function startNight(){
+  S.phase='play'; S.t=0; S.hour=0; S.hourT=0;
+  S.beam=-Math.PI/2; S.focus=false; S.shutter=false;
+  S.oil=CFG.oilMax; S.fear=0; S.integrity=CFG.integrity;
+  S.saved=0; S.wrecked=0;
+  S.ships.length=0; S.folk.length=0; S.parts.length=0; S.wraith=null; S.wraithCool=0;
+  S.shake=0; S.flash=0; S.msg=''; S.msgT=0; S.hornT=8;
+  shuffleReef();
+  buildRocks();
+  beginHour(0);
+}
+function beginHour(h){
+  S.hour=h; S.hourT=0;
+  S.queue = [];
+  const n = SCHEDULE[h];
+  for(let i=0;i<n;i++) S.queue.push(rnd(1.5, CFG.hourLen-9) );
+  S.queue.sort((a,b)=>a-b);
+  S.folkTimer = Math.max(2.2, 8.5 - h*1.1);
+  if(h===CFG.wraithHour && !S.wraith) spawnWraith();
+  say(HOUR_TEXT[h][0]);
+}
+
+/* ----------------------------------------------------------------- update */
+function update(dt){
+  if(S.phase!=='play') return;
+  dt = Math.min(dt, 0.05);
+  S.t+=dt; S.hourT+=dt;
+  if(S.msgT>0) S.msgT-=dt;
+  audioMix(dt);
+  S.hornT -= dt;
+  if(S.hornT<=0){ S.hornT = rnd(17,26); sfx('horn'); }
+  S.shake = Math.max(0,S.shake-dt*3.2);
+  S.flash = Math.max(0,S.flash-dt*2.4);
+
+  /* --- lamp control --- */
+  let turn=0;
+  if(keys['a']||keys['arrowleft']) turn-=1;
+  if(keys['d']||keys['arrowright']) turn+=1;
+  if(turn) S.beam += turn*CFG.turnRate*dt;
+  else if(mouse.has){
+    const want=Math.atan2(mouse.y-CY, mouse.x-CX);
+    const d=angDiff(want,S.beam);
+    S.beam += clamp(d, -CFG.turnRate*2.4*dt, CFG.turnRate*2.4*dt);
+  }
+  S.beam = (S.beam+TAU*4)%TAU;
+
+  /* --- oil --- */
+  const burning = !S.shutter && S.oil>0;
+  if(burning) S.oil -= (S.focus?CFG.oilFocus:CFG.oilBurn)*dt;
+  if(S.oil<=0){ S.oil=0; }
+
+  /* --- nerve --- */
+  if(!burning) S.fear += CFG.fearDark*dt;
+  else S.fear -= CFG.fearCalm*dt;
+  let near=0;
+  for(const f of S.folk){ const d=Math.hypot(f.x-CX,f.y-CY); if(d<250) near++; }
+  S.fear += near*0.30*dt;
+  if(S.wraith){
+    const wd=Math.hypot(S.wraith.x-CX,S.wraith.y-CY);
+    if(wd<300) S.fear += (300-wd)/300*2.2*dt;
+  }
+  S.fear = clamp(S.fear,0,CFG.fearMax);
+
+  /* --- ship queue --- */
+  while(S.queue.length && S.hourT>=S.queue[0]){ S.queue.shift(); spawnShip(S.hour); }
+
+  /* --- follower queue --- */
+  S.folkTimer -= dt;
+  if(S.folkTimer<=0 && S.folk.length<CFG.folkCap){
+    S.folkTimer = Math.max(3.4, 9.5 - S.hour*1.0) * rnd(0.7,1.3);
+    spawnFolk(S.hour);
+  }
+
+  // he comes back up
+  if(!S.wraith && S.hour>=CFG.wraithHour){
+    S.wraithCool -= dt;
+    if(S.wraithCool<=0) spawnWraith();
+  }
+
+  updateShips(dt);
+  updateFolk(dt);
+  updateWraith(dt);
+
+  for(let i=S.parts.length-1;i>=0;i--){
+    const p=S.parts[i]; p.x+=p.vx*dt; p.y+=p.vy*dt;
+    p.vx*=0.97; p.vy*=0.97; p.l-=dt;
+    if(p.l<=0) S.parts.splice(i,1);
+  }
+
+  /* --- hour rollover --- */
+  if(S.hourT>=CFG.hourLen && S.queue.length===0 && !S.ships.some(s=>!s.dead)){
+    if(S.hour+1>=CFG.hours){ endGame(true); return; }
+    S.phase='inter';
+    return;
+  }
+
+  /* --- loss --- */
+  if(S.wrecked>=CFG.maxWrecks) endGame(false,"TOO MANY LOST",
+    "Four hulls on the teeth of Carrick Sound. In the morning they will count them, and then they will come for you.");
+  else if(S.integrity<=0) endGame(false,"THE LAMP ROOM",
+    "The glass gives. Salt water and something colder pours over the lens, and the light goes out from the inside.");
+  else if(S.fear>=CFG.fearMax) endGame(false,"YOU RAN",
+    "You are on the cliff path with no shoes and no lamp, and behind you the tower stands dark and patient.");
+  else if(S.oil<=0 && S.hourT>3) endGame(false,"DRY",
+    "The wick gutters, gulps, and gives up. There is no more oil in the store, "+
+    "and a great deal of dark left to fill.");
+}
+
+function updateShips(dt){
+  for(let i=S.ships.length-1;i>=0;i--){
+    const s=S.ships[i];
+    const lit = litAmount(s.x,s.y);
+    const K = s.kind || HULLS[1];
+    s.course = clamp(s.course + (lit>0.12 ? lit*CFG.courseGain*K.gain : -CFG.courseDecay)*dt, 0, 1);
+
+    const bearing = Math.atan2(s.y-CY, s.x-CX);
+    let want;
+    if(s.through){
+      want = Math.atan2(CY-s.y, CX-s.x);
+    }else{
+      // aim at the gap itself, so a fully-guided hull crosses the ring inside it
+      const ch = s.ch || (s.ch = nearestChannel(bearing));
+      const tx = CX+Math.cos(ch.a)*CFG.rockR;
+      const ty = CY+Math.sin(ch.a)*CFG.rockR;
+      want = Math.atan2(ty-s.y, tx-s.x);
+      // unlit ships blunder straight at the tower instead
+      const blind = Math.atan2(CY-s.y, CX-s.x);
+      want = blind + angDiff(want,blind)*s.course;
+    }
+    s.wob += dt*2.1;
+    const drift = Math.sin(s.wob)*0.25*(1-s.course);
+    const d = angDiff(want+drift, s.h);
+    s.h += clamp(d, -2.0*dt*K.turn, 2.0*dt*K.turn) * (0.4 + s.course*1.3);
+
+    // a hull with no light heaves to and creeps; a guided one runs for the gap
+    const speed = s.sp*(0.45+s.course*0.7);
+    s.x += Math.cos(s.h)*speed*dt;
+    s.y += Math.sin(s.h)*speed*dt;
+
+    const dist = Math.hypot(s.x-CX, s.y-CY);
+    if(!s.through && dist <= CFG.rockR){
+      const a = Math.atan2(s.y-CY, s.x-CX);
+      if(inChannel(a)) s.through = true;
+      else { wreck(s); S.ships.splice(i,1); continue; }
+    }
+    if(s.through && dist <= CFG.harborR){
+      S.saved++; S.oil = Math.min(CFG.oilMax, S.oil+K.oil);
+      S.fear = Math.max(0, S.fear-4);
+      burst(s.x,s.y,10,'#ffdca8',60);
+      sfx('saved');
+      say("The "+K.label+" is in. "+S.saved+" home.");
+      S.ships.splice(i,1); continue;
+    }
+    if(dist > CFG.spawnR+220){ S.ships.splice(i,1); }  // wandered out of the world
+  }
+}
+function wreck(s){
+  const K = s.kind || HULLS[1];
+  S.wrecked += K.cost;
+  S.fear = clamp(S.fear+CFG.fearWreck*K.cost,0,CFG.fearMax);
+  S.shake = 1; S.flash = 0.5;
+  burst(s.x,s.y,26,'#e8f4ff',110);
+  burst(s.x,s.y,10,'#8fd0ff',60);
+  sfx('wreck');
+  say(K.cost>1 ? "The packet is on the rocks. There were people aboard her."
+               : "She's broken up on the reef.");
+  // wrecks call things in
+  for(let k=0;k<2;k++){
+    S.folk.push({x:s.x+rnd(-20,20), y:s.y+rnd(-20,20), vx:0,vy:0,
+      hp:42+S.hour*7, climb:0, lit:0, wander:rnd(0,TAU),
+      sp:rnd(22,32)+S.hour*1.6, seen:0});
+  }
+}
+
+function updateFolk(dt){
+  const burning = !S.shutter && S.oil>0;
+  for(let i=S.folk.length-1;i>=0;i--){
+    const f=S.folk[i];
+    const lit = litAmount(f.x,f.y);
+    f.lit += (lit-f.lit)*Math.min(1,dt*6);
+    const d = Math.hypot(f.x-CX,f.y-CY);
+    const bearing = Math.atan2(f.y-CY,f.x-CX);
+
+    if(burning){
+      if(lit>0.08){
+        // in the beam: it follows the light home
+        f.seen = 1.4;
+        const a = bearing + Math.PI;      // straight up the beam toward the lamp
+        f.vx += Math.cos(a)*f.sp*2.2*dt;
+        f.vy += Math.sin(a)*f.sp*2.2*dt;
+      }else{
+        // out of the beam: slides toward the lit water
+        const off = angDiff(S.beam, bearing);
+        const tang = bearing + Math.PI/2*Math.sign(off);
+        const pull = Math.min(1, Math.abs(off)/1.2);
+        f.vx += (Math.cos(tang)*0.9 + Math.cos(bearing+Math.PI)*0.35)*f.sp*pull*1.5*dt;
+        f.vy += (Math.sin(tang)*0.9 + Math.sin(bearing+Math.PI)*0.35)*f.sp*pull*1.5*dt;
+        f.seen = Math.max(0, f.seen-dt);
+      }
+    }else{
+      // shutter closed: they lose the trail
+      f.seen = Math.max(0,f.seen-dt*1.4);
+      f.wander += rnd(-2,2)*dt;
+      f.vx += Math.cos(f.wander)*f.sp*0.5*dt;
+      f.vy += Math.sin(f.wander)*f.sp*0.5*dt;
+    }
+    const damp = Math.pow(0.06, dt);
+    f.vx*=damp; f.vy*=damp;
+    const vm = Math.hypot(f.vx,f.vy), cap=f.sp*(f.seen>0?1.25:0.6);
+    if(vm>cap){ f.vx=f.vx/vm*cap; f.vy=f.vy/vm*cap; }
+    f.x+=f.vx*dt; f.y+=f.vy*dt;
+
+    // focused lens burns them at close range
+    if(S.focus && burning && lit>0.25 && d<CFG.burnRange){
+      f.hp -= CFG.burnDPS*lit*dt;
+      if(Math.random()<dt*12) S.parts.push({x:f.x+rnd(-6,6),y:f.y+rnd(-6,6),
+        vx:rnd(-14,14),vy:rnd(-30,-6),l:0.5,m:1,col:'#ffd9a0'});
+      if(f.hp<=0){ burst(f.x,f.y,14,'#3fd6c0',70); sfx('burn'); S.folk.splice(i,1); continue; }
+    }
+    // at the base it climbs
+    if(d < 46){
+      f.climb += dt;
+      S.integrity -= CFG.climbDPS*dt;
+      S.fear += 2.2*dt;
+      if(Math.random()<dt*8) S.parts.push({x:CX+rnd(-16,16),y:CY+rnd(-30,10),
+        vx:rnd(-8,8),vy:rnd(-20,0),l:0.6,m:1,col:'#2b6b63'});
+    } else f.climb=0;
+
+    if(d>CFG.spawnR+320) S.folk.splice(i,1);
+  }
+}
+
+function updateWraith(dt){
+  const w=S.wraith; if(!w) return;
+  const burning = !S.shutter && S.oil>0;
+  const lit = burning ? litAmount(w.x,w.y) : 0;
+  w.lit += (lit-w.lit)*Math.min(1,dt*8);
+  const d = Math.hypot(w.x-CX,w.y-CY);
+  const a = Math.atan2(CY-w.y, CX-w.x);
+  if(lit>0.2){
+    // pinned by the light, and driven back a step
+    w.held += dt;
+    const push = 48*lit;
+    w.x -= Math.cos(a)*push*dt; w.y -= Math.sin(a)*push*dt;
+    // driven far enough out, he goes under — and stays under a while
+    if(d > CFG.wraithFlee){
+      S.wraith = null; S.wraithCool = CFG.wraithCool;
+      sfx('sink');
+      say("He goes under. He does not go away.");
+      return;
+    }
+  }else{
+    w.held = 0;
+    const sp = 17 + S.hour*2;
+    w.x += Math.cos(a)*sp*dt; w.y += Math.sin(a)*sp*dt;
+  }
+  if(d<52){
+    endGame(false,"HE CAME UP THE STAIRS",
+      "The door at the top of the tower was never locked. It never needed to be. "+
+      "He is soaked through and he is smiling and he says your name the way he used to.");
+  }
+}
+
+/* the log book: one line, kept between nights */
+function loadLog(){
+  try{
+    if(typeof localStorage==='undefined') return null;
+    return JSON.parse(localStorage.getItem('lighthouse.log')||'null');
+  }catch(e){ return null; }
+}
+function saveLog(rec){
+  try{ if(typeof localStorage!=='undefined')
+    localStorage.setItem('lighthouse.log', JSON.stringify(rec)); }catch(e){}
+}
+function recordNight(){
+  const prev = loadLog() || {best:-1, bestWin:false, nights:0, dawns:0};
+  const rec = {
+    best: Math.max(prev.best, S.saved),
+    bestWin: prev.bestWin || S.endWin,
+    nights: (prev.nights||0)+1,
+    dawns: (prev.dawns||0) + (S.endWin?1:0),
+  };
+  saveLog(rec);
+  S.log = rec;
+  return rec;
+}
+
+function endGame(win, title, body){
+  if(S.phase==='over') return;      // one ending per night
+  S.phase='over'; S.endWin=win;
+  if(win){
+    S.endTitle = "DAWN";
+    S.endBody = "Grey light on the water and the beam gone thin and useless in it. "+
+      S.saved+" hulls home, "+S.wrecked+" on the rocks. Whatever walked the water walked back into it. "+
+      "You write one line in the log, the same line he wrote, and you go down the stairs to sleep.";
+  }else{ S.endTitle=title; S.endBody=body; }
+  recordNight();
+  showEnd();
+}
+
+/* ------------------------------------------------------------------ draw */
+function draw(){
+  const sh = S.shake;
+  ctx.save();
+  if(sh>0) ctx.translate(rnd(-6,6)*sh, rnd(-6,6)*sh);
+
+  // sea
+  const g = ctx.createRadialGradient(CX,CY,20,CX,CY,560);
+  g.addColorStop(0,'#0a1620'); g.addColorStop(0.5,'#060d15'); g.addColorStop(1,'#02040a');
+  ctx.fillStyle=g; ctx.fillRect(-40,-40,W+80,H+80);
+
+  // swell
+  ctx.strokeStyle='rgba(90,140,170,0.055)'; ctx.lineWidth=1;
+  for(let r=90;r<600;r+=34){
+    ctx.beginPath();
+    ctx.arc(CX,CY,r+Math.sin(S.t*0.7+r*0.02)*4,0,TAU);
+    ctx.stroke();
+  }
+
+  drawBeam();
+  drawRocks();
+  for(const f of S.folk) drawFolk(f);
+  for(const s of S.ships) drawShip(s);
+  if(S.wraith) drawWraith(S.wraith);
+  drawTower();
+
+  for(const p of S.parts){
+    ctx.globalAlpha = clamp(p.l,0,1);
+    ctx.fillStyle=p.col; ctx.fillRect(p.x-1.5,p.y-1.5,3,3);
+  }
+  ctx.globalAlpha=1;
+  ctx.restore();
+
+  if(S.flash>0){
+    ctx.fillStyle='rgba(200,230,255,'+(S.flash*0.35)+')';
+    ctx.fillRect(0,0,W,H);
+  }
+  const fearVeil = Math.max(0,(S.fear-45)/55);
+  if(fearVeil>0){
+    const v=ctx.createRadialGradient(CX,CY,120,CX,CY,560);
+    v.addColorStop(0,'rgba(20,0,0,0)');
+    v.addColorStop(1,'rgba(40,0,6,'+(fearVeil*0.7)+')');
+    ctx.fillStyle=v; ctx.fillRect(0,0,W,H);
+  }
+  drawHUD();
+}
+
+function drawBeam(){
+  if(S.shutter || S.oil<=0) return;
+  const hw=beamHalf(), reach=beamReach();
+  const flick = 0.86 + Math.sin(S.t*23)*0.05 + (S.oil<20?Math.sin(S.t*40)*0.12:0);
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  const g=ctx.createRadialGradient(CX,CY,10,CX,CY,reach);
+  const c = S.focus?'255,228,168':'255,198,116';
+  g.addColorStop(0,'rgba('+c+','+(0.40*flick)+')');
+  g.addColorStop(0.35,'rgba('+c+','+(0.15*flick)+')');
+  g.addColorStop(0.75,'rgba('+c+','+(0.05*flick)+')');
+  g.addColorStop(1,'rgba('+c+',0)');
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.moveTo(CX,CY);
+  ctx.arc(CX,CY,reach,S.beam-hw,S.beam+hw); ctx.closePath(); ctx.fill();
+  // hot core
+  ctx.beginPath(); ctx.moveTo(CX,CY);
+  ctx.arc(CX,CY,reach,S.beam-hw*0.32,S.beam+hw*0.32); ctx.closePath();
+  ctx.fillStyle='rgba('+c+','+(0.13*flick)+')'; ctx.fill();
+  ctx.restore();
+}
+
+function drawRocks(){
+  for(const r of S.rocks){
+    const x=CX+Math.cos(r.a)*r.r, y=CY+Math.sin(r.a)*r.r;
+    const l=litAmount(x,y);
+    ctx.fillStyle = 'rgb('+Math.round(16+l*90)+','+Math.round(20+l*80)+','+Math.round(26+l*72)+')';
+    ctx.beginPath();
+    ctx.moveTo(x+Math.cos(r.a)*r.s, y+Math.sin(r.a)*r.s);
+    ctx.lineTo(x+Math.cos(r.a+2.2)*r.s*0.8, y+Math.sin(r.a+2.2)*r.s*0.8);
+    ctx.lineTo(x+Math.cos(r.a-2.2)*r.s*0.8, y+Math.sin(r.a-2.2)*r.s*0.8);
+    ctx.closePath(); ctx.fill();
+  }
+  // channel markers
+  for(const c of CHANNELS){
+    for(const s of [-1,1]){
+      const a=c.a+s*c.w;
+      const x=CX+Math.cos(a)*CFG.rockR, y=CY+Math.sin(a)*CFG.rockR;
+      const blink = (Math.sin(S.t*2.6+a*3)>0)?1:0.25;
+      ctx.fillStyle='rgba(90,220,160,'+(0.35+blink*0.5)+')';
+      ctx.beginPath(); ctx.arc(x,y,2.6,0,TAU); ctx.fill();
+    }
+  }
+}
+
+function drawShip(s){
+  const lit=litAmount(s.x,s.y);
+  const K = s.kind || HULLS[1];
+  const z = K.size;
+  const a = 0.20 + lit*0.8;
+  ctx.save(); ctx.translate(s.x,s.y); ctx.rotate(s.h); ctx.scale(z,z);
+  ctx.fillStyle='rgba('+Math.round(120+lit*135)+','+Math.round(130+lit*120)+','+Math.round(140+lit*110)+','+a+')';
+  ctx.beginPath(); ctx.moveTo(11,0); ctx.lineTo(-7,5.5); ctx.lineTo(-4,0); ctx.lineTo(-7,-5.5);
+  ctx.closePath(); ctx.fill();
+  if(K.cost>1){   // a packet carries people: lit portholes down her side
+    ctx.fillStyle='rgba(255,196,120,'+(0.35+lit*0.6)+')';
+    for(let i=-1;i<=1;i++) ctx.fillRect(-2+i*3, -1, 1.6, 2);
+  }
+  ctx.restore();
+  // her own lantern
+  const pulse = 0.55+Math.sin(S.t*4+s.wob)*0.2;
+  ctx.fillStyle='rgba(255,180,90,'+pulse+')';
+  ctx.beginPath(); ctx.arc(s.x,s.y,1.8,0,TAU); ctx.fill();
+  // course confidence ring
+  if(s.course>0.05 && !s.through){
+    ctx.strokeStyle='rgba(140,230,190,'+(s.course*0.55)+')'; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.arc(s.x,s.y,13*z,-Math.PI/2,-Math.PI/2+TAU*s.course); ctx.stroke();
+  }
+}
+
+function drawFolk(f){
+  const l=f.lit;
+  const d=Math.hypot(f.x-CX,f.y-CY);
+  // close to the tower they show against the lamp's own glow, lit or not
+  const near = clamp((320-d)/240,0,1);
+  const v = clamp(l + near*0.55, 0, 1);
+  const wob=Math.sin(S.t*3+f.wander)*2;
+  // wake first, so the body sits inside it
+  ctx.strokeStyle='rgba(120,205,205,'+(0.12+v*0.28)+')'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(f.x,f.y,11+wob*0.5,0,TAU); ctx.stroke();
+  ctx.beginPath();
+  ctx.fillStyle='rgba('+Math.round(10+v*30)+','+Math.round(46+v*110)+','+Math.round(50+v*100)+','+(0.65+v*0.35)+')';
+  ctx.ellipse(f.x,f.y,9+wob*0.3,6.5,f.wander,0,TAU); ctx.fill();
+  // the ridge along its back
+  ctx.strokeStyle='rgba(150,235,215,'+(0.18+v*0.5)+')'; ctx.lineWidth=1.2;
+  ctx.beginPath();
+  ctx.moveTo(f.x-8,f.y+1); ctx.quadraticCurveTo(f.x,f.y-6-wob*0.4,f.x+8,f.y+1); ctx.stroke();
+  if(v>0.05){
+    ctx.fillStyle='rgba(215,255,240,'+(0.25+v*0.75)+')';
+    ctx.beginPath(); ctx.arc(f.x-2.6,f.y-1,1.3,0,TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(f.x+2.6,f.y-1,1.3,0,TAU); ctx.fill();
+  }
+  if(f.climb>0){   // it is on the stonework
+    ctx.strokeStyle='rgba(90,235,205,'+(0.35+Math.sin(S.t*9)*0.25)+')'; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.arc(f.x,f.y,14,0,TAU); ctx.stroke();
+  }
+}
+
+function drawWraith(w){
+  const l=w.lit;
+  const d=Math.hypot(w.x-CX,w.y-CY);
+  ctx.save(); ctx.translate(w.x,w.y);
+  const h=26+Math.sin(S.t*1.5)*1.5;
+  ctx.fillStyle='rgba(3,6,8,'+(0.55+l*0.4)+')';
+  ctx.beginPath();
+  ctx.moveTo(0,-h); ctx.lineTo(7,0); ctx.lineTo(4,10); ctx.lineTo(-4,10); ctx.lineTo(-7,0);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.arc(0,-h-4,5.5,0,TAU); ctx.fill();
+  if(l>0.05){
+    ctx.strokeStyle='rgba(255,220,170,'+(l*0.8)+')'; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.arc(0,-h-4,7.5,0,TAU); ctx.stroke();
+    ctx.fillStyle='rgba(255,120,90,'+l+')';
+    ctx.beginPath(); ctx.arc(-2,-h-5,1.1,0,TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(2,-h-5,1.1,0,TAU); ctx.fill();
+  }
+  ctx.restore();
+  if(d<340 && l<0.2){
+    ctx.strokeStyle='rgba(180,60,60,'+(0.10+(340-d)/340*0.2)+')'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(CX,CY,d,0,TAU); ctx.stroke();
+  }
+}
+
+function drawTower(){
+  const glow = (!S.shutter&&S.oil>0)?1:0.15;
+  const g=ctx.createRadialGradient(CX,CY,2,CX,CY,70);
+  g.addColorStop(0,'rgba(255,225,170,'+(0.55*glow)+')');
+  g.addColorStop(1,'rgba(255,225,170,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(CX,CY,70,0,TAU); ctx.fill();
+
+  ctx.fillStyle='#151d26';
+  ctx.beginPath(); ctx.moveTo(CX-15,CY+26); ctx.lineTo(CX-9,CY-16);
+  ctx.lineTo(CX+9,CY-16); ctx.lineTo(CX+15,CY+26); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#2a3846'; ctx.fillRect(CX-12,CY-20,24,5);
+  ctx.fillStyle = glow>0.5?'rgba(255,232,180,0.95)':'rgba(60,70,80,0.9)';
+  ctx.fillRect(CX-7,CY-16,14,11);
+  ctx.fillStyle='#0d141c';
+  ctx.beginPath(); ctx.moveTo(CX-11,CY-20); ctx.lineTo(CX,CY-29); ctx.lineTo(CX+11,CY-20);
+  ctx.closePath(); ctx.fill();
+  // integrity cracks
+  if(S.integrity<70){
+    ctx.strokeStyle='rgba(60,200,180,'+((70-S.integrity)/70*0.6)+')'; ctx.lineWidth=1;
+    for(let i=0;i<4;i++){
+      ctx.beginPath();
+      ctx.moveTo(CX-12+i*8, CY+26);
+      ctx.lineTo(CX-9+i*7+Math.sin(i*3+S.t)*3, CY-10);
+      ctx.stroke();
+    }
+  }
+}
+
+function bar(x,y,w,h,v,col,label){
+  ctx.fillStyle='rgba(255,255,255,0.08)'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle=col; ctx.fillRect(x,y,w*clamp(v,0,1),h);
+  ctx.strokeStyle='rgba(255,255,255,0.18)'; ctx.lineWidth=1; ctx.strokeRect(x+.5,y+.5,w-1,h-1);
+  ctx.fillStyle='#8fa9bb'; ctx.font='10px Georgia'; ctx.textAlign='left';
+  ctx.fillText(label,x,y-4);
+}
+function drawHUD(){
+  ctx.textAlign='left';
+  bar(20,34,150,9, S.oil/CFG.oilMax, S.oil<25?'#ff8a4a':'#ffca7a', 'OIL');
+  bar(20,60,150,9, 1-S.fear/CFG.fearMax, S.fear>65?'#c8434f':'#7fb3cc', 'NERVE');
+  bar(20,86,150,9, S.integrity/CFG.integrity, '#5fd0b6', 'TOWER');
+
+  ctx.fillStyle='#cfe3f0'; ctx.font='13px Georgia';
+  ctx.textAlign='right';
+  ctx.fillText(HOUR_TEXT[Math.min(S.hour,5)][0], W-20, 40);
+  ctx.fillStyle='#7fb3cc'; ctx.font='12px Georgia';
+  const left = Math.max(0, CFG.hourLen-S.hourT);
+  ctx.fillText('dawn in '+((CFG.hours-S.hour-1)*CFG.hourLen+left|0)+'s', W-20, 58);
+  ctx.fillStyle='#9ad6b4'; ctx.fillText('home  '+S.saved, W-20, 80);
+  ctx.fillStyle='#d88a8a'; ctx.fillText('lost  '+S.wrecked+' / '+CFG.maxWrecks, W-20, 98);
+
+  ctx.textAlign='center'; ctx.font='12px Georgia'; ctx.fillStyle='#5e7a8c';
+  ctx.fillText((S.shutter?'[shutter closed]':S.focus?'[lens focused]':'')+'', CX, H-22);
+  if(!AU.ok && !HEADLESS){    // the browser will not make a sound until you touch it
+    ctx.fillStyle='rgba(255,220,168,'+(0.45+Math.sin(S.t*2.2)*0.22)+')'; ctx.font='13px Georgia';
+    ctx.fillText('click anywhere for sound', CX, 26);
+  }
+
+  if(S.msgT>0){
+    ctx.globalAlpha=clamp(S.msgT,0,1);
+    ctx.fillStyle='#ffdca8'; ctx.font='16px Georgia';
+    ctx.fillText(S.msg, CX, H-52);
+    ctx.globalAlpha=1;
+  }
+}
+
+/* -------------------------------------------------------------- card / ui */
+function showCard(html){ if(HEADLESS) return; cardEl.innerHTML=html; cardEl.classList.remove('hidden'); }
+function hideCard(){ if(HEADLESS) return; cardEl.classList.add('hidden'); }
+function showInter(){
+  const h=S.hour;
+  showCard('<h2>'+HOUR_TEXT[h][0]+' &mdash; KEPT</h2>'+
+    '<p>'+HOUR_TEXT[h][1]+'</p>'+
+    '<p class="quiet">home '+S.saved+' &nbsp;&middot;&nbsp; lost '+S.wrecked+
+      ' &nbsp;&middot;&nbsp; oil '+Math.round(S.oil)+'%</p>'+
+    (h+1<CFG.hours?'<p>'+HOUR_TEXT[h+1][1]+'</p>':'')+
+    '<div class="btn" id="go">KEEP THE LIGHT</div>');
+  bindGo(()=>{ hideCard(); beginHour(S.hour+1); S.phase='play'; });
+}
+function showEnd(){
+  const L = S.log;
+  const book = L ? '<p class="quiet">the log book: '+L.nights+' night'+(L.nights===1?'':'s')+
+      ' kept, '+L.dawns+' seen through to dawn, best '+L.best+' home</p>' : '';
+  showCard('<h1>'+S.endTitle+'</h1><p>'+S.endBody+'</p>'+
+    '<p class="quiet">home '+S.saved+' &nbsp;&middot;&nbsp; lost '+S.wrecked+
+    ' &nbsp;&middot;&nbsp; hours kept '+(S.endWin?CFG.hours:S.hour)+' of '+CFG.hours+'</p>'+
+    book+
+    '<div class="btn" id="go">'+(S.endWin?'ANOTHER NIGHT':'TRY AGAIN')+'</div>');
+  bindGo(()=>{ hideCard(); startNight(); });
+}
+function bindGo(fn){
+  if(HEADLESS) return;
+  const b=document.getElementById('go');
+  if(b) b.onclick=fn;
+}
+
+/* ------------------------------------------------------------------- loop */
+let last=0;
+function frame(ts){
+  rafId = requestAnimationFrame(frame);
+  const dt = last? Math.min(0.06,(ts-last)/1000) : 0.016;
+  last=ts;
+  if(S.phase==='play') update(dt);
+  if(S.phase==='inter'){ showInter(); S.phase='interwait'; }
+  if(S.phase!=='menu') draw();
+}
+
+function boot(){
+  cv=document.getElementById('cv'); ctx=cv.getContext('2d');
+  cardEl=document.getElementById('card');
+  buildRocks();
+  resize();
+  window.addEventListener('resize',resize);
+  window.addEventListener('keydown',e=>{
+    const k=e.key.toLowerCase();
+    audioInit();
+    if(k==='m'){ toggleMute(); return; }
+    if(k===' ' && !keys[k]) sfx('shutter');
+    keys[k]=true;
+    if(k===' '){ S.shutter=true; e.preventDefault(); }
+    if(k==='shift') S.focus=true;
+  });
+  window.addEventListener('mousedown', audioInit);
+  window.addEventListener('keyup',e=>{
+    const k=e.key.toLowerCase(); keys[k]=false;
+    if(k===' ') S.shutter=false;
+    if(k==='shift') S.focus=false;
+  });
+  window.addEventListener('blur',()=>{ for(const k in keys) keys[k]=false; S.shutter=false; S.focus=false; });
+  cv.addEventListener('mousemove',e=>{
+    const r=cv.getBoundingClientRect();
+    mouse.x=(e.clientX-r.left)/r.width*W;
+    mouse.y=(e.clientY-r.top)/r.height*H;
+    mouse.has=true;
+  });
+  cv.addEventListener('mousedown',e=>{ if(e.button===2){S.shutter=true;} });
+  cv.addEventListener('mouseup',()=>{ S.shutter=false; });
+  cv.addEventListener('contextmenu',e=>e.preventDefault());
+  bindGo(()=>{ audioInit(); hideCard(); startNight(); });
+  rafId=requestAnimationFrame(frame);
+  // ?play skips the title card and lights the lamp straight away
+  if(typeof location!=='undefined' && /(\?|&)play\b/.test(location.search)){
+    hideCard(); startNight();
+  }
+}
+function resize(){
+  const s=Math.min(window.innerWidth/W, window.innerHeight/H);
+  cv.style.width=(W*s)+'px'; cv.style.height=(H*s)+'px';
+}
+
+const API = {S, CFG, CHANNELS, update, startNight, beginHour, spawnShip, spawnFolk,
+             spawnWraith, litAmount, inChannel, nearestChannel, draw, endGame, W,H,CX,CY,
+             HULLS, shuffleReef, sfx, audioMix, audioInit,
+             _bindCanvas(c){ cv=c; ctx=c.getContext('2d'); }};
+if(typeof window!=='undefined'){ window.GAME=API; if(!HEADLESS) boot(); }
+if(typeof module!=='undefined' && module.exports) module.exports=API;
+})();
+</script>
+</body>
+</html>

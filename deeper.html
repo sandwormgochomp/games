@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DEEPER</title>
+<style>
+  html,body{margin:0;padding:0;background:#07070a;color:#cbbfa8;font-family:Georgia,'Times New Roman',serif;overflow:hidden;height:100%}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{image-rendering:auto;background:#000;box-shadow:0 0 80px #000 inset}
+  #hint{position:fixed;bottom:6px;left:0;right:0;text-align:center;font-size:12px;color:#4a4238;letter-spacing:1px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c" width="1000" height="640"></canvas></div>
+<div id="hint">arrows / WASD &nbsp;·&nbsp; E interact &nbsp;·&nbsp; 1-9 use &nbsp;·&nbsp; space climb-to-surface &nbsp;·&nbsp; Esc menu</div>
+<script>
+"use strict";
+(function(){
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DEEPER — a well, a rope, and the arithmetic of what you can carry.
+//  The bag that keeps you alive is the same bag that carries the loot home.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const W = 1000, H = 640;
+const PPM = 24;                  // pixels per metre
+const MAXDEPTH = 420;            // metres to the bottom
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d');
+
+// ── deterministic randomness ────────────────────────────────────────────────
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function hash1(n){ let x = Math.sin(n*127.1)*43758.5453; return x - Math.floor(x); }
+function vnoise(x){ const i=Math.floor(x), f=x-i, u=f*f*(3-2*f); return hash1(i)*(1-u)+hash1(i+1)*u; }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function clamp(v,a,b){ return v<a?a:v>b?b:v; }
+function smooth(a,b,t){ t=clamp((t-a)/(b-a),0,1); return t*t*(3-2*t); }
+
+// ── the shaft ───────────────────────────────────────────────────────────────
+// One function defines the whole well. Everything else asks it questions.
+function shaftAt(d){                      // d = depth in metres
+  const cx = W*0.5 + Math.sin(d*0.031)*70 + (vnoise(d*0.05)-0.5)*90 + Math.sin(d*0.0071)*40;
+  let hw = 120 + Math.sin(d*0.043+1.7)*34 + (vnoise(d*0.09+11)-0.5)*46;
+  // the throat: the well pinches hard near the bottom
+  hw *= 1 - 0.42*smooth(330,405,d);
+  hw *= 0.55 + 0.45*smooth(0,14,d);       // narrow brick mouth at the top
+  return { cx, hw: Math.max(38, hw) };
+}
+
+const BANDS = [
+  { d:0,   name:'The Brick Mouth', rock:'#4a4038', grit:'#6b5c4b' },
+  { d:38,  name:'Chalk',           rock:'#5b5850', grit:'#8a8478' },
+  { d:96,  name:'The Bone Shelf',  rock:'#4e4741', grit:'#7d7266' },
+  { d:170, name:'The Flooded',     rock:'#2f3a40', grit:'#4d6068' },
+  { d:248, name:'Rootworks',       rock:'#3b3128', grit:'#5e4a34' },
+  { d:330, name:'The Throat',      rock:'#2a222a', grit:'#4a3a48' },
+  { d:398, name:'The Coin Bed',    rock:'#3a3128', grit:'#8a7440' },
+];
+function bandAt(d){ let b=BANDS[0]; for(const x of BANDS) if(d>=x.d) b=x; return b; }
+function bandIndex(d){ let i=0; for(let k=0;k<BANDS.length;k++) if(d>=BANDS[k].d) i=k; return i; }
+
+// The water sits in a bowl. It does not fill everything below it — the
+// Rootworks drink it. That is the only reason the bottom is reachable at all.
+const WATER_TOP = 176;
+const WATER_BOT = 246;
+
+// ── items you may carry down ────────────────────────────────────────────────
+// wt is kilograms. Everything is a trade against the loot you want to bring up.
+const ITEMS = {
+  lantern:  { name:'Lantern',      wt:3.0, cost:0,   uses:0,  desc:'Burns oil. Light is the only thing down there that is on your side.', key:true },
+  oil:      { name:'Oil Flask',    wt:1.6, cost:14,  uses:1,  desc:'Refills the lantern by half a reservoir.' },
+  coil:     { name:'Rope Coil',    wt:4.0, cost:26,  uses:1,  desc:'Spliced on at the lip. +26 m of rope for this trip only.' },
+  pick:     { name:'Pickaxe',      wt:4.0, cost:34,  uses:0,  desc:'Frees ore and anything set into the rock.' },
+  knife:    { name:'Knife',        wt:0.8, cost:12,  uses:0,  desc:'Cuts sacking, root, and gut.' },
+  mask:     { name:'Damp Mask',    wt:2.4, cost:30,  uses:0,  desc:'The bad air below the shelf slides right past it.' },
+  hood:     { name:"Diver's Hood", wt:2.6, cost:36,  uses:0,  desc:'Waxed leather and a bladder of air. You last more than twice as long in the cold bowl.' },
+  canary:   { name:'Canary',       wt:1.2, cost:18,  uses:1,  desc:'Screams before the gas reaches you. Once.' },
+  bread:    { name:'Black Bread',  wt:0.9, cost:6,   uses:1,  desc:'Restores 40 wind.' },
+  water:    { name:'Water Skin',   wt:1.1, cost:5,   uses:2,  desc:'Restores 22 wind a swallow.' },
+  charm:    { name:"Mother's Charm",wt:0.5,cost:22,  uses:2,  desc:'Steadies you. Sheds 34 dread.' },
+  patch:    { name:'Patch Kit',    wt:1.8, cost:20,  uses:2,  desc:'Whips a frayed rope back to sound. +26 rope.' },
+  candle:   { name:'Tallow Candle',wt:0.4, cost:8,   uses:1,  desc:'A poor small light for when the lantern is dry.' },
+  bell:     { name:'Hand Bell',    wt:1.5, cost:40,  uses:3,  desc:'It hates the sound. Drives it back thirty metres.' },
+  bucket:   { name:'Haul Bucket',  wt:3.2, cost:45,  uses:1,  desc:'Send the heaviest three things up the rope without you.' },
+};
+const ORDER = ['lantern','oil','coil','pick','knife','mask','hood','canary','bread','water','charm','patch','candle','bell','bucket'];
+
+// ── loot ────────────────────────────────────────────────────────────────────
+const LOOT = {
+  coin:   { name:'Wet Coin',        wt:0.15, val:3 },
+  silver: { name:'Silver Bit',      wt:0.4,  val:9 },
+  ring:   { name:'Swollen Ring',    wt:0.3,  val:16 },
+  ore:    { name:'Ore Chunk',       wt:3.0,  val:24 },
+  bone:   { name:'Carved Bone',     wt:1.0,  val:19 },
+  watch:  { name:'Stopped Watch',   wt:0.9,  val:38 },
+  doll:   { name:'Sodden Doll',     wt:2.0,  val:31 },
+  tooth:  { name:'Long Tooth',      wt:1.4,  val:44 },
+  idol:   { name:'Root Idol',       wt:4.0,  val:78 },
+  glass:  { name:'Wish-Glass',      wt:0.8,  val:62 },
+  key:    { name:'Iron Well-Key',   wt:1.0,  val:0 },
+};
+
+// which loot a node yields, by band index
+const BAND_LOOT = [
+  ['coin','coin','silver'],
+  ['coin','silver','ore','bone'],
+  ['bone','silver','ring','ore','watch'],
+  ['ring','watch','doll','ore','silver'],
+  ['doll','tooth','idol','watch','bone'],
+  ['tooth','idol','glass','watch'],
+  ['glass','glass','idol','coin','coin','coin'],
+];
+
+// ── father's notes: the spine of the story, one page per depth ──────────────
+const NOTES = [
+  [7,   "Day one. Tom's winch is sound and the brick is dry to twenty. I have told her it is about the water. It is not about the water."],
+  [26,  "Everything a village throws down a well it means to be rid of. Forty years of that under my boots. Coins first. The coins are the polite part."],
+  [44,  "Chalk. It takes a mark from a nail like paper. I have written my name at forty-four so that something knows it."],
+  [61,  "The lantern eats more than I budgeted. I sat in the dark eleven minutes to prove I could. I could not, in the end, but I sat."],
+  [88,  "Bones on a shelf, laid out. Laid. Not fallen. Somebody put them down flat and closed their eyes for them."],
+  [112, "I have started leaving these pages for whoever comes. That is a coward's way of saying I am not sure I am coming up."],
+  [141, "There is a smell below the shelf that makes your hands stupid. Canary went over sideways at one-forty and I ran the rope like a boy."],
+  [166, "Water. Cold as a knife handle. It rises when I look away from it and I know how that sounds."],
+  [193, "Things people wished for are down here. Not the wishes. The THINGS. A ring, a doll, a watch stopped at the hour someone wanted stopped."],
+  [227, "I have worked out the arithmetic of the bag. You cannot carry down what you need and carry up what you came for. That is not a flaw in the well."],
+  [259, "Roots. From what? There is nothing above but pasture and my own house and my own kitchen floor."],
+  [291, "I saw it. I am going to write it plainly. It is thin and it is patient and it stops moving when the light is on it, like a thing that is being polite."],
+  [318, "It is not hunting me. It is waiting to be paid. Forty years of wishes and nobody ever sent anything back down but rubbish and coins."],
+  [352, "The throat narrows. My shoulders only just. If the rope goes here nobody will ever get me out, and I find that I mind less than I should."],
+  [386, "If you are reading this you are my child and I am sorry and you should go up. Go up. There is a key on the ledge at three ninety-four. I could not make myself use it."],
+  [408, "It grants them. That is the horror of it. It has granted every single one and it has never once been thanked."],
+];
+
+// ── persistent progress ─────────────────────────────────────────────────────
+const save = {
+  marks: 40,
+  // tiers (what you bought) are kept separate from the derived stat they feed,
+  // or buying rope compounds into itself
+  ropeT: 0, packT: 0,
+  ropeMax: 60,
+  packCap: 14,
+  lampEff: 0,      // tiers
+  boots: 0,
+  nerve: 0,
+  winch: 0,
+  reflector: 0,
+  notesRead: {},
+  deepest: 0,
+  trips: 0,
+  hasKey: false,
+  ended: false,
+  owned: { lantern:1, oil:1, bread:1 },
+};
+
+const UPGRADES = [
+  { id:'ropeT',    name:'Longer Rope',    max:10, cost:t=>34+t*26,  eff:t=>`${60+t*26} m of rope`,               apply:t=>save.ropeMax = 60+t*26 },
+  { id:'packT',    name:'Bigger Pack',     max:5, cost:t=>46+t*40,  eff:t=>`${(14+t*5).toFixed(0)} kg carried`,  apply:t=>save.packCap = 14+t*5 },
+  { id:'lampEff',  name:'Trimmed Wick',    max:4, cost:t=>38+t*30,  eff:t=>`oil burns ${t*14}% slower`,          apply:()=>{} },
+  { id:'reflector',name:'Tin Reflector',   max:3, cost:t=>44+t*36,  eff:t=>`light reaches ${t*16}% further`,     apply:()=>{} },
+  { id:'boots',    name:'Nailed Boots',    max:4, cost:t=>36+t*28,  eff:t=>`${100+t*24} wind`,                   apply:()=>{} },
+  { id:'nerve',    name:'Steady Nerve',    max:3, cost:t=>50+t*42,  eff:t=>`dread gathers ${t*20}% slower`,      apply:()=>{} },
+  { id:'winch',    name:"Tom's Winch",     max:2, cost:t=>70+t*80,  eff:t=>`climbing costs ${t*26}% less`,       apply:()=>{} },
+];
+function upTier(id){ return save[id]|0; }
+function applyUpgrades(){ for(const u of UPGRADES) u.apply(upTier(u.id)); }
+
+// ── persistence ─────────────────────────────────────────────────────────────
+// Maxing the rope is a fortnight of trips, and the bottom cannot be reached
+// without it. Losing that to a closed tab would make the ending unreachable in
+// practice. Fields are merged onto the defaults, so a save written by an older
+// build keeps working when new fields appear.
+const SAVE_KEY = 'deeper.save.v1';
+function store(){
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
+  catch(e){ /* private mode, or no storage. the well is still there. */ }
+}
+function load(){
+  let raw = null;
+  try{ raw = localStorage.getItem(SAVE_KEY); }catch(e){ return; }
+  if(!raw) return;
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){ return; }
+  if(!data || typeof data !== 'object') return;
+  for(const k in save){
+    const v = data[k];
+    if(v === undefined || v === null) continue;
+    if(typeof v !== typeof save[k]) continue;   // never let a bad save poison a number
+    save[k] = (typeof v === 'object') ? Object.assign({}, save[k], v) : v;
+  }
+  applyUpgrades();   // ropeMax/packCap are derived — always rebuild from the tiers
+}
+
+// ── run state ───────────────────────────────────────────────────────────────
+let run = null;
+
+function newRun(pack){
+  const rope = save.ropeMax + (pack.coil ? 26*pack.coil : 0);
+  const r = {
+    d: 0,                 // depth, metres
+    x: shaftAt(0).cx,     // horizontal position, px
+    vx: 0,
+    ropeOut: 0,
+    ropeMax: rope,
+    ropeInt: 100,         // integrity
+    oil: 100,
+    candleT: 0,
+    wind: 100 + upTier('boots')*24,
+    windMax: 100 + upTier('boots')*24,
+    dread: 0,
+    breath: 100,
+    pack: Object.assign({}, pack),
+    packUses: {},
+    carried: [],          // loot ids
+    banked: [],
+    nodes: buildNodes(),
+    t: 0,
+    msgs: [],
+    dead: false,
+    surfaced: false,
+    reason: '',
+    it: { d: MAXDEPTH+40, active:false, x:0, stunned:0 },
+    canaryDead: false,
+    gasT: 0, gasWarn: 0,
+    shake: 0,
+    maxD: 0,
+    bucketUsed: false,
+    flashes: [],
+  };
+  for(const k in pack) if(ITEMS[k] && ITEMS[k].uses) r.packUses[k] = ITEMS[k].uses * pack[k];
+  return r;
+}
+
+function buildNodes(){
+  const rnd = mulberry32(1337 + save.trips*7919);
+  const list = [];
+  for(let d=5; d<MAXDEPTH; d += 4 + rnd()*5){
+    const bi = bandIndex(d);
+    const side = rnd()<0.5 ? -1 : 1;
+    const table = BAND_LOOT[bi];
+    const kind = table[(rnd()*table.length)|0];
+    let need = null;
+    if(kind==='ore') need='pick';
+    if(kind==='idol'||kind==='doll') need = rnd()<0.55 ? 'knife' : null;
+    if(kind==='glass') need='pick';
+    list.push({ d:+d.toFixed(2), side, kind, need, taken:false, id:list.length });
+  }
+  for(const [d,text] of NOTES) list.push({ d, side: (d%2?1:-1), kind:'note', text, need:null, taken:false, note:true, id:'n'+d });
+  if(!save.hasKey) list.push({ d:394, side:1, kind:'key', need:null, taken:false, id:'key' });
+  list.sort((a,b)=>a.d-b.d);
+  return list;
+}
+
+// ── weight ──────────────────────────────────────────────────────────────────
+function packWeight(pack){ let w=0; for(const k in pack) w += ITEMS[k].wt*pack[k]; return w; }
+function suppliesWeight(){
+  let w = 0;
+  for(const k in run.pack){
+    const it = ITEMS[k]; const n = run.pack[k];
+    if(!it.uses){ w += it.wt*n; }
+    else { const left = run.packUses[k]||0; w += it.wt * (it.uses ? Math.ceil(left/it.uses) : n); }
+  }
+  if(run.pack.lantern) w -= ITEMS.lantern.wt*(1-run.oil/100)*0.35;   // a dry lamp is lighter
+  return Math.max(0,w);
+}
+function lootWeight(){ let w=0; for(const id of run.carried) w += LOOT[id].wt; return w; }
+function totalWeight(){ return suppliesWeight() + lootWeight(); }
+function loadRatio(){ return clamp(totalWeight()/save.packCap, 0, 2); }
+
+// ── messages ────────────────────────────────────────────────────────────────
+function say(text, kind){ run.msgs.push({ text, kind:kind||'', t:0 }); if(run.msgs.length>5) run.msgs.shift(); }
+
+// ── light ───────────────────────────────────────────────────────────────────
+function lightRadius(){
+  if(!run) return 0;
+  let r = 0;
+  if(run.pack.lantern && run.oil>0) r = 90 + 210*(run.oil/100)**0.55;
+  if(run.candleT>0) r = Math.max(r, 74);
+  r *= 1 + upTier('reflector')*0.16;
+  if(run.d > WATER_TOP && submerged()) r *= 0.7;
+  return r;
+}
+function submerged(){ return run.d > WATER_TOP && run.d < WATER_BOT; }
+// the sour band under the Bone Shelf. One predicate, so the gas that hurts you
+// and the gas that stops you resting can never drift apart.
+function badAir(){ return run.d > 128 && run.d < WATER_TOP+30 && !run.pack.mask; }
+
+// ── the thing ───────────────────────────────────────────────────────────────
+function updateIt(dt){
+  const it = run.it;
+  const wakeAt = 232;
+  if(!it.active && run.d > wakeAt){ it.active = true; it.d = run.d + 55; say('Something below you shifts its weight.','bad'); }
+  if(!it.active) return;
+  if(it.stunned>0){ it.stunned -= dt; it.d += 26*dt; return; }
+  const lit = lightRadius() > 40 && Math.abs((it.d - run.d)*PPM) < lightRadius()*1.15;
+  if(lit){
+    // polite. it stops when looked at, and gives ground if you press into it.
+    // It holds station in the SHAFT, not relative to you — Math.max keeps it from
+    // ever coming within 2.5 m without letting the clamp haul it up as you climb.
+    it.d += 2*dt;
+    it.d = Math.max(it.d, run.d + 2.5);
+    run.dread += 6*dt*dreadScale()*proximity();
+  } else {
+    const speed = 5.5 + 3.5*smooth(230, MAXDEPTH, run.d);
+    it.d += (run.d - it.d) * Math.min(1, speed*dt/Math.max(4,Math.abs(run.d-it.d)));
+    it.d += (run.d > it.d ? 1 : -1) * speed * dt * 0.5;
+    // Losing sight of it is far worse than standing next to it — same curve,
+    // much higher intensity.
+    run.dread += 16*dt*dreadScale()*proximity();
+  }
+  // only the dark is fatal. a lit thing is only ever an unbearable neighbour.
+  if(!lit && Math.abs(it.d - run.d) < 1.1 && !run.dead){
+    die('It reached you in the dark.');
+  }
+}
+function dreadScale(){ return 1 - upTier('nerve')*0.2; }
+
+// How much of your nerve the thing costs, by distance. It runs faster than you
+// climb, so it always settles at the rim of your lantern and follows you up
+// there — that is the intended image. So the curve is anchored to how far you
+// can actually see: nothing at the rim, unbearable at arm's length. Both the
+// lit and unlit cases share it, or the boundary becomes a cliff the creature
+// sits exactly on top of, and no climb ever escapes it.
+// A dying lantern shrinks the rim, which is how the dark gets to come closer.
+function proximity(){
+  const rim = Math.max(5, lightRadius()/PPM);
+  return smooth(rim, 2.5, Math.abs(run.it.d - run.d));
+}
+
+// ── death & surfacing ───────────────────────────────────────────────────────
+function die(reason){
+  if(run.dead) return;
+  run.dead = true; run.reason = reason;
+  run.carried = [];
+  state = 'DEAD';
+}
+function surface(){
+  run.surfaced = true;
+  let earn = 0;
+  for(const id of run.carried){ earn += LOOT[id].val; if(id==='key') save.hasKey = true; }
+  save.marks += earn;
+  run.earned = earn;
+  save.trips++;
+  save.deepest = Math.max(save.deepest, Math.floor(run.maxD));
+  store();
+  state = 'RESULT';
+}
+
+// ── input ───────────────────────────────────────────────────────────────────
+const keys = {};
+const pressed = {};
+window.addEventListener('keydown', e=>{
+  if(!keys[e.code]) pressed[e.code] = true;
+  keys[e.code] = true;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+function tap(code){ if(pressed[code]){ pressed[code]=false; return true; } return false; }
+function clearTaps(){ for(const k in pressed) pressed[k]=false; }
+
+// ── pack screen ─────────────────────────────────────────────────────────────
+let pack = {};
+let packSel = 0;
+let shopSel = 0;
+let state = 'TITLE';
+let titleT = 0;
+
+function resetPack(){
+  pack = {};
+  if(save.owned.lantern) pack.lantern = 1;
+  const auto = ['oil','bread'];
+  for(const k of auto) if(save.owned[k] && packWeight(pack)+ITEMS[k].wt <= save.packCap*0.55) pack[k] = 1;
+}
+
+// ── the update loop ─────────────────────────────────────────────────────────
+function updateRun(dt){
+  run.t += dt;
+  const s = shaftAt(run.d);
+  const load = loadRatio();
+
+  // ── vertical: pay out or take in rope ─────────────────────────────────────
+  const down = keys.ArrowDown||keys.KeyS, up = keys.ArrowUp||keys.KeyW;
+  // the coin bed is a floor, not a suggestion — rope past MAXDEPTH just coils up
+  const maxOut = Math.min(run.ropeMax, MAXDEPTH);
+  if(down && run.ropeOut < maxOut && run.wind > 0){
+    const rate = 7.5;
+    run.ropeOut = Math.min(maxOut, run.ropeOut + rate*dt);
+    run.wind -= 0.6*dt*(0.5+load*0.5);
+  }
+  if(up && run.ropeOut > 0){
+    const cost = (5.6 + 7.0*load) * (1 - upTier('winch')*0.26);
+    if(run.wind > 0){
+      run.ropeOut = Math.max(0, run.ropeOut - 4.6*dt);
+      run.wind -= cost*dt;
+    } else {
+      run.dread += 9*dt*dreadScale();
+    }
+  }
+  run.d = run.ropeOut;
+  run.maxD = Math.max(run.maxD, run.d);
+
+  // rope grinds on a tight shaft
+  if(s.hw < 70 && (down||up)) { run.ropeInt -= 1.6*dt; }
+  if(load > 1) run.ropeInt -= (load-1)*7*dt;
+
+  // ── horizontal: swing to reach the walls ──────────────────────────────────
+  const L = keys.ArrowLeft||keys.KeyA, R = keys.ArrowRight||keys.KeyD;
+  const acc = 520;
+  if(L) run.vx -= acc*dt;
+  if(R) run.vx += acc*dt;
+  run.vx += (s.cx - run.x) * 1.9 * dt;     // the rope always wants you centred
+  run.vx *= Math.pow(0.12, dt);
+  run.x += run.vx*dt;
+  const lo = s.cx - s.hw + 12, hi = s.cx + s.hw - 12;
+  if(run.x < lo){ run.x = lo; run.vx = Math.abs(run.vx)*0.3; run.ropeInt -= 0.8*dt; }
+  if(run.x > hi){ run.x = hi; run.vx = -Math.abs(run.vx)*0.3; run.ropeInt -= 0.8*dt; }
+  if(L||R) run.wind -= 0.9*dt;
+
+  // ── resting on the rope ───────────────────────────────────────────────────
+  // Hang still and you get your breath back. Without this the climb has a hard
+  // ceiling — you simply run out of arms partway up and hang there until the
+  // dread finishes you. Resting is never free: it burns oil and depth-dread,
+  // and there is no catching your breath in the cold bowl or in the bad air.
+  const working = down || up || L || R || run.autoUp;
+  if(!working && !submerged() && !badAir() && run.wind < run.windMax){
+    run.wind = Math.min(run.windMax, run.wind + 8.5*dt);
+  }
+
+  // ── the lantern ───────────────────────────────────────────────────────────
+  if(run.pack.lantern && run.oil>0){
+    const burn = 1.35 * (1 - upTier('lampEff')*0.14) * (submerged()?1.5:1);
+    run.oil = Math.max(0, run.oil - burn*dt);
+    if(run.oil===0) say('The lantern gutters out.','bad');
+  }
+  if(run.candleT>0){ run.candleT -= dt; if(run.candleT<=0) say('The candle is a puddle.','bad'); }
+
+  // ── dread ─────────────────────────────────────────────────────────────────
+  const lr = lightRadius();
+  let dr = 0;
+  if(lr < 60) dr += 11;
+  else if(lr < 130) dr += 3.5;
+  else dr -= 4.5;
+  dr += smooth(80, MAXDEPTH, run.d)*7;
+  if(run.d < 12) dr -= 22;
+  run.dread = clamp(run.dread + dr*dt*(dr>0?dreadScale():1), 0, 100);
+  if(run.dread >= 100 && !run.dead){
+    if(run.carried.length){
+      const lost = run.carried.splice(0, Math.ceil(run.carried.length/2));
+      say(`You let go of ${lost.length} thing${lost.length>1?'s':''} without deciding to.`,'bad');
+      run.dread = 66;
+      run.shake = 1;
+    } else {
+      die('Your nerve went before your rope did.');
+    }
+  }
+
+  // ── air ───────────────────────────────────────────────────────────────────
+  if(badAir()){
+    run.gasT += dt;
+    if(run.pack.canary && !run.canaryDead && run.gasT > 1.2){
+      run.canaryDead = true; say('The canary drops. Go up. GO UP.','bad'); run.gasT = -2.5;
+    }
+    if(run.gasT > 0){
+      run.wind -= 4.2*dt;
+      run.dread += 4*dt*dreadScale();
+    }
+  } else run.gasT = Math.min(run.gasT, 0);
+
+  // ── water ─────────────────────────────────────────────────────────────────
+  if(submerged()){
+    run.breath -= 9.0*dt*(run.pack.hood ? 0.40 : 1);
+    run.wind -= 1.8*dt;
+    if(run.breath <= 0) die('The cold water finished what the rope started.');
+  } else {
+    run.breath = Math.min(100, run.breath + 26*dt);
+  }
+
+  // ── rope ──────────────────────────────────────────────────────────────────
+  run.ropeInt -= 0.22*dt*(1+run.d/220);
+  if(run.ropeInt <= 0 && !run.dead) die('The rope parted at the fray.');
+  if(run.ropeInt < 22 && Math.random() < dt*1.4) say('The rope creaks somewhere above you.','bad');
+
+  if(run.wind < 0) run.wind = 0;
+  if(run.wind === 0) run.dread += 6*dt*dreadScale();
+
+  updateIt(dt);
+  run.dread = clamp(run.dread, 0, 100);   // it adds dread of its own, after the clamp above
+
+  // ── interact ──────────────────────────────────────────────────────────────
+  const near = nearestNode();
+  if(tap('KeyE') && near) takeNode(near);
+
+  // ── use items ─────────────────────────────────────────────────────────────
+  const usable = ORDER.filter(k=>run.pack[k] && ITEMS[k].uses);
+  for(let i=0;i<9;i++){
+    if(tap('Digit'+(i+1)) && usable[i]) useItem(usable[i]);
+  }
+
+  // ── auto-climb ────────────────────────────────────────────────────────────
+  if(tap('Space')){ run.autoUp = !run.autoUp; say(run.autoUp?'Hauling for the light.':'Holding.'); }
+  if(run.autoUp && run.ropeOut > 0){
+    const cost = (5.6 + 7.0*load) * (1 - upTier('winch')*0.26);
+    if(run.wind>0){ run.ropeOut = Math.max(0, run.ropeOut - 4.6*dt); run.wind -= cost*dt; }
+  }
+  if(run.ropeOut <= 0.05 && run.t > 1.2 && (up || run.autoUp)) surface();
+
+  // shake decay & message ageing
+  run.shake = Math.max(0, run.shake - dt*2);
+  for(const m of run.msgs) m.t += dt;
+  while(run.msgs.length && run.msgs[0].t > 7) run.msgs.shift();
+  for(const f of run.flashes) f.t += dt;
+  run.flashes = run.flashes.filter(f=>f.t<1.1);
+}
+
+function nearestNode(){
+  let best=null, bd=1e9;
+  for(const n of run.nodes){
+    if(n.taken) continue;
+    const dy = Math.abs(n.d - run.d)*PPM;
+    if(dy > 46) continue;
+    const s = shaftAt(n.d);
+    const nx = s.cx + n.side*(s.hw-16);
+    const dx = Math.abs(nx - run.x);
+    const dist = Math.hypot(dx, dy);
+    if(dist < 54 && dist < bd){ bd = dist; best = n; }
+  }
+  return best;
+}
+
+function takeNode(n){
+  if(n.note){
+    n.taken = true; save.notesRead[n.d] = true;
+    say('— ' + n.text, 'note');
+    run.dread = Math.max(0, run.dread - 10);
+    return;
+  }
+  if(n.need && !run.pack[n.need]){ say(`You need ${ITEMS[n.need].name.toLowerCase()} for that.`); return; }
+  if(lightRadius() < 30){ say('You cannot see to work.'); return; }
+  const l = LOOT[n.kind];
+  if(totalWeight() + l.wt > save.packCap){ say(`No room. ${l.name} would take you over.`,'bad'); return; }
+  n.taken = true;
+  run.carried.push(n.kind);
+  run.wind = Math.max(0, run.wind - (n.need==='pick' ? 6 : 1.5));
+  run.flashes.push({ t:0, d:n.d, side:n.side, text:l.name });
+  say(`Took ${l.name}. (${totalWeight().toFixed(1)} / ${save.packCap} kg)`);
+  if(n.kind==='key') say('An iron key, wrapped in oiled cloth. He left it for you.','note');
+}
+
+function useItem(k){
+  const left = run.packUses[k]|0;
+  if(left<=0){ say(`${ITEMS[k].name}: spent.`); return; }
+  switch(k){
+    case 'oil':
+      if(run.oil >= 99){ say('The lantern is full.'); return; }
+      run.oil = Math.min(100, run.oil+50); say('You feed the lantern. The walls come back.'); break;
+    case 'bread': run.wind = Math.min(run.windMax, run.wind+40); say('Bread. Your arms remember what they are for.'); break;
+    case 'water': run.wind = Math.min(run.windMax, run.wind+22); say('You drink.'); break;
+    case 'charm': run.dread = Math.max(0, run.dread-34); say('You hold it until your hands are steady.'); break;
+    case 'patch': run.ropeInt = Math.min(100, run.ropeInt+26); say('You whip the fray tight.'); break;
+    case 'candle': run.candleT = 60; say('A small light. Better than the arithmetic of no light.'); break;
+    case 'canary': say('It is a bird. It does its work on its own.'); return;
+    case 'bell':
+      run.it.stunned = 3.2; run.it.d = run.d + 30;
+      say('You ring it. The sound goes down and something goes down with it.'); break;
+    case 'coil': say('Already spliced in at the lip.'); return;
+    case 'bucket':
+      if(run.bucketUsed){ say('The bucket is already up top.'); return; }
+      if(!run.carried.length){ say('Nothing to send up.'); return; }
+      run.carried.sort((a,b)=>LOOT[b].wt-LOOT[a].wt);
+      const sent = run.carried.splice(0,3);
+      for(const id of sent){ save.marks += LOOT[id].val; if(id==='key') save.hasKey=true; }
+      store();
+      run.banked.push(...sent);
+      run.bucketUsed = true;
+      say(`You send ${sent.length} up on the bucket. The rope goes light.`);
+      break;
+  }
+  run.packUses[k] = left-1;
+}
+
+// ── ENDING ──────────────────────────────────────────────────────────────────
+function checkEnding(){
+  if(save.hasKey && run && run.maxD >= MAXDEPTH-4 && !save.ended){ save.ended = true; store(); state='ENDING'; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════════════════════════
+function px(d, camD){ return H*0.42 + (d - camD)*PPM; }
+
+function drawRun(){
+  const camD = run.d - 60/PPM;
+  const sh = run.shake*7;
+  ctx.save();
+  ctx.translate((Math.random()-0.5)*sh, (Math.random()-0.5)*sh);
+
+  ctx.fillStyle='#000'; ctx.fillRect(-20,-20,W+40,H+40);
+
+  const dTop = camD - (H*0.42)/PPM - 2;
+  const dBot = camD + (H*0.62)/PPM + 2;
+  const step = 2/PPM;
+
+  // rock faces
+  ctx.beginPath(); ctx.moveTo(-20, px(dTop,camD));
+  for(let d=dTop; d<=dBot; d+=step){ const s=shaftAt(d); ctx.lineTo(s.cx-s.hw, px(d,camD)); }
+  ctx.lineTo(-20, px(dBot,camD)); ctx.closePath();
+  const b = bandAt(run.d);
+  ctx.fillStyle = b.rock; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(W+20, px(dTop,camD));
+  for(let d=dTop; d<=dBot; d+=step){ const s=shaftAt(d); ctx.lineTo(s.cx+s.hw, px(d,camD)); }
+  ctx.lineTo(W+20, px(dBot,camD)); ctx.closePath();
+  ctx.fill();
+
+  // grit / bricks
+  ctx.strokeStyle = b.grit; ctx.lineWidth = 1; ctx.globalAlpha = 0.35;
+  for(let d=Math.floor(dTop); d<dBot; d+=0.5){
+    const s = shaftAt(d), y = px(d,camD);
+    const j = hash1(d*13.7)*10;
+    ctx.beginPath(); ctx.moveTo(s.cx-s.hw-40-j, y); ctx.lineTo(s.cx-s.hw+2, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(s.cx+s.hw-2, y); ctx.lineTo(s.cx+s.hw+40+j, y); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // rim of the well far above
+  if(camD < 8){
+    const y = px(0,camD), s = shaftAt(0);
+    const g = ctx.createLinearGradient(0,y-90,0,y+30);
+    g.addColorStop(0,'#7d9099'); g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.fillRect(s.cx-s.hw, y-90, s.hw*2, 120);
+  }
+
+  // water
+  if(dBot > WATER_TOP && dTop < WATER_BOT){
+    const y = px(WATER_TOP, camD), yb = px(WATER_BOT, camD);
+    ctx.fillStyle='rgba(24,52,60,0.55)'; ctx.fillRect(0, y, W, yb-y);
+    ctx.strokeStyle='rgba(150,200,210,0.5)'; ctx.lineWidth=2;
+    ctx.beginPath();
+    for(let x=0;x<=W;x+=8) ctx.lineTo(x, y + Math.sin(x*0.03 + run.t*2)*2.5);
+    ctx.stroke();
+    // the underside of the bowl: water held up by nothing you can see
+    ctx.beginPath();
+    for(let x=0;x<=W;x+=8) ctx.lineTo(x, yb + Math.sin(x*0.021 - run.t*1.3)*3);
+    ctx.strokeStyle='rgba(110,170,180,0.35)'; ctx.stroke();
+  }
+
+  // nodes
+  for(const n of run.nodes){
+    if(n.taken || n.d < dTop-1 || n.d > dBot+1) continue;
+    const s = shaftAt(n.d), y = px(n.d,camD);
+    const nx = s.cx + n.side*(s.hw-16);
+    if(Math.hypot(nx-run.x, y-px(run.d,camD)) > lightRadius()*1.05) continue;
+    if(n.note){
+      ctx.fillStyle='#d9cfae'; ctx.save(); ctx.translate(nx,y); ctx.rotate(n.side*0.2);
+      ctx.fillRect(-7,-9,14,18); ctx.strokeStyle='#8a7f60'; ctx.strokeRect(-7,-9,14,18); ctx.restore();
+    } else if(n.kind==='key'){
+      ctx.fillStyle='#c9a94a'; ctx.beginPath(); ctx.arc(nx,y,6,0,7); ctx.fill();
+      ctx.fillRect(nx-1, y, 2, 14);
+    } else {
+      const c = { coin:'#c8a84e', silver:'#c9ccd2', ring:'#d8b96a', ore:'#8d7f6a', bone:'#ded3bb',
+                  watch:'#b9a56d', doll:'#8f6f7a', tooth:'#e6ded0', idol:'#6f5a3c', glass:'#9fd6e8' }[n.kind] || '#aaa';
+      ctx.fillStyle=c;
+      ctx.beginPath(); ctx.arc(nx, y, n.kind==='ore'||n.kind==='idol'?9:6, 0, 7); ctx.fill();
+      if(n.need){ ctx.strokeStyle='rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.arc(nx,y,12,0,7); ctx.stroke(); }
+    }
+  }
+
+  // the rope
+  const py = px(run.d, camD);
+  ctx.strokeStyle = run.ropeInt<30 ? '#8a6f52' : '#a3866a';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(shaftAt(Math.max(0,dTop)).cx, px(Math.max(0,dTop),camD));
+  for(let d=Math.max(0,dTop); d<run.d; d+=0.6){
+    const s2=shaftAt(d);
+    const t = (d)/(run.d||1);
+    ctx.lineTo(lerp(s2.cx, run.x, t*t), px(d,camD));
+  }
+  ctx.lineTo(run.x, py); ctx.stroke();
+
+  // the thing
+  if(run.it.active && Math.abs(run.it.d - run.d) < 14){
+    const s = shaftAt(run.it.d), y = px(run.it.d, camD);
+    const lit = lightRadius() > 40 && Math.abs((run.it.d-run.d)*PPM) < lightRadius()*1.15;
+    ctx.globalAlpha = lit ? 0.85 : 0.4;
+    ctx.strokeStyle = lit ? '#cfc4b0' : '#4a4a52'; ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(s.cx-18, y+26); ctx.lineTo(s.cx-4, y-6); ctx.lineTo(s.cx, y-22);
+    ctx.lineTo(s.cx+4, y-6); ctx.lineTo(s.cx+18, y+26); ctx.stroke();
+    ctx.beginPath(); ctx.arc(s.cx, y-28, 7, 0, 7); ctx.stroke();
+    for(let i=0;i<4;i++){
+      ctx.beginPath(); ctx.moveTo(s.cx, y-4);
+      ctx.lineTo(s.cx + Math.sin(run.t*1.3+i*2)*(s.hw*0.8), y + 10 + i*9);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // you
+  ctx.fillStyle='#241d17'; ctx.strokeStyle='#c8b89a'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(run.x, py-9, 5.5, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(run.x, py-4); ctx.lineTo(run.x, py+9); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(run.x-7, py+18); ctx.lineTo(run.x, py+9); ctx.lineTo(run.x+7, py+18); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(run.x-8, py+1); ctx.lineTo(run.x, py-3); ctx.lineTo(run.x+8, py+1); ctx.stroke();
+
+  // lantern glow + darkness
+  const lr = lightRadius();
+  ctx.globalCompositeOperation='source-over';
+  const dark = ctx.createRadialGradient(run.x, py, Math.max(4,lr*0.16), run.x, py, Math.max(10,lr));
+  dark.addColorStop(0,'rgba(0,0,0,0)');
+  dark.addColorStop(0.55,'rgba(2,2,4,0.30)');
+  dark.addColorStop(1,'rgba(0,0,1,0.985)');
+  ctx.fillStyle=dark; ctx.fillRect(-20,-20,W+40,H+40);
+  if(lr>40){
+    const warm = ctx.createRadialGradient(run.x+8, py-4, 2, run.x+8, py-4, lr*0.6);
+    warm.addColorStop(0,'rgba(255,204,120,0.28)'); warm.addColorStop(1,'rgba(255,180,90,0)');
+    ctx.fillStyle=warm; ctx.fillRect(-20,-20,W+40,H+40);
+  }
+
+  // dread vignette + hallucinated hands
+  if(run.dread > 45){
+    const a = smooth(45,100,run.dread);
+    const v = ctx.createRadialGradient(W/2,H/2,H*0.18, W/2,H/2,H*0.72);
+    v.addColorStop(0,'rgba(0,0,0,0)'); v.addColorStop(1,`rgba(40,0,10,${0.5*a})`);
+    ctx.fillStyle=v; ctx.fillRect(0,0,W,H);
+    // hands out of the rock: a wrist and four fingers, curling as they reach
+    ctx.globalAlpha = a*0.55;
+    ctx.strokeStyle='#6b5a52'; ctx.lineWidth=1.6; ctx.lineCap='round';
+    for(let i=0;i<6;i++){
+      const yy = ((run.t*30 + i*140) % (H+120)) - 60;
+      const side = i%2? -1: 1, s2 = shaftAt(camD + (yy-H*0.42)/PPM);
+      const hx = s2.cx + side*(s2.hw-2);
+      const reach = 13 + Math.sin(run.t*1.6+i)*5;
+      ctx.beginPath(); ctx.moveTo(hx, yy); ctx.lineTo(hx - side*reach*0.45, yy); ctx.stroke();
+      const knx = hx - side*reach*0.45;
+      for(let f=0; f<4; f++){
+        const sp = (f-1.5)*3.4;
+        ctx.beginPath(); ctx.moveTo(knx, yy);
+        ctx.quadraticCurveTo(knx - side*reach*0.7, yy + sp*0.6,
+                             knx - side*reach, yy + sp + side*0);
+        ctx.stroke();
+      }
+    }
+    ctx.lineCap='butt';
+    ctx.globalAlpha=1;
+  }
+
+  // pickup flashes
+  for(const f of run.flashes){
+    const s = shaftAt(f.d), y = px(f.d,camD);
+    ctx.globalAlpha = 1-f.t/1.1;
+    ctx.fillStyle='#f0e0b8'; ctx.font='14px Georgia';
+    ctx.textAlign = f.side<0?'left':'right';
+    ctx.fillText(f.text, s.cx + f.side*(s.hw-24) - f.side*6, y - 14 - f.t*20);
+    ctx.globalAlpha=1;
+  }
+  ctx.textAlign='left';
+  ctx.restore();
+
+  drawHUD();
+}
+
+function bar(x,y,w,h,v,col,label){
+  ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle=col; ctx.fillRect(x+1,y+1,(w-2)*clamp(v,0,1),h-2);
+  ctx.strokeStyle='rgba(200,190,170,0.35)'; ctx.lineWidth=1; ctx.strokeRect(x+0.5,y+0.5,w-1,h-1);
+  ctx.fillStyle='#d8ceb6'; ctx.font='11px Georgia'; ctx.fillText(label, x, y-3);
+}
+
+function drawHUD(){
+  ctx.save();
+  ctx.fillStyle='rgba(6,6,9,0.72)'; ctx.fillRect(0,0,224,H);
+  ctx.fillStyle='#e5d9bd'; ctx.font='28px Georgia';
+  ctx.fillText(run.d.toFixed(1)+' m', 16, 40);
+  ctx.font='12px Georgia'; ctx.fillStyle='#8d8168';
+  ctx.fillText(bandAt(run.d).name, 16, 58);
+  ctx.fillText(`rope ${run.ropeOut.toFixed(0)} / ${run.ropeMax|0} m`, 16, 76);
+
+  let y = 108;
+  bar(16,y,190,12, run.oil/100, '#d9a441','lantern oil'); y+=34;
+  bar(16,y,190,12, run.wind/run.windMax, '#7fae72','wind'); y+=34;
+  bar(16,y,190,12, run.ropeInt/100, '#a3866a','rope'); y+=34;
+  bar(16,y,190,12, run.dread/100, '#a1424f','dread'); y+=34;
+  if(submerged() || run.breath<100){ bar(16,y,190,12, run.breath/100, '#6a9fc0','breath'); y+=34; }
+  bar(16,y,190,12, totalWeight()/save.packCap, totalWeight()>save.packCap*0.92?'#b9502f':'#8a8478',
+      `load ${totalWeight().toFixed(1)} / ${save.packCap} kg`); y+=36;
+
+  ctx.font='12px Georgia'; ctx.fillStyle='#9c9078';
+  const usable = ORDER.filter(k=>run.pack[k] && ITEMS[k].uses);
+  usable.forEach((k,i)=>{
+    const n = run.packUses[k]|0;
+    ctx.fillStyle = n>0 ? '#cdbf9f' : '#5a5346';
+    ctx.fillText(`${i+1}  ${ITEMS[k].name}  ×${n}`, 16, y); y+=17;
+  });
+  const tools = ORDER.filter(k=>run.pack[k] && !ITEMS[k].uses);
+  if(tools.length){ y+=8; ctx.fillStyle='#6e6553'; ctx.fillText('carried: '+tools.map(k=>ITEMS[k].name).join(', '), 16, y); y+=18; }
+
+  if(run.carried.length){
+    y+=10; ctx.fillStyle='#8d8168'; ctx.fillText('in the bag:', 16, y); y+=16;
+    const counts = {}; for(const id of run.carried) counts[id]=(counts[id]||0)+1;
+    for(const id in counts){ ctx.fillStyle='#c3b593'; ctx.fillText(`  ${LOOT[id].name} ×${counts[id]}`, 16, y); y+=15; }
+  }
+
+  // interact prompt
+  const near = nearestNode();
+  if(near){
+    ctx.textAlign='center'; ctx.font='15px Georgia'; ctx.fillStyle='#efe2c0';
+    const label = near.note ? 'read the page' :
+      near.need && !run.pack[near.need] ? `needs ${ITEMS[near.need].name}` :
+      `take ${(LOOT[near.kind]||{name:'it'}).name}`;
+    ctx.fillText(`E — ${label}`, W/2+110, H-96);
+    ctx.textAlign='left';
+  }
+
+  // messages
+  ctx.textAlign='center';
+  let my = H-64;
+  for(let i=run.msgs.length-1;i>=0;i--){
+    const m = run.msgs[i];
+    ctx.globalAlpha = clamp(1.6 - m.t/5, 0, 1);
+    ctx.font = m.kind==='note' ? 'italic 15px Georgia' : '15px Georgia';
+    ctx.fillStyle = m.kind==='bad' ? '#d08a7c' : m.kind==='note' ? '#c9c0e0' : '#c9bfa5';
+    wrapText(m.text, W/2+110, my, 660, 19, true);
+    my -= 19 * Math.max(1, Math.ceil(measureLines(m.text, 660)));
+    ctx.globalAlpha=1;
+  }
+  ctx.textAlign='left';
+
+  if(run.autoUp){ ctx.fillStyle='#8fae8a'; ctx.font='13px Georgia'; ctx.fillText('hauling up (space)', 16, H-16); }
+  ctx.restore();
+}
+
+// same greedy break as wrapText, so reserved space matches drawn space exactly
+function measureLines(text, maxw){
+  const words = text.split(' '); let line='', n=1;
+  for(const w of words){
+    if(ctx.measureText(line+w+' ').width > maxw && line){ n++; line=w+' '; }
+    else line += w+' ';
+  }
+  return n;
+}
+function wrapText(text, cx, y, maxw, lh, up){
+  const words = text.split(' '); const lines=[]; let line='';
+  for(const w of words){ if(ctx.measureText(line+w+' ').width > maxw && line){ lines.push(line); line=w+' '; } else line+=w+' '; }
+  lines.push(line);
+  const start = up ? y - (lines.length-1)*lh : y;
+  lines.forEach((l,i)=>ctx.fillText(l.trim(), cx, start+i*lh));
+  return lines.length;
+}
+
+// ── screens ────────────────────────────────────────────────────────────────
+function drawTitle(){
+  ctx.fillStyle='#05050a'; ctx.fillRect(0,0,W,H);
+  const cx = W/2;
+  // a well, seen from above, in the dark
+  const g = ctx.createRadialGradient(cx,H*0.52,10,cx,H*0.52,300);
+  g.addColorStop(0,'#0b0d10'); g.addColorStop(1,'#000');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#3a352c'; ctx.lineWidth=14;
+  ctx.beginPath(); ctx.ellipse(cx, H*0.55, 210, 84, 0, 0, 7); ctx.stroke();
+  ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(cx,H*0.55,203,78,0,0,7); ctx.fill();
+  ctx.strokeStyle='#6b5a44'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(cx-2, H*0.47); ctx.lineTo(cx-2 + Math.sin(titleT*0.7)*4, H*0.55+70); ctx.stroke();
+
+  ctx.textAlign='center';
+  ctx.fillStyle='#e8dcc0'; ctx.font='72px Georgia';
+  ctx.fillText('DEEPER', cx, 140);
+  ctx.font='italic 17px Georgia'; ctx.fillStyle='#7e735f';
+  ctx.fillText('you can carry what keeps you alive, or what you came for', cx, 176);
+  ctx.font='15px Georgia'; ctx.fillStyle='#a2967c';
+  if(save.trips===0) ctx.fillText('Your father went down this well eleven days ago. The rope came up empty.', cx, 230);
+  else ctx.fillText(`${save.trips} trip${save.trips>1?'s':''} · deepest ${save.deepest} m · ${save.marks} marks`, cx, 230);
+  ctx.fillStyle= (Math.sin(titleT*3)>0) ? '#e8dcc0' : '#8a7e66';
+  ctx.font='19px Georgia';
+  ctx.fillText('press ENTER to make ready', cx, H-84);
+  ctx.textAlign='left';
+}
+
+function drawPack(){
+  ctx.fillStyle='#0a0a0d'; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='left';
+  ctx.fillStyle='#e5d9bd'; ctx.font='30px Georgia';
+  ctx.fillText('The Bag', 40, 56);
+  ctx.font='13px Georgia'; ctx.fillStyle='#7e735f';
+  ctx.fillText('↑↓ choose   ← → add / drop   B buy list   ENTER go down   Esc back', 40, 78);
+
+  const w = packWeight(pack);
+  bar(40, 108, 400, 16, w/save.packCap, w>save.packCap ? '#b9502f' : '#8a8478',
+      `pack ${w.toFixed(1)} / ${save.packCap} kg   —   ${(save.packCap-w).toFixed(1)} kg left for what you find`);
+
+  let y = 156;
+  ORDER.forEach((k,i)=>{
+    const it = ITEMS[k];
+    const own = save.owned[k]|0;
+    const have = pack[k]|0;
+    const sel = i===packSel;
+    ctx.fillStyle = sel ? 'rgba(70,62,48,0.55)' : 'rgba(0,0,0,0)';
+    ctx.fillRect(34, y-15, 520, 24);
+    ctx.fillStyle = own ? (have? '#eadfc2' : '#9a8f77') : '#4c463a';
+    ctx.font='15px Georgia';
+    ctx.fillText(`${have? '● '.repeat(Math.min(have,4)) : '○ '}${it.name}`, 44, y);
+    ctx.textAlign='right';
+    ctx.fillStyle = own? '#8d8168':'#463f34';
+    ctx.fillText(`${it.wt.toFixed(1)} kg`, 470, y);
+    ctx.fillText(own? `own ${own}` : '—', 546, y);
+    ctx.textAlign='left';
+    y += 26;
+  });
+
+  const k = ORDER[packSel], it = ITEMS[k];
+  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(580,148,392,240);
+  ctx.fillStyle='#e5d9bd'; ctx.font='20px Georgia'; ctx.fillText(it.name, 600, 182);
+  ctx.font='14px Georgia'; ctx.fillStyle='#a2967c';
+  wrapText(it.desc, 600, 212, 356, 20);
+  ctx.fillStyle='#7e735f'; ctx.font='13px Georgia';
+  ctx.fillText(`${it.wt.toFixed(1)} kg` + (it.uses?`   ·   ${it.uses} use${it.uses>1?'s':''} each`:'   ·   tool'), 600, 320);
+  if(!save.owned[k]) ctx.fillText(`you own none — buy on the B screen (${it.cost} marks)`, 600, 344);
+
+  ctx.fillStyle='#8d8168'; ctx.font='13px Georgia';
+  ctx.fillText(`rope: ${save.ropeMax + (pack.coil||0)*26} m`, 600, 420);
+  ctx.fillText(`wind: ${100+upTier('boots')*24}`, 600, 442);
+  ctx.fillText(`marks: ${save.marks}`, 600, 464);
+  if(!pack.lantern){ ctx.fillStyle='#c07a5f'; ctx.fillText('You have no lantern in the bag. Think about that.', 600, 496); }
+  if(w > save.packCap){ ctx.fillStyle='#c07a5f'; ctx.fillText('Over capacity. You will fray the rope carrying that.', 600, 518); }
+}
+
+function drawShop(){
+  ctx.fillStyle='#0a0a0d'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#e5d9bd'; ctx.font='30px Georgia';
+  ctx.fillText('Tom Ackley keeps a shed', 40, 56);
+  ctx.font='13px Georgia'; ctx.fillStyle='#7e735f';
+  ctx.fillText(`↑↓ choose   ENTER buy   B back   —   ${save.marks} marks`, 40, 78);
+
+  const rows = [];
+  for(const u of UPGRADES) rows.push({ kind:'up', u });
+  for(const k of ORDER) if(ITEMS[k].cost>0) rows.push({ kind:'item', k });
+
+  let y = 108;
+  const pitch = Math.min(24, Math.floor((H-140)/Math.max(1,rows.length)));
+  rows.forEach((r,i)=>{
+    const sel = i===shopSel;
+    ctx.fillStyle = sel ? 'rgba(70,62,48,0.55)' : 'rgba(0,0,0,0)';
+    ctx.fillRect(34, y-14, 920, pitch-1);
+    if(r.kind==='up'){
+      const t = upTier(r.u.id), maxed = t>=r.u.max, cost = r.u.cost(t);
+      ctx.fillStyle = maxed? '#5f5949' : (save.marks>=cost? '#eadfc2':'#7d6e59');
+      ctx.font='15px Georgia';
+      ctx.fillText(`${r.u.name}  ${'▪'.repeat(t)}${'▫'.repeat(r.u.max-t)}`, 44, y);
+      ctx.fillStyle='#8d8168'; ctx.fillText(r.u.eff(maxed?t:t+1), 400, y);
+      ctx.textAlign='right'; ctx.fillText(maxed?'—':cost+' marks', 940, y); ctx.textAlign='left';
+    } else {
+      const it = ITEMS[r.k];
+      ctx.fillStyle = save.marks>=it.cost? '#eadfc2':'#7d6e59'; ctx.font='15px Georgia';
+      ctx.fillText(it.name, 44, y);
+      ctx.fillStyle='#8d8168'; ctx.fillText(`${it.wt.toFixed(1)} kg   ·   own ${save.owned[r.k]|0}`, 400, y);
+      ctx.textAlign='right'; ctx.fillText(it.cost+' marks', 940, y); ctx.textAlign='left';
+    }
+    y += pitch;
+  });
+  shopRows = rows;
+}
+let shopRows = [];
+
+function drawResult(){
+  ctx.fillStyle='#0a0a0d'; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle='#e5d9bd'; ctx.font='34px Georgia';
+  ctx.fillText('You come up into the cold', W/2, 110);
+  ctx.font='15px Georgia'; ctx.fillStyle='#a2967c';
+  ctx.fillText(`deepest this trip: ${run.maxD.toFixed(1)} m`, W/2, 158);
+  const counts={}; for(const id of run.carried.concat(run.banked)) counts[id]=(counts[id]||0)+1;
+  let y=204;
+  for(const id in counts){ ctx.fillStyle='#c3b593'; ctx.fillText(`${LOOT[id].name} ×${counts[id]}`, W/2, y); y+=22; }
+  if(!Object.keys(counts).length){ ctx.fillStyle='#7d6e59'; ctx.fillText('nothing in the bag', W/2, y); y+=22; }
+  ctx.fillStyle='#e0cf9a'; ctx.font='22px Georgia';
+  ctx.fillText(`+${run.earned|0} marks`, W/2, y+30);
+  ctx.font='17px Georgia'; ctx.fillStyle='#8a7e66';
+  ctx.fillText('ENTER — make ready again', W/2, H-90);
+  ctx.textAlign='left';
+}
+
+function drawDead(){
+  ctx.fillStyle='#08060a'; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.fillStyle='#c07a5f'; ctx.font='34px Georgia';
+  ctx.fillText(run.reason, W/2, H*0.42);
+  ctx.fillStyle='#7e735f'; ctx.font='16px Georgia';
+  wrapText('You wake on the flags by the trough at first light with no memory of the climb and none of your load. Tom says nothing. Tom knows better than to say anything.', W/2, H*0.52, 620, 24);
+  ctx.font='17px Georgia'; ctx.fillStyle='#8a7e66';
+  ctx.fillText('ENTER — the well is still there', W/2, H-90);
+  ctx.textAlign='left';
+}
+
+const ENDING_TEXT = [
+  'The throat lets you through at three hundred and ninety, and does not want to.',
+  'The bottom is coins. Not a floor with coins on it — coins, four feet of them, forty years deep, every one thrown by somebody standing in the sun with their eyes shut.',
+  'He is sitting in them with his back to the wall and his lantern out. He has been sitting there a long time, and he is not sitting there alone.',
+  'The thin thing does not move while your light is on it. It never has. It has spent forty years being patient in a room full of payment it cannot spend, granting every wish that fell on its head, and no one — not once — came down.',
+  'You put the key in the old lock cut into the coin bed, because he could not, because he understood what it opens.',
+  'It is not a door out. It is a door in. It is how you let a thing be thanked.',
+  'You turn it. The well exhales. Somewhere above you a bucket rattles on a winch nobody is touching.',
+  'And your father opens his eyes.',
+];
+let endT = 0;
+function drawEnding(){
+  ctx.fillStyle='#05050a'; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  // flow the paragraphs — each takes as many rows as it wraps to, or they collide
+  const reveal = endT*0.55;
+  let y = 74;
+  ENDING_TEXT.forEach((line,i)=>{
+    const last = i===ENDING_TEXT.length-1;
+    ctx.fillStyle = last ? '#e8dcc0' : '#a2967c';
+    ctx.font = last ? 'italic 21px Georgia' : '16px Georgia';
+    const a = clamp(reveal - i*1.4, 0, 1);
+    ctx.globalAlpha = a;
+    const rows = a>0 ? wrapText(line, W/2, y, 740, 25)
+                     : measureLines(line, 740);   // reserve the space before it fades in
+    ctx.globalAlpha = 1;
+    y += rows*25 + (last ? 34 : 22);
+  });
+  if(reveal > ENDING_TEXT.length*1.4 + 1.5){
+    ctx.fillStyle='#8a7e66'; ctx.font='15px Georgia';
+    ctx.fillText('ENTER', W/2, H-46);
+  }
+  ctx.textAlign='left';
+}
+
+// ── screen input ────────────────────────────────────────────────────────────
+function handleMenus(){
+  if(state==='TITLE'){
+    if(tap('Enter')){ resetPack(); state='PACK'; }
+  } else if(state==='PACK'){
+    if(tap('ArrowUp')) packSel = (packSel+ORDER.length-1)%ORDER.length;
+    if(tap('ArrowDown')) packSel = (packSel+1)%ORDER.length;
+    const k = ORDER[packSel];
+    if(tap('ArrowRight')){
+      const own = save.owned[k]|0, have = pack[k]|0;
+      if(have<own) pack[k]=have+1;
+    }
+    if(tap('ArrowLeft')){ const have=pack[k]|0; if(have>0){ if(have===1) delete pack[k]; else pack[k]=have-1; } }
+    if(tap('KeyB')){ shopSel=0; state='SHOP'; }
+    if(tap('Escape')) state='TITLE';
+    if(tap('Enter')){
+      if(packWeight(pack) > save.packCap){ /* allowed but punished — the rope frays */ }
+      run = newRun(pack);
+      say('The rope takes your weight.');
+      state='RUN';
+    }
+  } else if(state==='SHOP'){
+    const n = shopRows.length||1;
+    if(tap('ArrowUp')) shopSel=(shopSel+n-1)%n;
+    if(tap('ArrowDown')) shopSel=(shopSel+1)%n;
+    if(tap('KeyB')||tap('Escape')) state='PACK';
+    if(tap('Enter')){
+      const r = shopRows[shopSel];
+      if(r && r.kind==='up'){
+        const t = upTier(r.u.id);
+        if(t<r.u.max && save.marks>=r.u.cost(t)){ save.marks-=r.u.cost(t); save[r.u.id]=t+1; applyUpgrades(); store(); }
+      } else if(r){
+        const it = ITEMS[r.k];
+        if(save.marks>=it.cost){ save.marks-=it.cost; save.owned[r.k]=(save.owned[r.k]|0)+1; store(); }
+      }
+    }
+  } else if(state==='RESULT'){
+    if(tap('Enter')){ checkEnding(); if(state==='RESULT'){ resetPack(); state='PACK'; } }
+  } else if(state==='DEAD'){
+    if(tap('Enter')){ save.trips++; save.deepest=Math.max(save.deepest, Math.floor(run.maxD)); store(); resetPack(); state='PACK'; }
+  } else if(state==='ENDING'){
+    if(tap('Enter') && endT>4){ state='TITLE'; }
+  } else if(state==='RUN'){
+    if(tap('Escape')) state='TITLE';
+  }
+}
+
+// ── main loop ───────────────────────────────────────────────────────────────
+let last = 0;
+function frame(ts){
+  const dt = Math.min(0.05, (ts-last)/1000 || 0.016);
+  last = ts;
+  titleT += dt; if(state==='ENDING') endT += dt; else endT = 0;
+  handleMenus();
+  if(state==='RUN' && run && !run.dead && !run.surfaced) updateRun(dt);
+  clearTaps();
+
+  ctx.setTransform(1,0,0,1,0,0);
+  if(state==='TITLE') drawTitle();
+  else if(state==='PACK') drawPack();
+  else if(state==='SHOP') drawShop();
+  else if(state==='RUN') drawRun();
+  else if(state==='RESULT') drawResult();
+  else if(state==='DEAD') drawDead();
+  else if(state==='ENDING') drawEnding();
+  requestAnimationFrame(frame);
+}
+
+function fit(){
+  const s = Math.min(window.innerWidth/W, (window.innerHeight-20)/H);
+  cvs.style.width = (W*s)+'px'; cvs.style.height = (H*s)+'px';
+}
+window.addEventListener('resize', fit); fit();
+load();
+applyUpgrades();
+requestAnimationFrame(frame);
+
+// ── headless test hook ──────────────────────────────────────────────────────
+window.__DEEPER__ = {
+  W,H,PPM,MAXDEPTH,ITEMS,LOOT,ORDER,BANDS,NOTES,UPGRADES,BAND_LOOT,WATER_TOP,
+  WATER_BOT,
+  shaftAt, bandAt, bandIndex, buildNodes, newRun, packWeight,
+  get save(){ return save; },
+  get run(){ return run; },
+  set run(r){ run = r; },
+  get state(){ return state; },
+  set state(s){ state = s; },
+  updateRun, useItem, takeNode, nearestNode, lightRadius, totalWeight, suppliesWeight,
+  lootWeight, surface, die, applyUpgrades, upTier, submerged, badAir, say, resetPack,
+  checkEnding, handleMenus, store, load, SAVE_KEY,
+  get pack(){ return pack; }, set pack(p){ pack = p; },
+  keys, press(code){ keys[code]=true; }, release(code){ keys[code]=false; },
+  tapKey(code){ pressed[code]=true; },
+};
+
+})();
+</script>
+</body>
+</html>

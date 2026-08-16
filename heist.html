@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SIXTY — one perfect minute</title>
+<style>
+  html,body{margin:0;padding:0;background:#0a0a0c;color:#cfd6dd;font-family:"Consolas","DejaVu Sans Mono",monospace;overflow:hidden}
+  #wrap{display:flex;align-items:center;justify-content:center;height:100vh}
+  canvas{image-rendering:pixelated;box-shadow:0 0 60px #000 inset,0 0 0 1px #23262c}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv" width="1200" height="600"></canvas></div>
+<script>
+"use strict";
+/* ============================================================
+   SIXTY  —  you have one minute, and everything you learn is kept.
+   Single file. No assets. Deterministic guards: the clock is the level.
+   ============================================================ */
+
+const W = 40, H = 24, TS = 24;
+const MAPW = W * TS, MAPH = H * TS;
+const SIDE = 240;
+const RUN_TIME = 60;
+const CODE = [4, 7, 2, 9];
+
+const T_WALL = 0, T_FLOOR = 1, T_VAULTDOOR = 2, T_LOCKDOOR = 3, T_EXIT = 4;
+
+/* ---------- map construction (no ascii counting, no off-by-one) ---------- */
+function buildMap() {
+  const m = new Uint8Array(W * H); // all wall
+  const carve = (x1, y1, x2, y2) => {
+    for (let y = y1; y <= y2; y++) for (let x = x1; x <= x2; x++) m[y * W + x] = T_FLOOR;
+  };
+  // vertical spine
+  carve(18, 1, 19, 22);
+  // top corridor (the long sight line)
+  carve(2, 4, 27, 4);
+  // office A + B
+  carve(2, 2, 8, 6);
+  carve(11, 2, 15, 6);
+  // mid corridor to antechamber — two tiles wide, so a cone doesn't own all of it
+  carve(20, 10, 27, 11);
+  // vault antechamber
+  carve(28, 8, 37, 13);
+  // vault proper
+  carve(29, 2, 37, 6);
+  // security office
+  carve(2, 11, 7, 14);
+  carve(8, 12, 17, 12);
+  // lobby
+  carve(2, 18, 37, 22);
+  // lobby side stair up to the antechamber corridor
+  carve(33, 14, 34, 17);
+  // --- second and third ways round. never force the player into a guard's lane.
+  carve(9, 5, 10, 11);   // west run: office row down past security
+  carve(9, 13, 10, 17);  // ...and on down into the lobby
+  carve(25, 5, 26, 9);   // east run: vault corridor straight down to the antechamber
+  // alcoves — somewhere to stand that isn't the middle of a lane
+  carve(16, 6, 17, 7);
+  carve(21, 3, 22, 3);   // cover on RUSK's corridor — the vault approach needs somewhere to hide
+  carve(23, 5, 24, 5);
+  carve(20, 14, 22, 15);
+  carve(30, 14, 31, 16);
+  // doors
+  m[4 * W + 28] = T_VAULTDOOR;   // vault door, needs the code
+  m[12 * W + 8] = T_LOCKDOOR;    // security door, needs the keycard
+  m[23 * W + 19] = T_EXIT;       // the way out
+  return m;
+}
+const MAP = buildMap();
+const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? T_WALL : MAP[y * W + x];
+const solid = (x, y) => {
+  const t = at(x, y);
+  if (t === T_WALL) return true;
+  if (t === T_VAULTDOOR) return !G.vaultOpen;
+  if (t === T_LOCKDOOR) return !G.secOpen;
+  return false;
+};
+const opaque = (x, y) => {
+  const t = at(x, y);
+  return t === T_WALL || (t === T_VAULTDOOR && !G.vaultOpen) || (t === T_LOCKDOOR && !G.secOpen);
+};
+
+/* ---------- fixed content ---------- */
+const NOTES = [
+  { id: 0, x: 3.5,  y: 3.5,  digit: 0, where: "office A, desk"      },
+  { id: 1, x: 35.5, y: 12.5, digit: 1, where: "antechamber, filing" },
+  { id: 2, x: 34.5, y: 21.5, digit: 2, where: "lobby, far corner"   },
+  { id: 3, x: 4.5,  y: 13.5, digit: 3, where: "security office"     },
+];
+const KEYCARD = { x: 13.5, y: 3.5, where: "office B" };
+const LOOT = [
+  { x: 30.5, y: 3.5 }, { x: 32.5, y: 3.5 }, { x: 34.5, y: 3.5 },
+  { x: 30.5, y: 5.5 }, { x: 32.5, y: 5.5 }, { x: 34.5, y: 5.5 },
+];
+
+const GUARDS = [
+  { id: 0, name: "RUSK",  speed: 2.6, path: [[25, 4], [19, 4], [19, 12], [19, 4]] },
+  { id: 1, name: "PELL",  speed: 2.2, path: [[3, 20], [36, 20], [36, 19], [3, 19]] },
+  { id: 2, name: "ODEN",  speed: 2.4, path: [[36, 10], [20, 10], [19, 2], [19, 10], [36, 10]] },
+];
+const CAMS = [
+  { id: 0, x: 27.5, y: 2.5,  base: Math.PI,          sweep: 0.75, rate: 0.55, range: 9,  half: 0.40 },
+  { id: 1, x: 17.5, y: 17.5, base: Math.PI * 0.5,    sweep: 0.85, rate: 0.42, range: 10, half: 0.45 },
+  { id: 2, x: 27.5, y: 12.5, base: 0,                sweep: 0.60, rate: 0.63, range: 9,  half: 0.40 },
+];
+
+/* ---------- persistent knowledge ---------- */
+const SAVEKEY = "sixty.v1";
+function freshKnown() {
+  return { guards: [], cams: [], digits: [null, null, null, null], notes: [], keycard: false };
+}
+function loadSave() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SAVEKEY) || "null"); } catch (e) { s = null; }
+  if (!s || typeof s !== "object") s = {};
+  const k = Object.assign(freshKnown(), s.known || {});
+  if (!Array.isArray(k.digits) || k.digits.length !== 4) k.digits = [null, null, null, null];
+  return { runs: s.runs | 0, best: s.best | 0, bestTime: s.bestTime || 0, wins: s.wins | 0, known: k };
+}
+function saveNow() {
+  try {
+    localStorage.setItem(SAVEKEY, JSON.stringify({
+      runs: G.runs, best: G.best, bestTime: G.bestTime, wins: G.wins, known: G.known
+    }));
+  } catch (e) { /* private mode, whatever — the run still counts in memory */ }
+}
+
+/* ---------- state ---------- */
+const G = {
+  mode: "brief",       // brief | play | over
+  t: 0,                // seconds elapsed this run
+  acc: 0,
+  runs: 0, best: 0, bestTime: 0, wins: 0,
+  known: freshKnown(),
+  px: 19.5, py: 22.5, pvx: 0, pvy: 0, face: -Math.PI / 2,
+  sprinting: false,
+  bags: 0,
+  vaultOpen: false, secOpen: false, hasCard: false,
+  alarm: 0,            // 0..1 ; 1 = caught
+  alarmSrc: "",
+  keypad: null,        // {slots:[..], cur:0} while entering the code
+  keypadLock: 0,
+  guards: [], cams: [],
+  notesLeft: [], lootLeft: [], cardLeft: true,
+  learnTimer: {},      // guardId -> seconds watched this run
+  newFacts: [],        // facts learned this run, for the debrief
+  result: "",
+  shake: 0,
+  msg: "", msgT: 0,
+};
+
+function resetRun() {
+  G.t = 0; G.acc = 0;
+  G.px = 19.5; G.py = 22.5; G.pvx = 0; G.pvy = 0; G.face = -Math.PI / 2;
+  G.bags = 0; G.vaultOpen = false; G.secOpen = false; G.hasCard = false;
+  G.alarm = 0; G.alarmSrc = ""; G.keypad = null; G.keypadLock = 0;
+  G.shake = 0; G.msg = ""; G.msgT = 0; G.result = "";
+  G.newFacts = [];
+  G.learnTimer = {};
+  G.notesLeft = NOTES.map(n => Object.assign({}, n, { taken: false }));
+  G.lootLeft = LOOT.map(l => ({ x: l.x, y: l.y, taken: false }));
+  G.cardLeft = true;
+  G.guards = GUARDS.map(g => ({
+    def: g, x: g.path[0][0] + 0.5, y: g.path[0][1] + 0.5,
+    wp: 1, ang: 0, susp: 0, investigate: null, pause: 0,
+  }));
+  G.cams = CAMS.map(c => ({ def: c, phase: 0, ang: c.base, susp: 0 }));
+}
+
+/* ---------- line of sight ---------- */
+function los(x0, y0, x1, y1) {
+  let dx = x1 - x0, dy = y1 - y0;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 0.001) return true;
+  const steps = Math.ceil(dist * 4);
+  const sx = dx / steps, sy = dy / steps;
+  let cx = x0, cy = y0;
+  for (let i = 0; i < steps; i++) {
+    cx += sx; cy += sy;
+    if (opaque(Math.floor(cx), Math.floor(cy))) return false;
+  }
+  return true;
+}
+function angDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return Math.abs(d);
+}
+function inCone(ox, oy, ang, half, range, tx, ty) {
+  const dx = tx - ox, dy = ty - oy;
+  const d = Math.hypot(dx, dy);
+  if (d > range) return false;
+  if (d > 0.35 && angDiff(Math.atan2(dy, dx), ang) > half) return false;
+  return los(ox, oy, tx, ty);
+}
+
+/* ---------- knowledge ---------- */
+function learnGuard(id) {
+  if (G.known.guards.indexOf(id) >= 0) return;
+  G.known.guards.push(id);
+  G.newFacts.push(GUARDS[id].name + "'s patrol route — mapped");
+  flash("LEARNED: " + GUARDS[id].name + "'s route");
+}
+function learnCam(id) {
+  if (G.known.cams.indexOf(id) >= 0) return;
+  G.known.cams.push(id);
+  G.newFacts.push("camera " + (id + 1) + " — arc mapped");
+  flash("LEARNED: camera " + (id + 1));
+}
+function learnDigit(slot) {
+  if (G.known.digits[slot] !== null && G.known.digits[slot] !== undefined) return;
+  G.known.digits[slot] = CODE[slot];
+  G.newFacts.push("vault code, digit " + (slot + 1) + " = " + CODE[slot]);
+}
+function knownDigits() { return G.known.digits.filter(d => d !== null && d !== undefined).length; }
+function flash(s) { G.msg = s; G.msgT = 2.2; }
+
+/* ---------- input ---------- */
+const keys = Object.create(null);
+addEventListener("keydown", e => {
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].indexOf(e.key) >= 0) e.preventDefault();
+  keys[e.key.toLowerCase()] = true;
+  onKey(e.key);
+});
+addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+
+function onKey(k) {
+  const low = k.toLowerCase();
+  if (G.mode === "brief") {
+    if (low === "enter" || low === " ") { startRun(); }
+    if (low === "backspace") { wipeSave(); }
+    return;
+  }
+  if (G.mode === "over") {
+    if (low === "enter" || low === " " || low === "r") { G.mode = "brief"; }
+    return;
+  }
+  if (G.keypad) {
+    if (/^[0-9]$/.test(k)) {
+      const p = G.keypad;
+      while (p.cur < 4 && p.locked[p.cur]) p.cur++;
+      if (p.cur < 4) { p.slots[p.cur] = parseInt(k, 10); p.cur++; while (p.cur < 4 && p.locked[p.cur]) p.cur++; }
+      return;
+    }
+    if (low === "backspace") {
+      const p = G.keypad;
+      let i = p.cur - 1;
+      while (i >= 0 && p.locked[i]) i--;
+      if (i >= 0) { p.slots[i] = null; p.cur = i; }
+      return;
+    }
+    if (low === "enter") { submitCode(); return; }
+    if (low === "escape" || low === "e") { G.keypad = null; return; }
+    return;
+  }
+  if (low === "e") tryInteract();
+  if (low === "escape") { G.mode = "over"; G.result = "abort"; endRun(); }
+}
+
+function wipeSave() {
+  G.known = freshKnown(); G.runs = 0; G.best = 0; G.bestTime = 0; G.wins = 0;
+  saveNow(); flash("notepad burned");
+}
+
+/* ---------- interaction ---------- */
+function tryInteract() {
+  // vault keypad?
+  const dx = G.px - 28.5, dy = G.py - 4.5;
+  if (!G.vaultOpen && Math.abs(dx) < 1.6 && Math.abs(dy) < 1.2) {
+    const locked = G.known.digits.map(d => d !== null && d !== undefined);
+    G.keypad = { slots: G.known.digits.map(d => (d === null || d === undefined) ? null : d), locked: locked, cur: 0 };
+    while (G.keypad.cur < 4 && locked[G.keypad.cur]) G.keypad.cur++;
+    if (G.keypad.cur >= 4) submitCode();
+    return;
+  }
+  flash("nothing here");
+}
+function submitCode() {
+  const p = G.keypad;
+  if (!p) return;
+  if (p.slots.some(s => s === null || s === undefined)) { flash("four digits"); return; }
+  const ok = p.slots.every((s, i) => s === CODE[i]);
+  if (ok) {
+    G.vaultOpen = true; G.keypad = null;
+    flash("VAULT OPEN");
+    beep(660, 0.12);
+  } else {
+    G.keypad = null;
+    G.alarm = Math.min(0.999, G.alarm + 0.30);
+    G.alarmSrc = "keypad";
+    G.shake = 0.4;
+    flash("WRONG — the keypad squawks");
+    beep(150, 0.25);
+    // a bad guess still teaches you nothing; the noise brings company
+    for (const g of G.guards) {
+      if (Math.hypot(g.x - 28.5, g.y - 4.5) < 16) g.investigate = { x: 28.5, y: 4.5, t: 6 };
+    }
+  }
+}
+
+/* ---------- guards ---------- */
+function stepGuard(g, dt) {
+  const d = g.def;
+  if (g.pause > 0) { g.pause -= dt; return; }
+  let tx, ty;
+  if (g.investigate) {
+    tx = g.investigate.x; ty = g.investigate.y;
+    g.investigate.t -= dt;
+    if (g.investigate.t <= 0 || (Math.abs(g.x - tx) < 0.4 && Math.abs(g.y - ty) < 0.4)) {
+      g.investigate = null; g.pause = 0.8; return;
+    }
+  } else {
+    const wp = d.path[g.wp];
+    tx = wp[0] + 0.5; ty = wp[1] + 0.5;
+    if (Math.abs(g.x - tx) < 0.08 && Math.abs(g.y - ty) < 0.08) {
+      g.x = tx; g.y = ty;
+      g.wp = (g.wp + 1) % d.path.length;
+      return;
+    }
+  }
+  // axis-first walk; the corridors are axis-aligned so this stays on the floor
+  let mx = 0, my = 0;
+  if (Math.abs(tx - g.x) > 0.06) mx = Math.sign(tx - g.x);
+  else if (Math.abs(ty - g.y) > 0.06) my = Math.sign(ty - g.y);
+  const sp = d.speed * (g.investigate ? 1.12 : 1) * dt;
+  let nx = g.x + mx * sp, ny = g.y + my * sp;
+  if (solid(Math.floor(nx), Math.floor(g.y))) nx = g.x;
+  if (solid(Math.floor(g.x), Math.floor(ny))) ny = g.y;
+  if (nx === g.x && ny === g.y && g.investigate) { g.investigate = null; g.pause = 0.5; }
+  // don't overshoot the waypoint
+  if (mx) { if ((mx > 0 && nx > tx) || (mx < 0 && nx < tx)) nx = tx; }
+  if (my) { if ((my > 0 && ny > ty) || (my < 0 && ny < ty)) ny = ty; }
+  g.x = nx; g.y = ny;
+  if (mx || my) g.ang = Math.atan2(my, mx);
+}
+
+/* ---------- the tick ---------- */
+function tick(dt) {
+  if (G.mode !== "play") return;
+  G.t += dt;
+  if (G.msgT > 0) G.msgT -= dt;
+  if (G.shake > 0) G.shake -= dt;
+
+  // ---- player
+  if (!G.keypad) {
+    let ix = 0, iy = 0;
+    if (keys["a"] || keys["arrowleft"]) ix -= 1;
+    if (keys["d"] || keys["arrowright"]) ix += 1;
+    if (keys["w"] || keys["arrowup"]) iy -= 1;
+    if (keys["s"] || keys["arrowdown"]) iy += 1;
+    const len = Math.hypot(ix, iy) || 1;
+    ix /= len; iy /= len;
+    G.sprinting = !!(keys["shift"] && (ix || iy));
+    const load = 1 - G.bags * 0.075;
+    const sp = (G.sprinting ? 7.0 : 4.2) * load;
+    const nx = G.px + ix * sp * dt, ny = G.py + iy * sp * dt;
+    const r = 0.28;
+    if (!solid(Math.floor(nx + Math.sign(ix) * r), Math.floor(G.py))) G.px = nx;
+    if (!solid(Math.floor(G.px), Math.floor(ny + Math.sign(iy) * r))) G.py = ny;
+    if (ix || iy) G.face = Math.atan2(iy, ix);
+    // sprinting is loud
+    if (G.sprinting) {
+      for (const g of G.guards) {
+        if (Math.hypot(g.x - G.px, g.y - G.py) < 8.5 && los(g.x, g.y, G.px, G.py)) {
+          g.investigate = { x: G.px, y: G.py, t: 4 };
+        }
+      }
+    }
+  }
+  if (G.keypadLock > 0) G.keypadLock -= dt;
+
+  // ---- guards
+  for (const g of G.guards) stepGuard(g, dt);
+  for (const c of G.cams) {
+    c.phase += c.def.rate * dt;
+    c.ang = c.def.base + Math.sin(c.phase) * c.def.sweep;
+  }
+
+  // ---- detection
+  let anySeen = false;
+  for (const g of G.guards) {
+    const seen = inCone(g.x, g.y, g.ang, 0.50, 6.5, G.px, G.py);
+    const near = Math.hypot(g.x - G.px, g.y - G.py);
+    if (seen) {
+      // being seen is a countdown, not a death. break the sight line and it drains.
+      g.susp += dt * (near < 3.0 ? 1.05 : 0.60);
+      g.investigate = { x: G.px, y: G.py, t: 2.5 };
+      anySeen = true;
+      if (g.susp > 0.35) G.alarmSrc = g.def.name;
+    } else {
+      g.susp = Math.max(0, g.susp - dt * 1.15);
+    }
+    G.alarm = Math.max(G.alarm, Math.min(1, g.susp));
+  }
+  for (const c of G.cams) {
+    const seen = inCone(c.def.x, c.def.y, c.ang, c.def.half, c.def.range, G.px, G.py);
+    if (seen) { c.susp += dt * 0.62; anySeen = true; if (c.susp > 0.35) G.alarmSrc = "camera " + (c.def.id + 1); }
+    else c.susp = Math.max(0, c.susp - dt * 0.95);
+    G.alarm = Math.max(G.alarm, Math.min(1, c.susp));
+  }
+  if (!anySeen) G.alarm = Math.max(G.alarm - dt * 0.25, Math.max(0, ...G.guards.map(g => g.susp), ...G.cams.map(c => c.susp)));
+
+  // ---- learning by watching
+  for (const g of G.guards) {
+    if (G.known.guards.indexOf(g.def.id) >= 0) continue;
+    if (los(G.px, G.py, g.x, g.y) && Math.hypot(g.x - G.px, g.y - G.py) < 11 &&
+        inCone(G.px, G.py, G.face, 1.15, 12, g.x, g.y)) {
+      G.learnTimer[g.def.id] = (G.learnTimer[g.def.id] || 0) + dt;
+      if (G.learnTimer[g.def.id] > 1.6) learnGuard(g.def.id);
+    }
+  }
+  for (const c of G.cams) {
+    if (G.known.cams.indexOf(c.def.id) >= 0) continue;
+    if (Math.hypot(c.def.x - G.px, c.def.y - G.py) < 8 && los(G.px, G.py, c.def.x, c.def.y)) learnCam(c.def.id);
+  }
+
+  // ---- pickups
+  for (const n of G.notesLeft) {
+    if (n.taken) continue;
+    if (Math.hypot(n.x - G.px, n.y - G.py) < 0.7) {
+      n.taken = true;
+      const had = G.known.digits[n.digit] !== null && G.known.digits[n.digit] !== undefined;
+      learnDigit(n.digit);
+      if (G.known.notes.indexOf(n.id) < 0) G.known.notes.push(n.id);
+      flash(had ? "note — already in the pad" : "DIGIT " + (n.digit + 1) + " = " + CODE[n.digit]);
+      beep(880, 0.07);
+    }
+  }
+  if (G.cardLeft && Math.hypot(KEYCARD.x - G.px, KEYCARD.y - G.py) < 0.7) {
+    G.cardLeft = false; G.hasCard = true; G.secOpen = true;
+    if (!G.known.keycard) { G.known.keycard = true; G.newFacts.push("keycard lives in " + KEYCARD.where); }
+    flash("KEYCARD — security door is yours");
+    beep(760, 0.09);
+  }
+  for (const l of G.lootLeft) {
+    if (l.taken) continue;
+    if (Math.hypot(l.x - G.px, l.y - G.py) < 0.7) {
+      l.taken = true; G.bags++;
+      flash("bag " + G.bags + " — heavier now");
+      beep(520 + G.bags * 40, 0.06);
+    }
+  }
+
+  // ---- the ways this ends
+  if (G.alarm >= 1) { G.result = "caught"; endRun(); return; }
+  if (G.t >= RUN_TIME) { G.result = "time"; endRun(); return; }
+  if (G.py > 22.6 && Math.abs(G.px - 19.5) < 1.0) {
+    G.result = G.bags > 0 ? "clean" : "empty";
+    endRun(); return;
+  }
+}
+
+function startRun() {
+  resetRun();
+  G.mode = "play";
+  G.runs++;
+  saveNow();
+}
+function endRun() {
+  G.mode = "over";
+  if (G.result === "clean") {
+    G.wins++;
+    const cash = G.bags * 5000;
+    if (cash > G.best || (cash === G.best && (RUN_TIME - G.t) > G.bestTime)) {
+      G.best = Math.max(G.best, cash);
+      G.bestTime = RUN_TIME - G.t;
+    }
+    beep(520, 0.1); setTimeout(() => beep(780, 0.16), 110);
+  } else {
+    beep(120, 0.4);
+  }
+  saveNow();
+}
+
+/* ---------- sound ---------- */
+let AC = null;
+function beep(freq, dur) {
+  if (typeof AudioContext === "undefined") return;
+  try {
+    if (!AC) AC = new AudioContext();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = "square"; o.frequency.value = freq;
+    g.gain.value = 0.05;
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur);
+  } catch (e) { /* no audio, no problem */ }
+}
+
+/* ---------- rendering ---------- */
+const cv = typeof document !== "undefined" ? document.getElementById("cv") : null;
+const ctx = cv ? cv.getContext("2d") : null;
+
+function tileVisible(tx, ty) {
+  return los(G.px, G.py, tx + 0.5, ty + 0.5) && Math.hypot(tx + 0.5 - G.px, ty + 0.5 - G.py) < 13;
+}
+
+function draw() {
+  if (!ctx) return;
+  ctx.save();
+  if (G.shake > 0) ctx.translate((Math.random() - 0.5) * 8 * G.shake, (Math.random() - 0.5) * 8 * G.shake);
+  ctx.fillStyle = "#08090b";
+  ctx.fillRect(0, 0, 1200, 600);
+
+  if (G.mode === "brief") { drawBrief(); ctx.restore(); return; }
+
+  // --- floor + walls
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = at(x, y);
+    const vis = tileVisible(x, y);
+    let col;
+    if (t === T_WALL) col = vis ? "#2b3038" : "#171a1f";
+    else if (t === T_VAULTDOOR) col = G.vaultOpen ? "#2c4a33" : "#5a3a22";
+    else if (t === T_LOCKDOOR) col = G.secOpen ? "#2c4a33" : "#4a3a5a";
+    else if (t === T_EXIT) col = "#2f6b3a";
+    else col = vis ? "#14181d" : "#0d0f12";
+    ctx.fillStyle = col;
+    ctx.fillRect(x * TS, y * TS, TS, TS);
+    if (t !== T_WALL && vis) {
+      ctx.fillStyle = "rgba(255,255,255,0.018)";
+      ctx.fillRect(x * TS, y * TS, TS, 1);
+    }
+  }
+  // vault carpet
+  ctx.fillStyle = "rgba(120,90,30,0.10)";
+  ctx.fillRect(29 * TS, 2 * TS, 9 * TS, 5 * TS);
+
+  // --- known camera arcs (from the notepad), drawn even when unseen
+  for (const c of G.cams) {
+    const kn = G.known.cams.indexOf(c.def.id) >= 0;
+    if (!kn) continue;
+    drawCone(c.def.x, c.def.y, c.ang, c.def.half, c.def.range, "rgba(220,60,80,0.10)");
+  }
+  for (const c of G.cams) {
+    const kn = G.known.cams.indexOf(c.def.id) >= 0;
+    const vis = los(G.px, G.py, c.def.x, c.def.y) && Math.hypot(c.def.x - G.px, c.def.y - G.py) < 13;
+    if (!kn && !vis) continue;
+    ctx.fillStyle = c.susp > 0.05 ? "#ff5566" : "#a03a4a";
+    ctx.beginPath(); ctx.arc(c.def.x * TS, c.def.y * TS, 5, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#ff8899"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(c.def.x * TS, c.def.y * TS);
+    ctx.lineTo((c.def.x + Math.cos(c.ang) * 0.9) * TS, (c.def.y + Math.sin(c.ang) * 0.9) * TS); ctx.stroke();
+  }
+
+  // --- known patrol routes
+  for (const g of G.guards) {
+    if (G.known.guards.indexOf(g.def.id) < 0) continue;
+    ctx.strokeStyle = "rgba(120,170,255,0.22)";
+    ctx.setLineDash([4, 5]); ctx.lineWidth = 2;
+    ctx.beginPath();
+    const p = g.def.path;
+    ctx.moveTo((p[0][0] + 0.5) * TS, (p[0][1] + 0.5) * TS);
+    for (let i = 1; i < p.length; i++) ctx.lineTo((p[i][0] + 0.5) * TS, (p[i][1] + 0.5) * TS);
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // --- items (only the ones you've found before, or can see now)
+  for (const n of G.notesLeft) {
+    if (n.taken) continue;
+    const kn = G.known.notes.indexOf(n.id) >= 0;
+    const vis = tileVisible(Math.floor(n.x), Math.floor(n.y));
+    if (!kn && !vis) continue;
+    ctx.fillStyle = vis ? "#e8e2c0" : "rgba(232,226,192,0.30)";
+    ctx.fillRect(n.x * TS - 5, n.y * TS - 6, 10, 12);
+    ctx.fillStyle = "#5a5442";
+    ctx.fillRect(n.x * TS - 3, n.y * TS - 3, 6, 1);
+    ctx.fillRect(n.x * TS - 3, n.y * TS, 6, 1);
+  }
+  if (G.cardLeft) {
+    const kn = G.known.keycard;
+    const vis = tileVisible(Math.floor(KEYCARD.x), Math.floor(KEYCARD.y));
+    if (kn || vis) {
+      ctx.fillStyle = vis ? "#7fd8ff" : "rgba(127,216,255,0.30)";
+      ctx.fillRect(KEYCARD.x * TS - 7, KEYCARD.y * TS - 4, 14, 9);
+      ctx.fillStyle = "#0d1a20"; ctx.fillRect(KEYCARD.x * TS - 5, KEYCARD.y * TS - 2, 5, 5);
+    }
+  }
+  for (const l of G.lootLeft) {
+    if (l.taken) continue;
+    const vis = tileVisible(Math.floor(l.x), Math.floor(l.y));
+    ctx.fillStyle = vis ? "#e0b640" : "rgba(224,182,64,0.28)";
+    ctx.beginPath();
+    ctx.moveTo(l.x * TS, l.y * TS - 8);
+    ctx.lineTo(l.x * TS + 7, l.y * TS + 6);
+    ctx.lineTo(l.x * TS - 7, l.y * TS + 6);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // --- guards
+  for (const g of G.guards) {
+    const vis = los(G.px, G.py, g.x, g.y) && Math.hypot(g.x - G.px, g.y - G.py) < 13;
+    const kn = G.known.guards.indexOf(g.def.id) >= 0;
+    if (!vis && !kn) continue;
+    // you know his route, so you know where he is looking — draw it even through walls
+    if (vis) drawCone(g.x, g.y, g.ang, 0.50, 6.5, g.susp > 0.1 ? "rgba(255,90,90,0.16)" : "rgba(255,200,120,0.10)");
+    else if (kn) drawCone(g.x, g.y, g.ang, 0.50, 6.5, "rgba(255,200,120,0.055)");
+    ctx.globalAlpha = vis ? 1 : 0.35;
+    ctx.fillStyle = g.susp > 0.5 ? "#ff6a5a" : (g.investigate ? "#ffc46a" : "#8fb6e8");
+    ctx.beginPath(); ctx.arc(g.x * TS, g.y * TS, 7, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#0a0a0c"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#0a0a0c";
+    ctx.fillRect((g.x + Math.cos(g.ang) * 0.42) * TS - 2, (g.y + Math.sin(g.ang) * 0.42) * TS - 2, 4, 4);
+    ctx.globalAlpha = 1;
+    if (g.susp > 0.12 && vis) {
+      ctx.fillStyle = "#ff5a4a"; ctx.font = "bold 14px monospace"; ctx.textAlign = "center";
+      ctx.fillText(g.susp > 0.6 ? "!!" : "?", g.x * TS, g.y * TS - 12);
+    }
+    if (!vis && kn) {
+      ctx.strokeStyle = "rgba(143,182,232,0.5)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(g.x * TS, g.y * TS, 10, 0, 7); ctx.stroke();
+    }
+  }
+
+  // --- player
+  ctx.fillStyle = G.bags ? "#ffe9a8" : "#e6eef7";
+  ctx.beginPath(); ctx.arc(G.px * TS, G.py * TS, 7, 0, 7); ctx.fill();
+  ctx.strokeStyle = "#0a0a0c"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = "rgba(230,238,247,0.35)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(G.px * TS, G.py * TS);
+  ctx.lineTo((G.px + Math.cos(G.face)) * TS, (G.py + Math.sin(G.face)) * TS); ctx.stroke();
+  for (let i = 0; i < G.bags; i++) {
+    ctx.fillStyle = "#e0b640";
+    ctx.fillRect(G.px * TS - 9 + i * 4, G.py * TS - 13, 3, 4);
+  }
+
+  // exit marker
+  ctx.fillStyle = "rgba(90,220,120," + (0.35 + Math.sin(G.t * 4) * 0.15) + ")";
+  ctx.fillRect(19 * TS, 23 * TS, TS, TS);
+  ctx.fillStyle = "#0a0a0c"; ctx.font = "bold 11px monospace"; ctx.textAlign = "center";
+  ctx.fillText("OUT", 19.5 * TS, 23.7 * TS);
+
+  drawHUD();
+  drawSidebar();
+  if (G.keypad) drawKeypad();
+  if (G.mode === "over") drawOver();
+  ctx.restore();
+}
+
+function drawCone(x, y, ang, half, range, fill) {
+  if (!ctx) return;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(x * TS, y * TS);
+  const N = 18;
+  for (let i = 0; i <= N; i++) {
+    const a = ang - half + (half * 2) * (i / N);
+    let d = range;
+    for (let s = 0.3; s <= range; s += 0.35) {
+      if (opaque(Math.floor(x + Math.cos(a) * s), Math.floor(y + Math.sin(a) * s))) { d = s; break; }
+    }
+    ctx.lineTo((x + Math.cos(a) * d) * TS, (y + Math.sin(a) * d) * TS);
+  }
+  ctx.closePath(); ctx.fill();
+}
+
+function drawHUD() {
+  const left = RUN_TIME - G.t;
+  ctx.fillStyle = "#0d0f12"; ctx.fillRect(0, MAPH, MAPW, 600 - MAPH);
+  ctx.textAlign = "left";
+  ctx.font = "bold 15px monospace";
+  ctx.fillStyle = left < 12 ? "#ff6a5a" : "#cfd6dd";
+  ctx.fillText("0:" + (left < 10 ? "0" : "") + left.toFixed(1), 10, MAPH + 16);
+  ctx.fillStyle = "#e0b640";
+  ctx.fillText("BAGS " + G.bags + "  ($" + (G.bags * 5000).toLocaleString() + ")", 100, MAPH + 16);
+  ctx.fillStyle = "#8fb6e8";
+  ctx.fillText(G.vaultOpen ? "VAULT OPEN" : "vault sealed", 300, MAPH + 16);
+  // alarm bar
+  ctx.fillStyle = "#20242a"; ctx.fillRect(470, MAPH + 6, 200, 12);
+  ctx.fillStyle = G.alarm > 0.66 ? "#ff4a3a" : (G.alarm > 0.33 ? "#ffb04a" : "#4a8f5a");
+  ctx.fillRect(470, MAPH + 6, 200 * G.alarm, 12);
+  ctx.fillStyle = "#8b939c"; ctx.font = "11px monospace";
+  ctx.fillText(G.alarm > 0.05 ? ("SPOTTED — " + G.alarmSrc) : "unseen", 678, MAPH + 16);
+  if (G.msgT > 0) {
+    ctx.fillStyle = "#ffe9a8"; ctx.font = "bold 13px monospace"; ctx.textAlign = "center";
+    ctx.fillText(G.msg, MAPW / 2, MAPH - 14);
+  }
+}
+
+function drawSidebar() {
+  ctx.fillStyle = "#101216"; ctx.fillRect(MAPW, 0, SIDE, 600);
+  ctx.fillStyle = "#1b1e24"; ctx.fillRect(MAPW, 0, 2, 600);
+  let y = 26;
+  ctx.textAlign = "left"; ctx.font = "bold 13px monospace"; ctx.fillStyle = "#e8e2c0";
+  ctx.fillText("NOTEPAD", MAPW + 14, y); y += 6;
+  ctx.fillStyle = "#3a3f47"; ctx.fillRect(MAPW + 14, y, SIDE - 28, 1); y += 22;
+
+  ctx.font = "12px monospace"; ctx.fillStyle = "#9aa3ad";
+  ctx.fillText("run #" + G.runs + "   clean: " + G.wins, MAPW + 14, y); y += 24;
+
+  ctx.fillStyle = "#cfd6dd"; ctx.fillText("VAULT CODE", MAPW + 14, y); y += 20;
+  for (let i = 0; i < 4; i++) {
+    const kn = G.known.digits[i] !== null && G.known.digits[i] !== undefined;
+    const bx = MAPW + 14 + i * 30;
+    ctx.fillStyle = kn ? "#2a3a2c" : "#22242a";
+    ctx.fillRect(bx, y - 14, 24, 22);
+    ctx.fillStyle = kn ? "#8fe0a0" : "#4a4f57";
+    ctx.font = "bold 15px monospace"; ctx.textAlign = "center";
+    ctx.fillText(kn ? String(G.known.digits[i]) : "?", bx + 12, y + 2);
+  }
+  ctx.textAlign = "left"; y += 34;
+
+  ctx.font = "12px monospace"; ctx.fillStyle = "#cfd6dd";
+  ctx.fillText("GUARDS", MAPW + 14, y); y += 18;
+  for (const g of GUARDS) {
+    const kn = G.known.guards.indexOf(g.id) >= 0;
+    ctx.fillStyle = kn ? "#8fb6e8" : "#4a4f57";
+    ctx.fillText((kn ? "✓ " : "· ") + g.name + (kn ? " route" : " ??"), MAPW + 14, y);
+    y += 16;
+  }
+  y += 10;
+  ctx.fillStyle = "#cfd6dd"; ctx.fillText("CAMERAS", MAPW + 14, y); y += 18;
+  for (const c of CAMS) {
+    const kn = G.known.cams.indexOf(c.id) >= 0;
+    ctx.fillStyle = kn ? "#ff8899" : "#4a4f57";
+    ctx.fillText((kn ? "✓ " : "· ") + "camera " + (c.id + 1), MAPW + 14, y);
+    y += 16;
+  }
+  y += 10;
+  ctx.fillStyle = G.known.keycard ? "#7fd8ff" : "#4a4f57";
+  ctx.fillText((G.known.keycard ? "✓ keycard: " + KEYCARD.where : "· keycard ??"), MAPW + 14, y);
+  y += 26;
+
+  ctx.fillStyle = "#cfd6dd"; ctx.fillText("NOTES FOUND", MAPW + 14, y); y += 18;
+  for (const n of NOTES) {
+    const kn = G.known.notes.indexOf(n.id) >= 0;
+    ctx.fillStyle = kn ? "#e8e2c0" : "#4a4f57";
+    ctx.fillText((kn ? "✓ " : "· ") + (kn ? n.where : "somewhere"), MAPW + 14, y);
+    y += 16;
+  }
+
+  y = 540;
+  ctx.fillStyle = "#5c636c"; ctx.font = "11px monospace";
+  ctx.fillText("WASD move   SHIFT run (loud)", MAPW + 14, y); y += 15;
+  ctx.fillText("E keypad    ESC bail out", MAPW + 14, y); y += 15;
+  ctx.fillStyle = "#e0b640";
+  ctx.fillText("best: $" + G.best.toLocaleString(), MAPW + 14, y);
+}
+
+function drawKeypad() {
+  ctx.fillStyle = "rgba(5,6,8,0.72)"; ctx.fillRect(0, 0, MAPW, MAPH);
+  const bw = 320, bh = 180, bx = (MAPW - bw) / 2, by = (MAPH - bh) / 2;
+  ctx.fillStyle = "#14181d"; ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = "#3a3f47"; ctx.lineWidth = 2; ctx.strokeRect(bx, by, bw, bh);
+  ctx.textAlign = "center"; ctx.fillStyle = "#cfd6dd"; ctx.font = "bold 14px monospace";
+  ctx.fillText("VAULT KEYPAD", bx + bw / 2, by + 30);
+  const p = G.keypad;
+  for (let i = 0; i < 4; i++) {
+    const sx = bx + 60 + i * 52;
+    ctx.fillStyle = p.locked[i] ? "#22322a" : (i === p.cur ? "#2c3340" : "#22242a");
+    ctx.fillRect(sx, by + 56, 40, 48);
+    ctx.strokeStyle = i === p.cur ? "#8fb6e8" : "#3a3f47"; ctx.lineWidth = 2;
+    ctx.strokeRect(sx, by + 56, 40, 48);
+    ctx.fillStyle = p.locked[i] ? "#8fe0a0" : "#e6eef7"; ctx.font = "bold 24px monospace";
+    ctx.fillText(p.slots[i] === null || p.slots[i] === undefined ? "_" : String(p.slots[i]), sx + 20, by + 90);
+  }
+  ctx.fillStyle = "#8b939c"; ctx.font = "11px monospace";
+  ctx.fillText("green = known from your notes.  type the rest.", bx + bw / 2, by + 128);
+  ctx.fillText("ENTER submit   BACKSPACE clear   E cancel", bx + bw / 2, by + 148);
+  ctx.fillStyle = "#ff8877";
+  ctx.fillText("a wrong guess is LOUD", bx + bw / 2, by + 166);
+}
+
+function drawBrief() {
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#e6eef7"; ctx.font = "bold 46px monospace";
+  ctx.fillText("S I X T Y", 600, 130);
+  ctx.fillStyle = "#8b939c"; ctx.font = "14px monospace";
+  ctx.fillText("one minute inside. you will not get it right the first time.", 600, 165);
+  ctx.fillText("you keep nothing you steal until you get out — but you keep everything you LEARN.", 600, 190);
+
+  ctx.font = "13px monospace";
+  const lines = [
+    "",
+    "IN:  the lobby door, bottom centre.       OUT: the same door, with bags.",
+    "",
+    "The vault takes a four-digit code. Four notes in the building each hold one digit,",
+    "and once a digit is in your pad it is yours forever. Guards walk fixed routes on a",
+    "fixed clock — watch one for a second and a half and his whole loop gets drawn on",
+    "your map, in every run after this one. Cameras the same.",
+    "",
+    "SHIFT runs, and running is loud. A wrong code is louder.",
+    "",
+  ];
+  let y = 235;
+  ctx.fillStyle = "#9aa3ad";
+  for (const l of lines) { ctx.fillText(l, 600, y); y += 20; }
+
+  ctx.fillStyle = "#e8e2c0"; ctx.font = "13px monospace";
+  ctx.fillText("your pad so far:  code " + G.known.digits.map(d => (d === null || d === undefined) ? "?" : d).join(" ") +
+    "    routes " + G.known.guards.length + "/3    cameras " + G.known.cams.length + "/3" +
+    "    keycard " + (G.known.keycard ? "found" : "?"), 600, y + 8);
+  y += 44;
+  ctx.fillStyle = "#5c636c"; ctx.font = "12px monospace";
+  ctx.fillText("runs: " + G.runs + "    clean getaways: " + G.wins + "    best haul: $" + G.best.toLocaleString(), 600, y);
+  y += 34;
+  ctx.fillStyle = "#8fe0a0"; ctx.font = "bold 16px monospace";
+  ctx.fillText("[ ENTER ] go in", 600, y);
+  ctx.fillStyle = "#4a4f57"; ctx.font = "11px monospace";
+  ctx.fillText("backspace burns the notepad and starts you blind again", 600, y + 26);
+}
+
+function drawOver() {
+  ctx.fillStyle = "rgba(5,6,8,0.80)"; ctx.fillRect(0, 0, MAPW, MAPH);
+  ctx.textAlign = "center";
+  const head = { caught: "CAUGHT", time: "OUT OF TIME", empty: "YOU LEFT WITH NOTHING", clean: "CLEAN", abort: "WALKED AWAY" }[G.result] || "";
+  ctx.fillStyle = G.result === "clean" ? "#8fe0a0" : "#ff6a5a";
+  ctx.font = "bold 40px monospace";
+  ctx.fillText(head, MAPW / 2, 180);
+  ctx.font = "14px monospace"; ctx.fillStyle = "#9aa3ad";
+  if (G.result === "clean") ctx.fillText("$" + (G.bags * 5000).toLocaleString() + " out the front door with " + (RUN_TIME - G.t).toFixed(1) + "s to spare", MAPW / 2, 215);
+  else if (G.result === "caught") ctx.fillText("spotted by " + (G.alarmSrc || "somebody"), MAPW / 2, 215);
+  else if (G.result === "time") ctx.fillText("the shift changes. you are still inside.", MAPW / 2, 215);
+
+  let y = 268;
+  ctx.fillStyle = "#e8e2c0"; ctx.font = "bold 14px monospace";
+  ctx.fillText(G.newFacts.length ? "ADDED TO THE PAD — YOURS FOREVER" : "you learned nothing new that run", MAPW / 2, y);
+  y += 26;
+  ctx.font = "13px monospace"; ctx.fillStyle = "#cfd6dd";
+  for (const f of G.newFacts.slice(0, 8)) { ctx.fillText("+ " + f, MAPW / 2, y); y += 20; }
+  y += 24;
+  ctx.fillStyle = "#8fe0a0"; ctx.font = "bold 15px monospace";
+  ctx.fillText("[ ENTER ] again", MAPW / 2, Math.max(y, 470));
+}
+
+/* ---------- loop ---------- */
+let last = 0;
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - last) / 1000 || 0);
+  last = ts;
+  G.acc += dt;
+  while (G.acc >= 1 / 120) { tick(1 / 120); G.acc -= 1 / 120; }
+  draw();
+  requestAnimationFrame(frame);
+}
+
+(function boot() {
+  const s = loadSave();
+  G.runs = s.runs; G.best = s.best; G.bestTime = s.bestTime; G.wins = s.wins; G.known = s.known;
+  resetRun();
+  if (typeof window !== "undefined") {
+    window.G = G;
+    window.SIXTY = { tick, resetRun, startRun, endRun, MAP, at, solid, los, inCone, CODE, NOTES, KEYCARD, LOOT, GUARDS, CAMS, W, H, T_WALL, T_FLOOR, T_VAULTDOOR, T_LOCKDOOR, T_EXIT, keys };
+  }
+  if (typeof requestAnimationFrame !== "undefined" && !(typeof window !== "undefined" && window.__HEADLESS__)) {
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
+</body>
+</html>

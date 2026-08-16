@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE</title>
+<style>
+  * { box-sizing: border-box; margin:0; padding:0; }
+  html,body { height:100%; }
+  body {
+    background:#0d0f14; color:#d8dee9;
+    font-family: "Consolas", "DejaVu Sans Mono", monospace;
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden;
+  }
+  #wrap { width:960px; height:640px; position:relative; }
+  canvas { position:absolute; inset:0; width:960px; height:640px; background:#11141b; image-rendering:pixelated; }
+  #ui {
+    position:absolute; inset:0; overflow:auto;
+    padding:14px 22px;
+  }
+  #ui.hidden { display:none; }
+  h1 { font-size:30px; letter-spacing:6px; color:#ffd479; font-weight:normal; }
+  h2 { font-size:17px; letter-spacing:3px; color:#8fd6ff; font-weight:normal; margin-bottom:6px; }
+  .sub { color:#6d7789; font-size:12px; margin-top:4px; letter-spacing:1px; }
+  .bar { display:flex; gap:18px; font-size:11px; color:#9aa6b8; border-bottom:1px solid #232838; padding-bottom:6px; margin-bottom:9px; }
+  .bar b { color:#ffd479; font-weight:normal; }
+  .cols { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .slot { border:1px solid #232838; background:#141822; padding:5px 7px; }
+  .slot h3 { font-size:10px; letter-spacing:2px; color:#6d7789; font-weight:normal; margin-bottom:4px; }
+  .opt {
+    border:1px solid #262c3c; padding:2px 6px; margin-bottom:2px; cursor:pointer;
+    font-size:11px; color:#b6c0d0; background:#181d28; transition:none;
+  }
+  .opt:hover { border-color:#4a86a8; color:#fff; }
+  .opt.sel { border-color:#ffd479; background:#2a2517; color:#ffd479; }
+  .opt.locked { opacity:.35; cursor:not-allowed; }
+  .opt .d { display:block; font-size:9.5px; color:#6d7789; margin-top:1px; }
+  .opt .c { float:right; color:#7fbf7f; font-size:9.5px; }
+  button {
+    font-family:inherit; font-size:13px; letter-spacing:2px;
+    background:#1d2536; color:#8fd6ff; border:1px solid #3a4a63;
+    padding:5px 18px; cursor:pointer; margin-top:7px;
+  }
+  button:hover { background:#2a3548; color:#fff; }
+  button:disabled { opacity:.3; cursor:not-allowed; }
+  input {
+    font-family:inherit; font-size:14px; background:#141822; color:#ffd479;
+    border:1px solid #3a4a63; padding:6px 10px; width:320px; letter-spacing:2px;
+  }
+  .review { border-left:3px solid #4a86a8; padding:6px 12px; margin:8px 0; font-size:12px; color:#b6c0d0; }
+  .review b { color:#8fd6ff; font-weight:normal; }
+  .score { font-size:46px; color:#ffd479; }
+  .note { font-size:11px; color:#6d7789; margin-top:3px; }
+  .good { color:#7fbf7f; }
+  .bad { color:#e07a6a; }
+  .center { text-align:center; margin-top:60px; }
+  ul { list-style:none; font-size:12px; }
+  li { padding:2px 0; }
+  .flash { color:#ffd479; }
+  #ui.through { pointer-events:none; padding:0; }
+  #ui.through .edbar { pointer-events:auto; }
+  .edbar {
+    position:absolute; left:0; right:0; bottom:0; height:104px;
+    background:#141822; border-top:1px solid #232838; padding:8px 14px;
+    display:flex; flex-direction:column; gap:5px;
+  }
+  .edtools { display:flex; gap:5px; flex-wrap:wrap; }
+  .edtools .opt { margin:0; padding:3px 9px; font-size:11px; }
+  .edmsg { font-size:11.5px; min-height:15px; }
+  .edbtns { display:flex; gap:9px; }
+  .edbtns button { margin-top:0; padding:4px 14px; font-size:12px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="960" height="640"></canvas>
+  <div id="ui"></div>
+</div>
+<script>
+"use strict";
+(function(){
+
+/* ============================== CONSTANTS ============================== */
+const TILE = 24, ROWS = 20;
+const VIEW_W = 960, VIEW_H = 640;
+// scale so a full 20-row level fits the canvas height exactly (640/480 = 4/3),
+// which makes a 30-column world exactly one screen wide with no camera at all
+const SCALE = VIEW_H / (ROWS * TILE);
+const VW = VIEW_W / SCALE, VH = VIEW_H / SCALE;   // 720 x 480 world view
+const GRAV = 0.42, MAXFALL = 8;
+const CYCLES = 5;
+
+/* ============================== MODULES ============================== */
+const MODULES = {
+  verb: [
+    { id:'jump',  name:'JUMP',  cost:60,  weeks:2, desc:'Double jump, higher arc.' },
+    { id:'shoot', name:'SHOOT', cost:140, weeks:4, desc:'Fire projectiles. Kills things.' },
+    { id:'dash',  name:'DASH',  cost:110, weeks:3, desc:'Burst forward. Invulnerable, lethal.' },
+    { id:'grab',  name:'GRAB',  cost:90,  weeks:3, desc:'Yank nearby objects toward you.' },
+    { id:'bomb',  name:'BOMB',  cost:130, weeks:4, desc:'Drop a charge. Blows open walls.' },
+  ],
+  world: [
+    { id:'platforms', name:'PLATFORMS', cost:80,  weeks:3, desc:'Side view. Gravity. Ledges.' },
+    { id:'scroller',  name:'SCROLLER',  cost:160, weeks:5, desc:'Side view, wide, wall of death.' },
+    { id:'arena',     name:'ARENA',     cost:70,  weeks:2, desc:'Top-down open room, pillars.' },
+    { id:'maze',      name:'MAZE',      cost:120, weeks:4, desc:'Top-down corridors. Tight.' },
+    { id:'cavern',    name:'CAVERN',    cost:100, weeks:3, desc:'Top-down. Eroded, organic, open.' },
+  ],
+  threat: [
+    { id:'chasers', name:'CHASERS', cost:100, weeks:3, desc:'They walk at you. Forever.' },
+    { id:'turrets', name:'TURRETS', cost:120, weeks:3, desc:'Static. They lead their shots.' },
+    { id:'spikes',  name:'SPIKES',  cost:40,  weeks:1, desc:'Cheap. Do not move. Work.' },
+    { id:'timer',   name:'TIMER',   cost:20,  weeks:1, desc:'Pressure with no art budget.' },
+    { id:'swarm',   name:'SWARM',   cost:150, weeks:4, desc:'Small, fast, endless. Weak alone.' },
+  ],
+  goal: [
+    { id:'collect', name:'COLLECT', cost:60,  weeks:2, desc:'Gather 6 things.' },
+    { id:'reach',   name:'REACH',   cost:50,  weeks:2, desc:'Get to the exit.' },
+    { id:'survive', name:'SURVIVE', cost:40,  weeks:1, desc:'Last 30 seconds.' },
+    { id:'score',   name:'SCORE',   cost:90,  weeks:3, desc:'Destroy 8 enemies.' },
+    { id:'deliver', name:'DELIVER', cost:110, weeks:4, desc:'Carry the package to the exit.' },
+  ],
+  polish: [
+    { id:'shake',     name:'SCREEN SHAKE', cost:30, weeks:1, desc:'Impacts kick the camera.' },
+    { id:'particles', name:'PARTICLES',    cost:50, weeks:2, desc:'Everything sprays debris.' },
+    { id:'juice',     name:'JUICE',        cost:70, weeks:2, desc:'Squash, stretch, hitstop.' },
+    { id:'music',     name:'SOUNDTRACK',   cost:60, weeks:2, desc:'A loop. It is fine.' },
+    { id:'tutorial',  name:'TUTORIAL',     cost:40, weeks:1, desc:'Tells the player the controls.' },
+    { id:'lighting',  name:'LIGHTING',     cost:80, weeks:3, desc:'Darkness, and a lamp on the player.' },
+  ],
+};
+const SLOTS = ['verb','world','threat','goal'];
+
+/* Publisher briefs. One per cycle from cycle 2 on. They exist to stop you shipping the
+   same known-good build five times — the constraint is the game. */
+const BRIEFS = [
+  { id:'topdown', text:'Our audience plays top-down. No side views.', pay:120,
+    test:s => s.picks.world==='arena' || s.picks.world==='maze' || s.picks.world==='cavern' },
+  { id:'sideon',  text:'They want gravity. Side view only.', pay:120,
+    test:s => s.picks.world==='platforms' || s.picks.world==='scroller' },
+  { id:'gun',     text:'Marketing already made the trailer. It has a gun in it.', pay:140,
+    test:s => s.picks.verb==='shoot' },
+  { id:'nogun',   text:'No weapons this time. Something gentler.', pay:130,
+    test:s => s.picks.verb!=='shoot' },
+  { id:'fast',    text:'Ten weeks. Not eleven.', pay:200,
+    test:s => cost().weeks <= 10 },
+  { id:'cheap',   text:'Keep it under $320 total.', pay:190,
+    test:s => cost().money <= 320 },
+  { id:'notimer', text:'Absolutely no countdown clocks. Focus-tested badly.', pay:100,
+    test:s => s.picks.threat!=='timer' },
+  { id:'shiny',   text:'It has to FEEL good. Three polish modules, minimum.', pay:170,
+    test:s => s.polish.length >= 3 },
+  { id:'fresh',   text:'Nothing you have shipped before. All four slots new.', pay:260,
+    test:s => SLOTS.every(k => !(studio.shipped[k+':'+s.picks[k]])) },
+  { id:'kills',   text:'The store page needs a body count. Make it a kill game.', pay:150,
+    test:s => s.picks.goal==='score' },
+  { id:'dark',    text:'The art director saw a screenshot of a cave. Make it dark.', pay:160,
+    test:s => s.polish.includes('lighting') },
+  { id:'raw',     text:'We are selling it as a raw prototype. No polish. None.', pay:210,
+    test:s => s.polish.length === 0 },
+  { id:'errand',  text:'They want an escort. Something to carry, somewhere to carry it.', pay:150,
+    test:s => s.picks.goal==='deliver' },
+  { id:'known',   text:'No experiments. Every part is one you have shipped before.', pay:140,
+    test:s => SLOTS.every(k => !!studio.shipped[k+':'+s.picks[k]]) },
+  { id:'onelife', text:'Cheapest threat you have. Spend the money on the verb.', pay:130,
+    test:s => !!s.picks.verb && !!s.picks.threat &&
+              priceOf('verb', s.picks.verb).money > priceOf('threat', s.picks.threat).money * 2 },
+];
+
+/* pairwise design chemistry: [a, b, delta, note] */
+const CHEMISTRY = [
+  ['world:platforms','verb:jump',    +1,'Jumping in a platformer. Obvious, and it sings.'],
+  ['world:arena','verb:shoot',       +1,'An open room full of firing lines.'],
+  ['world:scroller','verb:dash',     +1,'Dashing ahead of the wall of death feels incredible.'],
+  ['world:maze','threat:chasers',    +1,'Corridors turn the chasers into a real hunt.'],
+  ['goal:score','verb:shoot',        +1,'A kill goal with a gun. Clean loop.'],
+  ['goal:collect','verb:grab',       +1,'Grab reaches the pickups you cannot walk to.'],
+  ['goal:survive','threat:turrets',  +1,'Turrets make standing still a losing move.'],
+  ['goal:reach','world:scroller',    +1,'A finish line at the end of a scroller. Perfect fit.'],
+  ['goal:collect','threat:timer',    +1,'A clock over a scavenger hunt. Tense.'],
+  ['world:scroller','threat:spikes', +1,'Spikes read instantly at speed.'],
+  ['goal:reach','threat:timer',      +1,'Race to the exit. Everyone understands it.'],
+  ['threat:swarm','verb:bomb',       +1,'One charge, half the swarm gone. Enormously satisfying.'],
+  ['world:cavern','verb:bomb',       +1,'Blasting your own tunnels through soft rock. Inspired.'],
+  ['threat:swarm','world:arena',     +1,'Open ground and a tide of them. Reads at a glance.'],
+  ['goal:deliver','world:maze',      +1,'Carrying something fragile through corridors. Real tension.'],
+  ['goal:deliver','threat:swarm',    +1,'They pour in the moment you pick it up. Great escalation.'],
+  ['world:cavern','threat:chasers',  +1,'Things loping at you out of the dark. Classic.'],
+  ['goal:deliver','polish:lighting', +1,'A long carry through gloom. The light does the work.'],
+  ['world:cavern','polish:lighting', +1,'Caves without falloff look like paper. With it, they breathe.'],
+
+  ['goal:deliver','world:scroller',  -1,'A fetch quest inside a wall of death. Nobody finishes it.'],
+  ['threat:swarm','goal:survive',    -1,'Endless spawns and a survival clock. Attrition, not design.'],
+  ['world:cavern','goal:reach',      -1,'One exit hidden in an eroded blob. Players wander.'],
+  ['verb:bomb','world:platforms',    -1,'Bombs fall off the ledges before they go off.'],
+  ['verb:bomb','goal:collect',       -1,'Your own blast scatters the pickups. Fighting yourself.'],
+
+  ['world:arena','verb:jump',        -1,'Nothing to jump onto in a top-down room.'],
+  ['world:maze','verb:jump',         -1,'Jump does nothing in a maze. Wasted budget.'],
+  ['goal:score','verb:grab',         -1,'A kill goal with no way to kill.'],
+  ['goal:score','verb:jump',         -1,'A kill goal with no weapon. Players flail.'],
+  ['goal:survive','threat:timer',    -1,'A survival timer AND a death timer. Redundant.'],
+  ['world:maze','threat:turrets',    -1,'Turrets cannot see past a corner. They just sit there.'],
+  ['world:platforms','threat:turrets',-1,'Turret shots and gravity fight each other.'],
+  ['goal:survive','world:maze',      -1,'Waiting out a clock in a maze is a hiding game.'],
+];
+
+/* ============================== RNG ============================== */
+function mulberry(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+/* ============================== STUDIO STATE ============================== */
+const studio = {
+  cycle:1, money:520, fans:0, weeksMax:14,
+  picks:{}, polish:[], title:'',
+  exp:{},        // moduleKey -> times shipped; drives the experience discount
+  shipped:{},    // moduleKey -> true, for the "nothing you have shipped before" brief
+  brief:null,
+  history:[], phase:'intro', lastResult:null, lastReview:null,
+};
+
+/* Shipping a module teaches you to build it cheaper. Caps at 40% so specialising
+   is rewarded but never free — and the briefs keep pulling you off your favourites. */
+function discount(slot,id){
+  const e = studio.exp[slot+':'+id] || 0;
+  return Math.min(0.4, e*0.15);
+}
+function priceOf(slot,id){
+  const d = find(slot,id);
+  return { money: Math.round(d.cost * (1-discount(slot,id))), weeks: d.weeks };
+}
+function cost(){
+  let m=0,w=0;
+  for(const s of SLOTS){ const p=studio.picks[s]; if(p){ const q=priceOf(s,p); m+=q.money; w+=q.weeks; } }
+  for(const p of studio.polish){ const q=priceOf('polish',p); m+=q.money; w+=q.weeks; }
+  return {money:m, weeks:w};
+}
+function briefMet(){ return studio.brief ? !!studio.brief.test(studio) : true; }
+function find(slot,id){ return MODULES[slot].find(x=>x.id===id); }
+function ready(){ return SLOTS.every(s=>studio.picks[s]); }
+
+function chemistry(){
+  // polish is included so a module like LIGHTING can genuinely suit a build,
+  // not just add a flat point for having bought something
+  const set = new Set(SLOTS.map(s=>s+':'+studio.picks[s]));
+  for(const id of studio.polish) set.add('polish:'+id);
+  const out = [];
+  for(const [a,b,d,t] of CHEMISTRY){ if(set.has(a)&&set.has(b)) out.push({d,t}); }
+  return out;
+}
+
+/* ============================== GAME ENGINE ============================== */
+/* The generated prototype. Built entirely from studio.picks. */
+const G = {
+  active:false, grid:null, cols:30, w:0, h:ROWS*TILE,
+  side:false, player:null, ents:[], bullets:[], pickups:[], parts:[],
+  exit:null, cam:0, camShake:0, hitstop:0,
+  time:0, limit:0, hp:3, invuln:0, kills:0, got:0, need:0,
+  deaths:0, result:null, doom:-9999, msg:'', msgT:0, over:0,
+  bombs:[], carrying:false, swarmCd:0, flash:0,
+  editCam:0, tool:'wall', hoverT:null, edits:0,
+  spec:null, rng:null, keys:{}, hint:'', best:0,
+};
+
+function spec(){
+  return {
+    verb:studio.picks.verb, world:studio.picks.world,
+    threat:studio.picks.threat, goal:studio.picks.goal,
+    polish:studio.polish.slice(),
+  };
+}
+
+/* Reachability, extracted so the level editor can re-run it after every single
+   edit. In top-down a 4-connected flood is exact; in side view that flood LIES —
+   it walks straight through air — so it is redone as a walk-and-jump BFS between
+   standable tiles. Objectives are only ever placed in `reach`. */
+function computeReach(grid, side, cols){
+  const openAll = [];
+  for(let r=1;r<ROWS-1;r++) for(let c=1;c<cols-1;c++) if(grid[r][c]!==1) openAll.push([r,c]);
+  const stand0 = openAll.filter(t => !side || grid[t[0]+1][t[1]]===1);
+  const seed0 = (stand0.length?stand0:openAll).slice().sort((a,b)=>a[1]-b[1])[0] || [ROWS-3,2];
+
+  const seen = new Set(), key=(r,c)=>r*1000+c;
+  const stack = [seed0]; seen.add(key(seed0[0],seed0[1]));
+  while(stack.length){
+    const [r,c] = stack.pop();
+    for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nr=r+dr, nc=c+dc;
+      if(nr<1||nr>=ROWS-1||nc<1||nc>=cols-1) continue;
+      if(grid[nr][nc]===1 || seen.has(key(nr,nc))) continue;
+      seen.add(key(nr,nc)); stack.push([nr,nc]);
+    }
+  }
+  const openAny = openAll.filter(t=>seen.has(key(t[0],t[1])));
+  const open = openAny.filter(t => !side || grid[t[0]+1][t[1]]===1);
+  const standable = (open.length?open:openAny).slice();
+  standable.sort((a,b)=>a[1]-b[1]);
+  const spawn = standable[0] || [ROWS-3,2];
+
+  let reach = standable;
+  if(side){
+    const R = new Set([key(spawn[0],spawn[1])]);
+    const frontier = [spawn];
+    while(frontier.length){
+      const [r,c] = frontier.pop();
+      for(const t of standable){
+        const k = key(t[0],t[1]);
+        if(R.has(k)) continue;
+        const dc = Math.abs(t[1]-c), dr = t[0]-r;
+        if(dc<=4 && dr>=-3 && dr<=9){ R.add(k); frontier.push(t); }
+      }
+    }
+    reach = standable.filter(t=>R.has(key(t[0],t[1])));
+  }
+  return { reach, standable, openAny, spawn };
+}
+
+function buildLevel(sp, seed){
+  const rng = mulberry(seed|0);
+  G.spec = sp; G.rng = rng;
+  G.side = (sp.world==='platforms' || sp.world==='scroller');
+  G.cols = sp.world==='scroller' ? 90 : 30;
+  G.w = G.cols*TILE;
+  const grid = [];
+  for(let r=0;r<ROWS;r++){ grid.push(new Array(G.cols).fill(0)); }
+  const S=(r,c,v)=>{ if(r>=0&&r<ROWS&&c>=0&&c<G.cols) grid[r][c]=v; };
+
+  // border
+  for(let c=0;c<G.cols;c++){ S(0,c,1); S(ROWS-1,c,1); }
+  for(let r=0;r<ROWS;r++){ S(r,0,1); S(r,G.cols-1,1); }
+
+  if(G.side){
+    // ground line with occasional gaps, plus floating platforms
+    for(let c=1;c<G.cols-1;c++){
+      const gap = rng()<0.10 && c>4 && c<G.cols-5;
+      if(!gap) S(ROWS-2,c,1);
+    }
+    let c=3;
+    while(c<G.cols-4){
+      const run = 3+Math.floor(rng()*5);
+      const r = 5+Math.floor(rng()*10);
+      for(let i=0;i<run && c+i<G.cols-2;i++) S(r,c+i,1);
+      c += run + 2 + Math.floor(rng()*4);
+    }
+  } else if(sp.world==='arena'){
+    const pillars = 8+Math.floor(rng()*6);
+    for(let i=0;i<pillars;i++){
+      const r=2+Math.floor(rng()*(ROWS-5)), c=3+Math.floor(rng()*(G.cols-7));
+      const w=1+Math.floor(rng()*3), h=1+Math.floor(rng()*3);
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++) S(r+y,c+x,1);
+    }
+  } else if(sp.world==='cavern'){
+    // cellular-automata erosion: random fill, then smooth. Open and organic, so it
+    // plays nothing like the maze's rigid 2-tile lattice even though both are top-down.
+    let cave = [];
+    for(let r=0;r<ROWS;r++){
+      cave.push([]);
+      for(let c=0;c<G.cols;c++) cave[r].push(rng()<0.42 ? 1 : 0);
+    }
+    for(let pass=0; pass<4; pass++){
+      const next = cave.map(row=>row.slice());
+      for(let r=1;r<ROWS-1;r++) for(let c=1;c<G.cols-1;c++){
+        let n=0;
+        for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
+          if(dr||dc) n += cave[r+dr][c+dc];
+        }
+        next[r][c] = n>4 ? 1 : (n<4 ? 0 : cave[r][c]);
+      }
+      cave = next;
+    }
+    for(let r=1;r<ROWS-1;r++) for(let c=1;c<G.cols-1;c++) S(r,c,cave[r][c]);
+    // carve a guaranteed open lane so the spawn corner is never sealed off
+    for(let c=1;c<G.cols-1;c++){ S(ROWS-3,c,0); S(ROWS-4,c,0); }
+  } else { // maze
+    for(let r=2;r<ROWS-2;r+=2){
+      for(let c=2;c<G.cols-2;c+=2){
+        S(r,c,1);
+        const d = Math.floor(rng()*4);
+        if(d===0) S(r-1,c,1); else if(d===1) S(r+1,c,1);
+        else if(d===2) S(r,c-1,1); else S(r,c+1,1);
+      }
+    }
+  }
+  G.grid = grid;
+
+  const RR = computeReach(grid, G.side, G.cols);
+  const openAny = RR.openAny, standable = RR.standable, sp0 = RR.spawn, reach = RR.reach;
+
+  G.reach = reach;
+  G.player = { x:sp0[1]*TILE+4, y:sp0[0]*TILE+2, w:14, h:18, vx:0, vy:0,
+               onGround:false, jumps:0, face:1, dx:1, dy:0, dash:0, stomp:0, sq:1 };
+
+  // spikes
+  if(sp.threat==='spikes'){
+    const n = G.side ? Math.floor(G.cols/6) : 14;
+    for(let i=0;i<n;i++){
+      const t = standable[Math.floor(rng()*standable.length)];
+      if(t && t[1]>4) grid[t[0]][t[1]] = 2;
+    }
+  }
+
+  // entities
+  G.ents=[]; G.bullets=[]; G.pickups=[]; G.parts=[]; G.bombs=[];
+  G.editCam=0; G.hoverT=null;
+  G.carrying=false; G.swarmCd=0; G.flash=0;
+  const far = standable.filter(t=>t[1]>6);
+  const pick = ()=> far.length? far[Math.floor(rng()*far.length)] : [ROWS-3, G.cols-3];
+
+  if(sp.threat==='chasers'){
+    const n = sp.goal==='score' ? 6 : 5;
+    for(let i=0;i<n;i++){ const t=pick(); G.ents.push({type:'chaser',x:t[1]*TILE+4,y:t[0]*TILE+4,w:14,h:16,vx:0,vy:0,hp:1,stun:0,alive:true}); }
+  }
+  if(sp.threat==='swarm'){
+    // many, fast, and each dies to a touch — the danger is being surrounded, not any one of them
+    const n = 10;
+    for(let i=0;i<n;i++){ const t=pick(); G.ents.push({type:'swarm',x:t[1]*TILE+6,y:t[0]*TILE+6,w:10,h:10,vx:0,vy:0,hp:1,stun:0,alive:true}); }
+    G.swarmCd = 100;
+  }
+  if(sp.threat==='turrets'){
+    for(let i=0;i<6;i++){ const t=pick(); G.ents.push({type:'turret',x:t[1]*TILE+4,y:t[0]*TILE+6,w:16,h:16,cd:40+Math.floor(rng()*60),hp:2,alive:true}); }
+  }
+
+  // goal setup
+  G.got=0; G.kills=0; G.need=0; G.exit=null; G.limit=0;
+  if(sp.goal==='collect'){
+    G.need=6;
+    // only ever on reachable, non-spike tiles — a pickup you cannot touch is a broken game
+    const spots = reach.filter(t=>grid[t[0]][t[1]]===0);
+    const pool = spots.length>=6 ? spots : openAny;
+    for(let i=0;i<6;i++){
+      const t = pool[Math.floor(rng()*pool.length)];
+      const y = G.side ? t[0]*TILE+16 : t[0]*TILE+12;
+      G.pickups.push({x:t[1]*TILE+12, y, got:false, bob:rng()*6});
+    }
+  } else if(sp.goal==='reach'){
+    const sorted = reach.slice().sort((a,b)=>a[1]-b[1]);
+    const t = sorted[sorted.length-1] || [ROWS-3,G.cols-3];
+    G.exit = {x:t[1]*TILE, y:t[0]*TILE};
+    grid[t[0]][t[1]] = 3;
+  } else if(sp.goal==='deliver'){
+    // package on a reachable tile near the start, exit at the far end: a two-stage reach
+    const spots = reach.filter(t=>grid[t[0]][t[1]]===0).sort((a,b)=>a[1]-b[1]);
+    const pk = spots[Math.floor(spots.length*0.25)] || spots[0] || [ROWS-3,3];
+    G.pickups.push({x:pk[1]*TILE+12, y:G.side?pk[0]*TILE+16:pk[0]*TILE+12, got:false, bob:0, pkg:true});
+    G.need = 1;
+    const t = spots[spots.length-1] || [ROWS-3,G.cols-3];
+    G.exit = {x:t[1]*TILE, y:t[0]*TILE};
+    grid[t[0]][t[1]] = 3;
+    G.carrying = false;
+  } else if(sp.goal==='survive'){
+    G.need = 30;
+  } else if(sp.goal==='score'){
+    G.need = 8;
+  }
+
+  // time limits
+  if(sp.threat==='timer') G.limit = sp.goal==='survive' ? 22 : 45;
+  else if(sp.goal==='survive') G.limit = 0;
+  else G.limit = 95;
+
+  // spawner for score goal (needs a supply of targets)
+  G.spawnCd = 90;
+
+  G.doom = sp.world==='scroller' ? -60 : -9999;
+  // Clear held input. G is a singleton, so without this a key still down when the
+  // last prototype ended stays down in the next one — which starts you walking
+  // into a wall, and quietly breaks replay()'s "same seed, same game" promise.
+  // Spelled out as a literal rather than looped over: G.keys starts as {}, so on
+  // the very first build there would be no keys to clear, and actPrev — which
+  // decides whether the verb fires on frame one — only ever appears inside step().
+  // The handlers read G.keys fresh each event, so reassigning it is safe.
+  G.keys = { left:false, right:false, up:false, down:false, act:false, actPrev:false };
+  G.time=0; G.hp=3; G.invuln=0; G.deaths=0; G.result=null; G.cam=0;
+  G.camShake=0; G.hitstop=0; G.over=0; G.active=true; G.msg=''; G.msgT=0;
+  G.best = 0;
+  G.hint = hintFor(sp);
+  return G;
+}
+
+function hintFor(sp){
+  const move = G.side ? 'ARROWS move  •  UP jumps' : 'ARROWS move';
+  const v = { jump:'SPACE: double jump', shoot:'SPACE: shoot', dash:'SPACE: dash',
+              grab:'SPACE: grab', bomb:'SPACE: drop a bomb' }[sp.verb];
+  const g = { collect:'Collect 6', reach:'Reach the green exit', survive:'Survive 30s',
+              score:'Destroy 8', deliver:'Grab the package, then the exit' }[sp.goal];
+  return move+'  •  '+v+'  •  '+g;
+}
+
+function solid(c,r){
+  if(r<0||r>=ROWS) return true;
+  if(c<0||c>=G.cols) return true;
+  return G.grid[r][c]===1;
+}
+function tileAt(x,y){
+  const c=Math.floor(x/TILE), r=Math.floor(y/TILE);
+  if(r<0||r>=ROWS||c<0||c>=G.cols) return 1;
+  return G.grid[r][c];
+}
+function hitsGrid(b, kind){
+  const c0=Math.floor(b.x/TILE), c1=Math.floor((b.x+b.w-1)/TILE);
+  const r0=Math.floor(b.y/TILE), r1=Math.floor((b.y+b.h-1)/TILE);
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+    const t = (r<0||r>=ROWS||c<0||c>=G.cols) ? 1 : G.grid[r][c];
+    if(kind==='solid' && t===1) return true;
+    if(kind==='spike' && t===2) return true;
+    if(kind==='exit'  && t===3) return true;
+  }
+  return false;
+}
+function moveBox(b, dx, dy){
+  // resolve each axis by stepping one pixel at a time, so we never tunnel
+  const sx = Math.sign(dx);
+  for(let i=0;i<Math.abs(dx);i++){
+    b.x += sx;
+    if(hitsGrid(b,'solid')){ b.x -= sx; b.vx = 0; break; }
+  }
+  let grounded = false;
+  const sy = Math.sign(dy);
+  for(let i=0;i<Math.abs(dy);i++){
+    b.y += sy;
+    if(hitsGrid(b,'solid')){ b.y -= sy; if(sy>0) grounded = true; b.vy = 0; break; }
+  }
+  return grounded;
+}
+
+function boxOverlap(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+
+function burst(x,y,color,n){
+  if(!G.spec.polish.includes('particles')) n = Math.min(n,2);
+  for(let i=0;i<n;i++){
+    // deliberately NOT G.rng: particles are pure decoration, and burning rng
+    // draws on them would make the seeded sim depend on how much debris flew
+    const a = Math.random()*Math.PI*2, s = 0.6+Math.random()*2.4;
+    G.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:18+Math.random()*16,color});
+  }
+}
+function shake(n){ if(G.spec.polish.includes('shake')) G.camShake = Math.max(G.camShake, n); }
+function stop(n){ if(G.spec.polish.includes('juice')) G.hitstop = Math.max(G.hitstop, n); }
+
+function hurt(){
+  if(G.invuln>0 || G.result) return;
+  G.hp--; G.invuln = 70; shake(7); stop(5);
+  burst(G.player.x+7, G.player.y+9, '#e07a6a', 14);
+  beep(140, 0.12);
+  if(G.hp<=0){ G.deaths++; G.result='lose'; G.over=0; }
+}
+function win(){ if(!G.result){ G.result='win'; G.over=0; shake(5); beep(660,0.16); } }
+
+function step(){
+  if(!G.active || G.result){ if(G.result) G.over++; return; }
+  if(G.hitstop>0){ G.hitstop--; return; }
+  const sp = G.spec, p = G.player, K = G.keys;
+  G.time += 1/60;
+
+  const L = K.left, R = K.right, U = K.up, D = K.down;
+  const speed = 1.9;
+
+  if(G.side){
+    if(L){ p.vx = -speed; p.face=-1; p.dx=-1; }
+    else if(R){ p.vx = speed; p.face=1; p.dx=1; }
+    else p.vx *= 0.6;
+    p.vy = Math.min(p.vy + GRAV, MAXFALL);
+    if(U && p.onGround){ p.vy = -7.2; p.onGround=false; p.jumps=1; beep(420,0.05); }
+  } else {
+    let mx = (R?1:0)-(L?1:0), my = (D?1:0)-(U?1:0);
+    if(mx||my){ const m=Math.hypot(mx,my); p.vx = mx/m*speed*1.15; p.vy = my/m*speed*1.15; p.dx=mx/m; p.dy=my/m; if(mx) p.face=Math.sign(mx); }
+    else { p.vx*=0.55; p.vy*=0.55; }
+  }
+
+  // verb
+  if(K.act && !K.actPrev){
+    if(sp.verb==='jump'){
+      if(G.side){
+        if(p.jumps>0 || p.onGround){ p.vy=-7.6; p.jumps--; if(p.onGround)p.jumps=1; burst(p.x+7,p.y+18,'#8fd6ff',6); beep(520,0.05); }
+      } else { p.sq = 1.5; p.stomp = 20; G.invuln=Math.max(G.invuln,16); burst(p.x+7,p.y+9,'#8fd6ff',4); beep(520,0.05); }
+    } else if(sp.verb==='shoot'){
+      const dx = G.side ? p.face : (p.dx||p.face), dy = G.side ? 0 : p.dy;
+      const m = Math.hypot(dx,dy)||1;
+      G.bullets.push({x:p.x+6,y:p.y+7,vx:dx/m*4.6,vy:dy/m*4.6,w:5,h:5,friend:true,life:110});
+      shake(1.5); burst(p.x+7,p.y+9,'#ffd479',3); beep(760,0.04);
+    } else if(sp.verb==='dash'){
+      const dx = G.side ? p.face : (p.dx||p.face), dy = G.side ? 0 : p.dy;
+      const m = Math.hypot(dx,dy)||1;
+      p.vx = dx/m*7.2; p.vy = G.side ? -1.2 : dy/m*7.2;
+      p.dash = 16; G.invuln = Math.max(G.invuln,18); shake(3); beep(300,0.06);
+    } else if(sp.verb==='grab'){
+      let any=false;
+      for(const q of G.pickups){ if(q.got) continue;
+        const d = Math.hypot(q.x-(p.x+7), q.y-(p.y+9));
+        if(d<95){ q.x += ((p.x+7)-q.x)*0.55; q.y += ((p.y+9)-q.y)*0.55; any=true; } }
+      for(const e of G.ents){ if(!e.alive||e.type!=='chaser') continue;
+        const d = Math.hypot(e.x-p.x, e.y-p.y); if(d<80){ e.stun=50; any=true; burst(e.x+7,e.y+8,'#a98fff',5); } }
+      if(any){ beep(240,0.06); burst(p.x+7,p.y+9,'#a98fff',5); }
+    } else if(sp.verb==='bomb'){
+      if(G.bombs.length < 3){
+        G.bombs.push({x:p.x+3, y:p.y+8, w:10, h:10, vy:0, fuse:48});
+        beep(150,0.05); burst(p.x+7,p.y+12,'#ff9a4a',4);
+      }
+    }
+  }
+  K.actPrev = K.act;
+
+  if(p.dash>0){ p.dash--; if(G.side) p.vy = Math.min(p.vy, 0.6); }
+  if(p.stomp>0) p.stomp--;
+
+  const g = moveBox(p, p.vx, p.vy);
+  if(G.side){ p.onGround = g; if(g) p.jumps = 1; }
+  p.sq += (1-p.sq)*0.2;
+
+  if(hitsGrid(p,'spike')) hurt();
+  if(sp.goal==='reach' && hitsGrid(p,'exit')) win();
+  if(sp.goal==='deliver' && G.carrying && hitsGrid(p,'exit')) win();
+
+  // scroller doom wall
+  if(sp.world==='scroller'){
+    G.doom += 0.62;
+    if(p.x < G.doom) hurt(), p.x = G.doom + 4;
+  }
+
+  // camera
+  const target = Math.max(0, Math.min(G.w - VW, p.x - VW/2));
+  G.cam += (target - G.cam) * 0.14;
+
+  // entities
+  for(const e of G.ents){
+    if(!e.alive) continue;
+    if(e.type==='chaser' || e.type==='swarm'){
+      const fast = e.type==='swarm' ? 1.45 : 1;
+      if(e.stun>0){ e.stun--; }
+      else {
+        const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx,dy)||1;
+        if(G.side){
+          e.vx = dx/d * 0.95 * fast;
+          e.vy = Math.min(e.vy + GRAV, MAXFALL);
+          const eg = moveBox(e, e.vx, e.vy);
+          if(eg && Math.abs(dy)>20 && dy<0 && G.rng()<0.04) e.vy = -6.4;
+        } else {
+          e.vx = dx/d*1.1*fast; e.vy = dy/d*1.1*fast;
+          moveBox(e, e.vx, e.vy);
+        }
+      }
+      if(boxOverlap(p,e)){
+        // every verb has SOME kill: dash, a falling stomp, a hop-stomp, or shoving a stunned one
+        if(p.dash>0 || p.stomp>0 || e.stun>0 || (G.side && p.vy>2.4 && p.y+p.h < e.y+10)){
+          e.alive=false; G.kills++; burst(e.x+7,e.y+8,'#e07a6a',12); shake(4); stop(4); beep(200,0.08);
+        } else hurt();
+      }
+    } else if(e.type==='turret'){
+      e.cd--;
+      if(e.cd<=0){
+        e.cd = 78;
+        const dx=(p.x+7)-(e.x+8), dy=(p.y+9)-(e.y+8), d=Math.hypot(dx,dy)||1;
+        if(d < 260){ G.bullets.push({x:e.x+6,y:e.y+6,vx:dx/d*2.5,vy:dy/d*2.5,w:5,h:5,friend:false,life:200}); beep(180,0.03); }
+      }
+      if(boxOverlap(p,e) && p.dash>0){ e.hp--; if(e.hp<=0){ e.alive=false; G.kills++; burst(e.x+8,e.y+8,'#ffd479',12); shake(4);} }
+    }
+  }
+
+  // swarm keeps coming — that is the whole threat
+  if(sp.threat==='swarm'){
+    G.swarmCd--;
+    const live = G.ents.filter(e=>e.alive).length;
+    if(G.swarmCd<=0 && live<12){
+      G.swarmCd = 42;
+      const ex = G.side ? Math.min(G.w-40, Math.max(20, p.x + (G.rng()<0.5?-200:200)))
+                        : G.rng()*(G.w-60)+30;
+      const ey = 40 + G.rng()*(ROWS*TILE-120);
+      const b = {type:'swarm',x:ex,y:ey,w:10,h:10,vx:0,vy:0,hp:1,stun:0,alive:true};
+      if(!hitsGrid(b,'solid')) G.ents.push(b);
+    }
+  }
+
+  // score-goal target supply
+  if(sp.goal==='score'){
+    G.spawnCd--;
+    const live = G.ents.filter(e=>e.alive).length;
+    if(G.spawnCd<=0 && live<7){
+      G.spawnCd = 55;
+      const ex = G.side ? Math.min(G.w-40, p.x + (G.rng()<0.5?-170:170)) : G.rng()*(G.w-60)+30;
+      const ey = 40 + G.rng()*(ROWS*TILE-120);
+      const b = {type:'chaser',x:ex,y:ey,w:14,h:16,vx:0,vy:0,hp:1,stun:0,alive:true};
+      if(!hitsGrid(b,'solid')){ G.ents.push(b); burst(ex+7,ey+8,'#a98fff',6); }
+    }
+  }
+
+  // bombs: fall, tick down, then blow a hole in the level and everything near it
+  for(const bm of G.bombs){
+    if(G.side){ bm.vy = Math.min(bm.vy + GRAV, MAXFALL); moveBox(bm, 0, bm.vy); }
+    bm.fuse--;
+    if(bm.fuse<=0){
+      const bx = bm.x+5, by = bm.y+5, RAD = 46;
+      shake(7); stop(4); beep(90,0.16); G.flash = 8;
+      burst(bx,by,'#ff9a4a',22);
+      // break soft tiles, never the border — the level must stay a closed box
+      const c0=Math.floor((bx-RAD)/TILE), c1=Math.floor((bx+RAD)/TILE);
+      const r0=Math.floor((by-RAD)/TILE), r1=Math.floor((by+RAD)/TILE);
+      for(let r=Math.max(1,r0); r<=Math.min(ROWS-2,r1); r++)
+        for(let c=Math.max(1,c0); c<=Math.min(G.cols-2,c1); c++){
+          if(G.grid[r][c]!==1 && G.grid[r][c]!==2) continue;
+          if(Math.hypot(c*TILE+TILE/2-bx, r*TILE+TILE/2-by) <= RAD){
+            G.grid[r][c]=0; burst(c*TILE+12, r*TILE+12, '#6d7789', 3);
+          }
+        }
+      for(const e of G.ents){
+        if(!e.alive) continue;
+        if(Math.hypot(e.x+7-bx, e.y+8-by) <= RAD+8){
+          e.hp -= 2;
+          if(e.hp<=0){ e.alive=false; G.kills++; burst(e.x+7,e.y+8,'#ff9a4a',10); }
+        }
+      }
+      if(Math.hypot(p.x+7-bx, p.y+9-by) <= RAD-6) hurt();   // your own charge, your own problem
+    }
+  }
+  G.bombs = G.bombs.filter(b=>b.fuse>0);
+  if(G.flash>0) G.flash--;
+
+  // bullets
+  for(const b of G.bullets){
+    if(b.life<=0) continue;
+    b.life--;
+    b.x += b.vx; b.y += b.vy;
+    if(hitsGrid(b,'solid')){ b.life=0; burst(b.x,b.y,'#6d7789',4); continue; }
+    if(b.friend){
+      for(const e of G.ents){
+        if(!e.alive) continue;
+        if(boxOverlap(b,e)){ b.life=0; e.hp--; burst(e.x+7,e.y+8,'#ffd479',8);
+          if(e.hp<=0){ e.alive=false; G.kills++; shake(3); stop(3); beep(220,0.07); } break; }
+      }
+    } else if(boxOverlap(b,p)){ b.life=0; hurt(); }
+  }
+  G.bullets = G.bullets.filter(b=>b.life>0);
+
+  // pickups
+  for(const q of G.pickups){
+    if(q.got) continue;
+    q.bob += 0.1;
+    if(Math.abs(q.x-(p.x+7))<14 && Math.abs(q.y-(p.y+9))<16){
+      q.got=true; G.got++; burst(q.x,q.y,'#7fbf7f',10); beep(880,0.05); stop(2);
+      if(q.pkg){ G.carrying = true; G.msg='PACKAGE — get it to the exit'; G.msgT=140; }
+      else if(G.got>=G.need) win();
+    }
+  }
+
+  // particles
+  for(const t of G.parts){ t.x+=t.vx; t.y+=t.vy; t.vy+=0.06; t.vx*=0.97; t.life--; }
+  G.parts = G.parts.filter(t=>t.life>0);
+
+  if(G.invuln>0) G.invuln--;
+  if(G.camShake>0) G.camShake *= 0.86;
+
+  // win / lose conditions
+  if(sp.goal==='survive' && G.time>=30) win();
+  if(sp.goal==='score' && G.kills>=G.need) win();
+  if(G.limit>0 && G.time>=G.limit && !G.result){
+    if(sp.goal==='survive') win(); else { G.result='lose'; G.deaths++; }
+  }
+  G.best = Math.max(G.best, sp.goal==='collect'?G.got : sp.goal==='score'?G.kills : Math.floor(G.time));
+}
+
+/* ============================== AUDIO ============================== */
+let actx=null;
+function beep(f,d){
+  if(!studio.polish.includes('music') && !G.spec) return;
+  if(G.spec && !G.spec.polish.includes('music')) return;
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type='square'; o.frequency.value=f; g.gain.value=0.03;
+    o.connect(g); g.connect(actx.destination); o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+d);
+    o.stop(actx.currentTime+d+0.02);
+  }catch(e){}
+}
+
+/* ============================== REVIEW ============================== */
+function reviewScore(res){
+  const chem = chemistry();
+  const chemSum = chem.reduce((a,c)=>a+c.d,0);
+  const c = cost();
+  let s = 4.2;
+  s += chemSum * 0.75;
+  s += studio.polish.length * 0.55;
+  if(res.won) s += 1.0; else s -= 0.6;
+  if(res.won && res.time < 9) s -= 0.7;
+  if(res.deaths >= 3) s -= 0.6;
+  if(res.won && res.time >= 9 && res.hpLeft === 1) s += 0.6;  // clutch
+  if(c.weeks > studio.weeksMax) s -= (c.weeks - studio.weeksMax) * 0.5;
+  if(c.money > studio.money) s -= 1.0;
+  if(studio.brief) s += briefMet() ? 0.5 : -0.9;
+  s = Math.max(1, Math.min(10, s));
+  return Math.round(s*10)/10;
+}
+function reviewLines(score, res){
+  const chem = chemistry();
+  const out = [];
+  const names = SLOTS.map(s=>find(s,studio.picks[s]).name);
+  out.push({who:'PIXEL POST', text:`"${studio.title}" is a ${names[1].toLowerCase()} game about ${names[3].toLowerCase()}ing, and its one idea is ${names[0].toLowerCase()}.`});
+  for(const ch of chem) out.push({who: ch.d>0?'THE GOOD':'THE BAD', text:ch.t, good:ch.d>0});
+  if(studio.polish.length===0) out.push({who:'THE BAD', text:'No polish at all. It reads as a prototype, because it is.'});
+  if(studio.polish.length>=4) out.push({who:'THE GOOD', text:'Every impact lands. Somebody spent the money on feel.'});
+  if(!res.won) out.push({who:'PLAYTEST', text:`Our tester never finished it. Difficulty is a design choice; this reads as an accident.`, good:false});
+  else if(res.time<9) out.push({who:'PLAYTEST', text:'Over in seconds. There is not enough game here.', good:false});
+  else out.push({who:'PLAYTEST', text:`Beaten in ${res.time.toFixed(0)}s with ${res.hpLeft} health left. The loop works.`, good:true});
+  const c = cost();
+  if(c.weeks > studio.weeksMax) out.push({who:'THE PRESS', text:`Shipped ${c.weeks-studio.weeksMax} weeks late. The delay soured the launch.`, good:false});
+  if(studio.brief) out.push({ who:'THE PUBLISHER',
+    text: briefMet() ? `You gave them what they asked for. Brief honoured, invoice paid in full.`
+                     : `You ignored the brief. “${studio.brief.text}” They are not paying the bonus.`,
+    good: briefMet() });
+  out.push({who:'VERDICT', text: score>=9?'A landmark small game.' : score>=7.5?'Genuinely good. Word will spread.'
+    : score>=6?'Solid, unremarkable, worth the price.' : score>=4?'Half an idea, shipped.' : 'This should not have left the office.'});
+  return out;
+}
+
+/* ============================== RENDER ============================== */
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const ui = document.getElementById('ui');
+
+function draw(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle = '#11141b'; ctx.fillRect(0,0,VIEW_W,VIEW_H);
+  if(!G.active || !G.grid) return;
+  ctx.save();
+  ctx.scale(SCALE,SCALE);
+  const sh = G.camShake;
+  const ox = -Math.round(G.cam) + (sh>0.2 ? (Math.random()-0.5)*sh : 0);
+  const oy = (sh>0.2 ? (Math.random()-0.5)*sh : 0) + (VH - ROWS*TILE)/2;
+  ctx.translate(ox, oy);
+
+  const c0 = Math.max(0, Math.floor(G.cam/TILE)-1), c1 = Math.min(G.cols, c0 + Math.ceil(VW/TILE)+2);
+  for(let r=0;r<ROWS;r++) for(let c=c0;c<c1;c++){
+    const t = G.grid[r][c];
+    if(t===1){ ctx.fillStyle='#232838'; ctx.fillRect(c*TILE,r*TILE,TILE,TILE);
+               ctx.fillStyle='#2e3550'; ctx.fillRect(c*TILE,r*TILE,TILE,3); }
+    else if(t===2){ ctx.fillStyle='#e07a6a';
+      ctx.beginPath(); ctx.moveTo(c*TILE,r*TILE+TILE); ctx.lineTo(c*TILE+TILE/2,r*TILE+6); ctx.lineTo(c*TILE+TILE,r*TILE+TILE); ctx.fill(); }
+    else if(t===3){ const p=(Math.sin(G.time*4)+1)*3;
+      ctx.fillStyle='#7fbf7f'; ctx.fillRect(c*TILE+2,r*TILE+2,TILE-4,TILE-4);
+      ctx.fillStyle='#0d0f14'; ctx.fillRect(c*TILE+6,r*TILE+6+p*0.2,TILE-12,TILE-12); }
+  }
+
+  // doom wall
+  if(G.spec.world==='scroller'){
+    ctx.fillStyle='rgba(224,122,106,0.22)'; ctx.fillRect(G.doom-400,0,400,ROWS*TILE);
+    ctx.fillStyle='#e07a6a'; ctx.fillRect(G.doom-2,0,3,ROWS*TILE);
+  }
+
+  for(const q of G.pickups){ if(q.got) continue;
+    const b = Math.sin(q.bob)*2;
+    if(q.pkg){
+      ctx.fillStyle='#d8a13a'; ctx.fillRect(q.x-7, q.y-6+b, 14, 12);
+      ctx.fillStyle='#8a5f18'; ctx.fillRect(q.x-7, q.y-1+b, 14, 2); ctx.fillRect(q.x-1, q.y-6+b, 2, 12);
+    } else {
+      ctx.fillStyle='#7fbf7f'; ctx.fillRect(q.x-4, q.y-4+b, 8, 8);
+      ctx.fillStyle='#c8ffc8'; ctx.fillRect(q.x-2, q.y-2+b, 3, 3);
+    }
+  }
+  for(const bm of G.bombs){
+    const hot = bm.fuse < 16 && Math.floor(bm.fuse/3)%2;
+    ctx.fillStyle = hot ? '#ffe9a0' : '#2a2028';
+    ctx.fillRect(bm.x, bm.y, bm.w, bm.h);
+    ctx.fillStyle='#ff9a4a'; ctx.fillRect(bm.x+4, bm.y-3, 2, 3);
+  }
+  for(const e of G.ents){ if(!e.alive) continue;
+    if(e.type==='chaser'){ ctx.fillStyle = e.stun>0 ? '#a98fff' : '#e07a6a';
+      ctx.fillRect(e.x,e.y,e.w,e.h); ctx.fillStyle='#0d0f14';
+      ctx.fillRect(e.x+3,e.y+5,3,3); ctx.fillRect(e.x+9,e.y+5,3,3); }
+    else if(e.type==='swarm'){ ctx.fillStyle = e.stun>0 ? '#a98fff' : '#ff9a6a';
+      ctx.fillRect(e.x,e.y,e.w,e.h); ctx.fillStyle='#0d0f14'; ctx.fillRect(e.x+3,e.y+3,4,2); }
+    else { ctx.fillStyle='#8f7fbf'; ctx.fillRect(e.x,e.y,e.w,e.h);
+      ctx.fillStyle='#ffd479'; ctx.fillRect(e.x+5,e.y+5,6,6); }
+  }
+  for(const b of G.bullets){ ctx.fillStyle = b.friend? '#ffd479' : '#ff8f6a'; ctx.fillRect(b.x,b.y,b.w,b.h); }
+  for(const t of G.parts){ ctx.globalAlpha = Math.min(1,t.life/18); ctx.fillStyle=t.color; ctx.fillRect(t.x,t.y,2,2); }
+  ctx.globalAlpha=1;
+
+  const p = G.player;
+  if(!(G.invuln>0 && Math.floor(G.invuln/4)%2)){
+    const sq = G.spec.polish.includes('juice') ? p.sq : 1;
+    ctx.save(); ctx.translate(p.x+p.w/2, p.y+p.h);
+    ctx.scale(1/sq, sq); ctx.translate(-p.w/2, -p.h);
+    ctx.fillStyle = p.dash>0 ? '#ffffff' : '#8fd6ff';
+    ctx.fillRect(0,0,p.w,p.h);
+    ctx.fillStyle='#0d0f14';
+    ctx.fillRect(p.face>0?8:3, 5, 3, 4);
+    ctx.restore();
+  }
+
+  // LIGHTING: everything above is drawn, then most of it is taken away again.
+  // The lamp rides the player; a bomb blast briefly blows the darkness back.
+  if(G.spec.polish.includes('lighting')){
+    const lx = p.x+p.w/2, ly = p.y+p.h/2;
+    const rad = 178 + G.flash*16 + (p.dash>0 ? 34 : 0);
+    const gr = ctx.createRadialGradient(lx,ly,rad*0.26, lx,ly,rad);
+    // the far dark stops at 0.72 on purpose: unlit tiles must stay legible enough
+    // to navigate, or LIGHTING stops being polish and becomes a blindfold
+    gr.addColorStop(0,   'rgba(6,7,11,0)');
+    gr.addColorStop(0.5, 'rgba(6,7,11,0.30)');
+    gr.addColorStop(1,   'rgba(6,7,11,0.72)');
+    ctx.fillStyle = gr;
+    ctx.fillRect(-ox, -oy, VW, VH);
+    // a warm wash right at the lamp so the dark reads as light, not as fog
+    ctx.globalCompositeOperation = 'lighter';
+    const wm = ctx.createRadialGradient(lx,ly,0, lx,ly,rad*0.55);
+    wm.addColorStop(0,'rgba(255,212,121,0.13)');
+    wm.addColorStop(1,'rgba(255,212,121,0)');
+    ctx.fillStyle = wm; ctx.fillRect(lx-rad, ly-rad, rad*2, rad*2);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.restore();
+
+  // HUD
+  ctx.fillStyle='rgba(13,15,20,0.82)'; ctx.fillRect(0,0,VIEW_W,34);
+  ctx.font='13px Consolas, monospace'; ctx.textAlign='left';
+  ctx.fillStyle='#e07a6a';
+  for(let i=0;i<3;i++) ctx.fillText(i<G.hp?'◆':'◇', 16+i*16, 23);
+  ctx.fillStyle='#d8dee9';
+  let g = '';
+  const sp = G.spec;
+  if(sp.goal==='collect') g = `PARTS ${G.got}/${G.need}`;
+  else if(sp.goal==='score') g = `DESTROYED ${G.kills}/${G.need}`;
+  else if(sp.goal==='survive') g = `SURVIVED ${G.time.toFixed(1)}/30.0`;
+  else if(sp.goal==='deliver') g = G.carrying ? 'CARRYING — TO THE EXIT' : 'FIND THE PACKAGE';
+  else g = 'FIND THE EXIT';
+  ctx.fillText(g, 84, 23);
+  if(G.limit>0){ const t=Math.max(0,G.limit-G.time);
+    ctx.fillStyle = t<10?'#e07a6a':'#9aa6b8'; ctx.textAlign='right';
+    ctx.fillText('T-'+t.toFixed(1), VIEW_W-16, 23); }
+  ctx.textAlign='center'; ctx.fillStyle='#6d7789';
+  ctx.fillText(studio.title.toUpperCase(), VIEW_W/2, 23);
+
+  ctx.textAlign='left'; ctx.fillStyle='#3d4557'; ctx.font='11px Consolas, monospace';
+  ctx.fillText('ESC abandon  •  R restart', 14, VIEW_H-14);
+  ctx.font='13px Consolas, monospace';
+  if(G.spec.polish.includes('tutorial') && G.time<6){
+    ctx.textAlign='center'; ctx.fillStyle='rgba(255,212,121,'+Math.min(1,(6-G.time))+')';
+    ctx.fillText(G.hint, VIEW_W/2, VIEW_H-26);
+  }
+  if(G.result){
+    ctx.fillStyle='rgba(13,15,20,0.75)'; ctx.fillRect(0,0,VIEW_W,VIEW_H);
+    ctx.textAlign='center'; ctx.font='34px Consolas, monospace';
+    ctx.fillStyle = G.result==='win'?'#7fbf7f':'#e07a6a';
+    ctx.fillText(G.result==='win'?'PLAYTEST PASSED':'PLAYTEST FAILED', VIEW_W/2, VIEW_H/2-10);
+    ctx.font='13px Consolas, monospace'; ctx.fillStyle='#9aa6b8';
+    ctx.fillText(studio.replaying ? 'press ENTER to go back to the catalogue'
+                                  : 'press ENTER to send it to review', VIEW_W/2, VIEW_H/2+24);
+  }
+}
+
+
+/* ============================== LEVEL EDITOR ==============================
+   The generator hands you a level; this lets you actually change it before you
+   playtest. Every edit re-runs computeReach, because the one thing the editor
+   must never allow is shipping a level whose objectives cannot be touched. */
+
+const EDIT_PAD = 104;                                  // room for the toolbar strip
+const ESCALE   = (VIEW_H - EDIT_PAD) / (ROWS*TILE);
+const EVW      = VIEW_W / ESCALE;                      // world px visible across
+
+const TOOLS = [
+  { id:'wall',  name:'WALL',  key:'1' },
+  { id:'erase', name:'ERASE', key:'2' },
+  { id:'spike', name:'SPIKE', key:'3' },
+  { id:'enemy', name:'ENEMY', key:'4' },
+  { id:'item',  name:'ITEM',  key:'5' },
+  { id:'exit',  name:'EXIT',  key:'6' },
+  { id:'start', name:'START', key:'7' },
+];
+
+function levelSnapshot(){
+  return {
+    grid: G.grid.map(function(r){ return r.slice(); }),
+    ents: G.ents.map(function(e){ return Object.assign({}, e); }),
+    pickups: G.pickups.map(function(q){ return Object.assign({}, q); }),
+    exit: G.exit ? {x:G.exit.x, y:G.exit.y} : null,
+    px: G.player.x, py: G.player.y,
+  };
+}
+function applySnapshot(sn){
+  if(!sn) return;
+  G.grid = sn.grid.map(function(r){ return r.slice(); });
+  G.ents = sn.ents.map(function(e){ return Object.assign({}, e, {alive:true, stun:0}); });
+  G.pickups = sn.pickups.map(function(q){ return Object.assign({}, q, {got:false}); });
+  G.exit = sn.exit ? {x:sn.exit.x, y:sn.exit.y} : null;
+  G.player.x = sn.px; G.player.y = sn.py;
+  G.player.vx = 0; G.player.vy = 0; G.player.onGround = false;
+  G.got = 0; G.kills = 0; G.carrying = false;
+  G.reach = computeReach(G.grid, G.side, G.cols).reach;
+  if(G.spec.goal === 'collect') G.need = G.pickups.length;
+}
+
+/* What is wrong with the level as it stands. Empty array = shippable. */
+function validateLevel(){
+  const probs = [];
+  const R = computeReach(G.grid, G.side, G.cols);
+  G.reach = R.reach;
+  const key = function(r,c){ return r*1000+c; };
+  const reach = new Set(R.reach.map(function(t){ return key(t[0],t[1]); }));
+  const near = function(x,y){
+    const r = Math.floor(y/TILE), c = Math.floor(x/TILE);
+    return reach.has(key(r,c)) || reach.has(key(r+1,c)) || reach.has(key(r-1,c));
+  };
+  const pr = Math.floor((G.player.y+9)/TILE), pc = Math.floor((G.player.x+7)/TILE);
+  if(G.grid[pr] && G.grid[pr][pc]===1) probs.push('The player starts inside a wall.');
+  if(G.grid[pr] && G.grid[pr][pc]===2) probs.push('The player starts on a spike.');
+
+  const goal = G.spec.goal;
+  const live = G.pickups.filter(function(q){ return !q.got; });
+  if(goal==='collect'){
+    if(live.length < 1) probs.push('A collect game with nothing to collect.');
+    const bad = live.filter(function(q){ return !near(q.x,q.y); }).length;
+    if(bad) probs.push(bad + ' pickup' + (bad>1?'s are':' is') + ' walled off.');
+  }
+  if(goal==='deliver'){
+    const pkg = live.filter(function(q){ return q.pkg; })[0];
+    if(!pkg) probs.push('No package to deliver.');
+    else if(!near(pkg.x,pkg.y)) probs.push('The package is walled off.');
+  }
+  if(goal==='reach' || goal==='deliver'){
+    if(!G.exit) probs.push('No exit placed.');
+    else if(!reach.has(key(Math.floor(G.exit.y/TILE), Math.floor(G.exit.x/TILE))))
+      probs.push('The exit cannot be reached from the start.');
+  }
+  // NOTE: no "nothing to kill" check for the score goal — it runs its own spawner
+  // during play, so an empty entity list at edit time is perfectly normal.
+  return probs;
+}
+
+// levels narrower than the view are centred, so the same offset has to come back
+// out of the mouse position or every click lands a few tiles to the right
+function editOffset(){ return Math.max(0, (EVW - G.cols*TILE) / 2); }
+
+function editTileAt(mx, my){
+  const wx = mx / ESCALE - editOffset() + G.editCam, wy = my / ESCALE;
+  return [Math.floor(wy/TILE), Math.floor(wx/TILE)];
+}
+
+function editorPaint(r, c){
+  if(r<1 || r>=ROWS-1 || c<1 || c>=G.cols-1) return false;   // the border stays a closed box
+  const t = G.tool, tx = c*TILE, ty = r*TILE;
+  if(t==='wall'){
+    if(G.grid[r][c]===1) return false;
+    G.grid[r][c] = 1;
+    G.ents = G.ents.filter(function(e){ return Math.floor(e.y/TILE)!==r || Math.floor(e.x/TILE)!==c; });
+    G.pickups = G.pickups.filter(function(q){ return Math.floor(q.y/TILE)!==r || Math.floor(q.x/TILE)!==c; });
+  } else if(t==='erase'){
+    if(G.grid[r][c]===0) return false;
+    if(G.grid[r][c]===3) G.exit = null;
+    G.grid[r][c] = 0;
+  } else if(t==='spike'){
+    if(G.grid[r][c]===2) return false;
+    G.grid[r][c] = 2;
+  } else if(t==='enemy'){
+    let hit = -1;
+    for(let i=0;i<G.ents.length;i++){
+      if(Math.floor(G.ents[i].y/TILE)===r && Math.floor(G.ents[i].x/TILE)===c){ hit=i; break; }
+    }
+    if(hit>=0) G.ents.splice(hit,1);
+    else {
+      if(G.grid[r][c]===1) return false;
+      const swarm = G.spec.threat==='swarm';
+      G.ents.push(swarm
+        ? {type:'swarm',  x:tx+7, y:ty+7, w:10, h:10, vx:0, vy:0, hp:1, stun:0, alive:true}
+        : {type:'chaser', x:tx+5, y:ty+4, w:14, h:16, vx:0, vy:0, hp:1, stun:0, alive:true});
+    }
+  } else if(t==='item'){
+    let hit = -1;
+    for(let i=0;i<G.pickups.length;i++){
+      if(Math.floor(G.pickups[i].y/TILE)===r && Math.floor(G.pickups[i].x/TILE)===c){ hit=i; break; }
+    }
+    if(hit>=0){ if(G.pickups[hit].pkg) return false; G.pickups.splice(hit,1); }
+    else {
+      if(G.grid[r][c]===1) return false;
+      G.pickups.push({x:tx+12, y:ty+(G.side?16:12), got:false, bob:0});
+    }
+  } else if(t==='exit'){
+    if(G.grid[r][c]===1) return false;
+    for(let rr=0;rr<ROWS;rr++) for(let cc=0;cc<G.cols;cc++) if(G.grid[rr][cc]===3) G.grid[rr][cc]=0;
+    G.grid[r][c] = 3;
+    G.exit = {x:tx, y:ty};
+  } else if(t==='start'){
+    if(G.grid[r][c]===1) return false;
+    G.player.x = tx+4; G.player.y = ty+2;
+  } else return false;
+  G.edits++;
+  return true;
+}
+
+function drawEditor(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle = '#11141b'; ctx.fillRect(0,0,VIEW_W,VIEW_H);
+  if(!G.grid) return;
+  ctx.save();
+  ctx.scale(ESCALE, ESCALE);
+  ctx.translate(editOffset() - Math.round(G.editCam), 0);
+
+  const c0 = Math.max(0, Math.floor(G.editCam/TILE)-1);
+  const c1 = Math.min(G.cols, c0 + Math.ceil(EVW/TILE)+2);
+  for(let r=0;r<ROWS;r++) for(let c=c0;c<c1;c++){
+    const v = G.grid[r][c], x = c*TILE, y = r*TILE;
+    if(v===1){ ctx.fillStyle='#2b3242'; ctx.fillRect(x,y,TILE,TILE);
+               ctx.fillStyle='#39435a'; ctx.fillRect(x,y,TILE,3); }
+    else if(v===2){ ctx.fillStyle='#e07a6a';
+      ctx.beginPath(); ctx.moveTo(x,y+TILE); ctx.lineTo(x+TILE/2,y+6); ctx.lineTo(x+TILE,y+TILE); ctx.fill(); }
+    else if(v===3){ ctx.fillStyle='#7fbf7f'; ctx.fillRect(x+2,y+2,TILE-4,TILE-4); }
+    ctx.strokeStyle='rgba(120,140,180,0.10)'; ctx.lineWidth=1;
+    ctx.strokeRect(x+0.5,y+0.5,TILE-1,TILE-1);
+  }
+
+  // reachable floor, so you can SEE what you just cut off
+  ctx.fillStyle = 'rgba(127,191,127,0.13)';
+  const rr = G.reach || [];
+  for(let i=0;i<rr.length;i++) ctx.fillRect(rr[i][1]*TILE+2, rr[i][0]*TILE+2, TILE-4, TILE-4);
+
+  for(const q of G.pickups){
+    ctx.fillStyle = q.pkg ? '#d8a13a' : '#7fbf7f';
+    ctx.fillRect(q.x-6, q.y-6, 12, 12);
+  }
+  for(const e of G.ents){
+    ctx.fillStyle = e.type==='swarm' ? '#ff9a6a' : e.type==='turret' ? '#8f7fbf' : '#e07a6a';
+    ctx.fillRect(e.x, e.y, e.w, e.h);
+  }
+  ctx.fillStyle='#8fd6ff'; ctx.fillRect(G.player.x, G.player.y, 14, 18);
+  ctx.fillStyle='#0d0f14';
+  ctx.fillRect(G.player.x+3, G.player.y+5, 3,3); ctx.fillRect(G.player.x+8, G.player.y+5, 3,3);
+
+  if(G.hoverT){
+    ctx.strokeStyle='#ffd479'; ctx.lineWidth=2;
+    ctx.strokeRect(G.hoverT[1]*TILE+1, G.hoverT[0]*TILE+1, TILE-2, TILE-2);
+  }
+  ctx.restore();
+
+  if(G.cols*TILE > EVW){
+    ctx.fillStyle='#6d7789'; ctx.font='11px Consolas, monospace';
+    const pct = Math.round(G.editCam/(G.cols*TILE-EVW)*100);
+    ctx.fillText('ARROWS PAN   ' + pct + '%', 14, VIEW_H-EDIT_PAD-8);
+  }
+}
+
+/* ============================== SCREENS ============================== */
+function bar(){
+  const c = cost();
+  const over = c.weeks>studio.weeksMax, brok = c.money>studio.money;
+  return `<div class="bar">
+    <span>CYCLE <b>${studio.cycle}/${CYCLES}</b></span>
+    <span>BUDGET <b>$${studio.money}</b></span>
+    <span>SPENT <b class="${brok?'bad':''}">$${c.money}</b></span>
+    <span>WEEKS <b class="${over?'bad':''}">${c.weeks}/${studio.weeksMax}</b></span>
+    <span>FANS <b>${studio.fans.toLocaleString()}</b></span>
+  </div>`;
+}
+
+function show(html){ ui.classList.remove('hidden'); ui.innerHTML = html; }
+function hide(){ ui.classList.add('hidden'); }
+
+function screenIntro(){
+  show(`<div class="center">
+    <h1>P R O T O T Y P E</h1>
+    <div class="sub" style="margin-top:12px">you run a two-person studio. you have five cycles.</div>
+    <div class="sub">pick your parts. play what you built. read what they say about it.</div>
+    <button id="go">START THE STUDIO</button>
+    <div class="note" style="margin-top:24px">arrows + space in the game. enter to advance.</div>
+  </div>`);
+  document.getElementById('go').onclick = ()=>{ studio.phase='design'; screenDesign(); };
+}
+
+function screenDesign(){
+  const c = cost();
+  const price = (slot,m)=>{
+    const q = priceOf(slot,m.id), d = discount(slot,m.id);
+    return d>0 ? `<span class="c"><s style="color:#4a5266">$${m.cost}</s> $${q.money} / ${q.weeks}w</span>`
+               : `<span class="c">$${q.money} / ${q.weeks}w</span>`;
+  };
+  const slotHtml = (slot,label)=>`
+    <div class="slot"><h3>${label}</h3>
+    ${MODULES[slot].map(m=>{
+      const sel = studio.picks[slot]===m.id;
+      const e = studio.exp[slot+':'+m.id]||0;
+      return `<div class="opt ${sel?'sel':''}" data-slot="${slot}" data-id="${m.id}">
+        ${price(slot,m)}${m.name}${e?`<span style="color:#7fbf7f;font-size:9px"> ×${e}</span>`:''}
+        <span class="d">${m.desc}</span></div>`;
+    }).join('')}</div>`;
+  const polishHtml = `<div class="slot"><h3>POLISH (any number)</h3>
+    ${MODULES.polish.map(m=>{
+      const sel = studio.polish.includes(m.id);
+      return `<div class="opt ${sel?'sel':''}" data-slot="polish" data-id="${m.id}">
+        ${price('polish',m)}${m.name}<span class="d">${m.desc}</span></div>`;
+    }).join('')}</div>`;
+  const met = briefMet();
+  const briefHtml = studio.brief ? `<div class="slot" style="border-color:${met?'#7fbf7f':'#8a6a3a'};margin-bottom:9px">
+      <h3>PUBLISHER BRIEF <span style="color:${met?'#7fbf7f':'#e0a86a'}">${met?'— MET (+$'+studio.brief.pay+')':'— NOT MET'}</span></h3>
+      <div style="font-size:12px;color:#b6c0d0">“${studio.brief.text}”</div></div>` : '';
+
+  const chem = ready()? chemistry() : [];
+  const chemHtml = ready()
+    ? `<div class="slot"><h3>DESIGN CHEMISTRY</h3>${
+        chem.length? chem.map(x=>`<div class="note ${x.d>0?'good':'bad'}">${x.d>0?'+':'−'} ${x.t}</div>`).join('')
+        : '<div class="note">Nothing clashes. Nothing sings either.</div>'}</div>`
+    : `<div class="slot"><h3>DESIGN CHEMISTRY</h3><div class="note">Fill all four slots to see how the parts react.</div></div>`;
+
+  show(bar()+`
+    <h2 style="margin-bottom:8px">CYCLE ${studio.cycle} — BUILD SOMETHING
+      <span class="note" style="display:inline;margin-left:10px">four core slots + optional polish</span></h2>
+    ${briefHtml}
+    <div class="cols">
+      ${slotHtml('verb','CORE VERB')}
+      ${slotHtml('world','WORLD')}
+      ${slotHtml('threat','THREAT')}
+    </div>
+    <div class="cols" style="margin-top:10px">
+      ${slotHtml('goal','GOAL')}
+      ${polishHtml}
+      ${chemHtml}
+    </div>
+    <div style="margin-top:8px">
+      <input id="title" maxlength="22" placeholder="TITLE YOUR GAME" value="${studio.title}">
+      <button id="build" ${ready()?'':'disabled'}>PLAYTEST IT ▶</button>
+      ${c.money>studio.money?'<span class="note bad" style="margin-left:12px">over budget — reviewers will hear about it</span>':''}
+      ${c.weeks>studio.weeksMax?'<span class="note bad" style="margin-left:12px">over schedule</span>':''}
+    </div>`);
+
+  ui.querySelectorAll('.opt').forEach(el=>{
+    el.onclick = ()=>{
+      const s = el.dataset.slot, id = el.dataset.id;
+      studio.title = document.getElementById('title').value;
+      if(s==='polish'){
+        const i = studio.polish.indexOf(id);
+        if(i>=0) studio.polish.splice(i,1); else studio.polish.push(id);
+      } else {
+        studio.picks[s] = studio.picks[s]===id ? undefined : id;
+      }
+      screenDesign();
+    };
+  });
+  document.getElementById('build').onclick = ()=>{
+    const t = document.getElementById('title').value.trim();
+    studio.title = t || autoTitle();
+    startEdit();
+  };
+}
+
+function nextBrief(){
+  // never repeat a brief you have already been given this playthrough
+  const used = new Set(studio.usedBriefs||[]);
+  const pool = BRIEFS.filter(b=>!used.has(b.id));
+  const b = pool.length ? pool[Math.floor(Math.random()*pool.length)] : null;
+  studio.brief = b;
+  studio.usedBriefs = [...used, ...(b?[b.id]:[])];
+}
+
+function autoTitle(){
+  const a = { jump:'LEAP', shoot:'BARREL', dash:'BLINK', grab:'PULL', bomb:'FUSE' }[studio.picks.verb];
+  const b = { platforms:'LEDGE', scroller:'RUNNER', arena:'PIT', maze:'WARREN', cavern:'HOLLOW' }[studio.picks.world];
+  return (a||'UNTITLED')+' '+(b||'PROJECT');
+}
+
+/* Replay a shipped game from the back catalogue. Same picks, same seed, same game. */
+function replay(h){
+  if(!h) return;
+  studio.picks = Object.assign({},h.picks);
+  studio.polish = h.polish.slice();
+  studio.title = h.title;
+  studio.replaying = true;
+  hide();
+  buildLevel(spec(), h.seed);
+  studio.phase = 'play';
+}
+
+
+/* The editor screen. #ui is click-through here so the canvas gets the paint
+   events directly; only the toolbar strip takes pointer input. */
+function screenEdit(){
+  const probs = validateLevel();
+  const shippable = probs.length === 0;
+  const tools = TOOLS.map(function(t){
+    return '<span class="opt tool ' + (G.tool===t.id?'sel':'') + '" data-tool="' + t.id + '">' +
+           t.key + ' ' + t.name + '</span>';
+  }).join('');
+  ui.classList.remove('hidden');
+  ui.classList.add('through');
+  ui.innerHTML =
+    '<div class="edbar">' +
+      '<div class="edtools">' + tools + '</div>' +
+      '<div class="edmsg ' + (shippable?'good':'bad') + '">' +
+        (shippable
+          ? 'Level is playable. ' + G.edits + ' edit' + (G.edits===1?'':'s') + ' made.'
+          : probs.join('  ')) +
+      '</div>' +
+      '<div class="edbtns">' +
+        '<button id="eregen">REGENERATE</button>' +
+        '<button id="eplay" ' + (shippable?'':'disabled') + '>PLAYTEST ▶</button>' +
+      '</div>' +
+    '</div>';
+
+  ui.querySelectorAll('.tool').forEach(function(el){
+    el.onclick = function(){ G.tool = el.dataset.tool; screenEdit(); };
+  });
+  document.getElementById('eregen').onclick = function(){
+    studio.editSeed = (studio.editSeed||0) + 1;
+    buildLevel(spec(), studio.cycle*7919 + 13 + studio.editSeed*101);
+    G.edits = 0; G.tool = 'wall';
+    screenEdit();
+  };
+  document.getElementById('eplay').onclick = function(){ startPlaytest(); };
+}
+
+function startEdit(){
+  studio.replaying = false;
+  studio.editSeed = 0;
+  buildLevel(spec(), studio.cycle*7919 + 13);
+  G.edits = 0; G.tool = 'wall'; G.editCam = 0;
+  studio.phase = 'edit';
+  screenEdit();
+}
+
+/* canvas painting */
+let painting = false;
+function edMouse(e, down){
+  if(studio.phase !== 'edit') return;
+  const rect = cv.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (VIEW_W/rect.width);
+  const my = (e.clientY - rect.top)  * (VIEW_H/rect.height);
+  if(my > VIEW_H - EDIT_PAD){ G.hoverT = null; return; }
+  const t = editTileAt(mx, my);
+  G.hoverT = t;
+  if(down || painting){
+    if(editorPaint(t[0], t[1])) screenEdit();
+  }
+}
+cv.addEventListener('mousedown', function(e){ painting = true; edMouse(e, true); });
+cv.addEventListener('mousemove', function(e){ edMouse(e, false); });
+window.addEventListener('mouseup', function(){ painting = false; });
+cv.addEventListener('mouseleave', function(){ G.hoverT = null; });
+
+function startPlaytest(){
+  studio.replaying = false;
+  hide();
+  ui.classList.remove('through');
+  // Whatever is in G right now IS the level the player edited. Snapshot it so
+  // restarting with R replays their level rather than regenerating a new one.
+  studio.level = levelSnapshot();
+  applySnapshot(studio.level);
+  G.time=0; G.hp=3; G.invuln=0; G.result=null; G.deaths=0;
+  G.bullets=[]; G.bombs=[]; G.parts=[]; G.cam=0; G.over=0;
+  G.doom = G.spec.world==='scroller' ? -60 : -9999;
+  G.active = true;
+  studio.phase='play';
+}
+
+function screenReview(){
+  const res = studio.lastResult;
+  const score = reviewScore(res);
+  studio.lastReview = score;
+  const lines = reviewLines(score, res);
+  const fansGain = Math.round(Math.pow(score,2.35) * 4);
+  const bonus = (studio.brief && briefMet()) ? studio.brief.pay : 0;
+  const cash = Math.round(fansGain*1.1 + score*45) + bonus;
+  studio.fans += fansGain;
+  studio.money = studio.money - cost().money + cash;
+  if(studio.money < 120) studio.money = 120;
+
+  // bank what we learned building this, and remember it well enough to replay it later
+  for(const k of SLOTS){ const key = k+':'+studio.picks[k];
+    studio.exp[key] = (studio.exp[key]||0)+1; studio.shipped[key] = true; }
+  for(const p of studio.polish){ const key='polish:'+p; studio.exp[key]=(studio.exp[key]||0)+1; }
+  studio.history.push({ title:studio.title, score, fans:fansGain,
+    picks:Object.assign({},studio.picks), polish:studio.polish.slice(), seed:studio.cycle*7919+13 });
+
+  show(bar()+`
+    <h2>${studio.title.toUpperCase()} — REVIEWS</h2>
+    <div style="display:flex;gap:26px;align-items:flex-start;margin-top:10px">
+      <div style="text-align:center;min-width:120px">
+        <div class="score">${score.toFixed(1)}</div>
+        <div class="note">out of 10</div>
+        <div class="note" style="margin-top:14px;color:#7fbf7f">+${fansGain.toLocaleString()} fans</div>
+        <div class="note" style="color:#7fbf7f">+$${cash}${bonus?' ('+bonus+' brief)':''}</div>
+      </div>
+      <div style="flex:1">
+        ${lines.map(l=>`<div class="review" style="border-color:${l.good===false?'#e07a6a':l.good?'#7fbf7f':'#4a86a8'}">
+          <b>${l.who}</b> — ${l.text}</div>`).join('')}
+      </div>
+    </div>
+    <button id="next">${studio.cycle>=CYCLES?'CLOSE THE BOOKS':'NEXT CYCLE ▶'}</button>`);
+
+  document.getElementById('next').onclick = ()=>{
+    if(studio.cycle>=CYCLES){ screenEnd(); return; }
+    studio.cycle++;
+    studio.weeksMax += 1;
+    studio.money += 180 + Math.floor(studio.fans/40);
+    studio.picks = {}; studio.polish = []; studio.title=''; studio.lastResult=null;
+    nextBrief();
+    studio.phase='design'; screenDesign();
+  };
+}
+
+function screenEnd(){
+  const avg = studio.history.reduce((a,h)=>a+h.score,0)/studio.history.length;
+  const rank = studio.fans>9000?'HOUSEHOLD NAME' : studio.fans>5000?'CULT STUDIO'
+    : studio.fans>2200?'RESPECTED SMALL SHOP' : studio.fans>800?'STILL OPEN' : 'CLOSED THE DOORS';
+  show(`<div class="center">
+    <h1>${rank}</h1>
+    <div class="sub" style="margin-top:10px">${studio.fans.toLocaleString()} fans &nbsp;•&nbsp; average ${avg.toFixed(1)}/10</div>
+    <div class="sub" style="margin-top:20px">YOUR BACK CATALOGUE — click any of them to play it again</div>
+    <ul style="margin-top:10px;display:inline-block;text-align:left">
+      ${studio.history.map((h,i)=>`<li><span class="opt" data-play="${i}" style="display:inline-block;min-width:340px">
+        ${i+1}. <span class="flash">${h.title.toUpperCase()}</span> — ${h.score.toFixed(1)}
+        <span class="note" style="display:inline">&nbsp;+${h.fans.toLocaleString()} fans</span></span></li>`).join('')}
+    </ul>
+    <div><button id="again">RUN IT BACK</button></div>
+  </div>`);
+  ui.querySelectorAll('[data-play]').forEach(el=>{
+    el.onclick = ()=>{ replay(studio.history[+el.dataset.play]); };
+  });
+  document.getElementById('again').onclick = ()=>{
+    Object.assign(studio,{cycle:1,money:520,fans:0,weeksMax:14,picks:{},polish:[],title:'',
+      exp:{},shipped:{},brief:null,usedBriefs:[],history:[],phase:'design',lastResult:null});
+    screenDesign();
+  };
+}
+
+/* ============================== INPUT / LOOP ============================== */
+const KMAP = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down',
+  KeyA:'left', KeyD:'right', KeyW:'up', KeyS:'down' };
+addEventListener('keydown', e=>{
+  if(e.code==='Space'){ G.keys.act = true; e.preventDefault(); }
+  if(KMAP[e.code]){ G.keys[KMAP[e.code]] = true; e.preventDefault(); }
+  if(e.code==='Enter' && studio.phase==='play' && G.result){
+    if(studio.replaying){ G.active=false; studio.replaying=false; studio.phase='end'; screenEnd(); }
+    else {
+      studio.lastResult = { won:G.result==='win', time:G.time, deaths:G.deaths, hpLeft:Math.max(0,G.hp) };
+      G.active=false; studio.phase='review'; screenReview();
+    }
+  }
+  // abandon a playtest you have decided is a lost cause — it still counts as a failure
+  if(studio.phase==='edit'){
+    const n = parseInt(e.key, 10);
+    if(n>=1 && n<=TOOLS.length){ G.tool = TOOLS[n-1].id; screenEdit(); }
+  }
+  if(e.code==='Escape' && studio.phase==='play' && !G.result){ G.result='lose'; G.deaths++; }
+  if(e.code==='KeyR' && studio.phase==='play'){
+    buildLevel(spec(), studio.cycle*7919+13);
+    applySnapshot(studio.level);
+    G.time=0; G.hp=3; G.result=null; G.active=true;
+    G.doom = G.spec.world==='scroller' ? -60 : -9999;
+  }
+});
+addEventListener('keyup', e=>{
+  if(e.code==='Space') G.keys.act = false;
+  if(KMAP[e.code]) G.keys[KMAP[e.code]] = false;
+});
+
+let acc=0, last=performance.now();
+function loop(now){
+  requestAnimationFrame(loop);
+  let dt = Math.min(100, now-last); last = now;
+  if(studio.phase==='play'){
+    acc += dt;
+    while(acc >= 1000/60){ step(); acc -= 1000/60; }
+    draw();
+  } else if(studio.phase==='edit'){
+    acc=0;
+    if(G.cols*TILE > EVW){
+      const span = G.cols*TILE - EVW;
+      if(G.keys.left)  G.editCam = Math.max(0, G.editCam - 9);
+      if(G.keys.right) G.editCam = Math.min(span, G.editCam + 9);
+    }
+    drawEditor();
+  } else { acc=0; ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle='#11141b'; ctx.fillRect(0,0,VIEW_W,VIEW_H); }
+}
+requestAnimationFrame(loop);
+screenIntro();
+
+/* ============================== TEST HOOK ============================== */
+window.__PROTO = { studio, G, MODULES, SLOTS, CHEMISTRY, BRIEFS, buildLevel, step, spec, cost,
+  chemistry, reviewScore, find, hitsGrid, solid, briefMet, nextBrief, priceOf, discount, replay,
+  computeReach, validateLevel, editorPaint, levelSnapshot, applySnapshot, TOOLS, startEdit, startPlaytest };
+window.__redesign = screenDesign;
+window.__edit = screenEdit;
+window.__review = screenReview;
+window.__end = screenEnd;
+
+})();
+</script>
+</body>
+</html>

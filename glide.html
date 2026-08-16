@@ -183,6 +183,77 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .mrow .ebtn{flex:1;text-align:center}
 .empty{color:var(--mute2);font-size:11.5px;padding:4px 2px 8px;line-height:1.5}
 
+/* ---------- multiplayer ---------- */
+#vsSetup{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:16px 14px 40px;
+  max-width:760px;width:100%;margin:0 auto}
+.vsh{font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--mute2);
+  margin:22px 2px 9px;display:flex;align-items:center;gap:11px}
+.vsh:first-child{margin-top:4px}
+.vsh::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--uiLine),transparent)}
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.mode{border:1px solid var(--uiLine);border-radius:12px;background:rgba(16,26,38,.6);padding:13px 14px;
+  text-align:left;transition:border-color .16s,background .16s,transform .12s}
+.mode:hover{transform:translateY(-2px);border-color:var(--cyanDim)}
+.mode.sel{border-color:var(--cyan);background:rgba(31,107,102,.18)}
+.mode .mt{font-size:13px;font-weight:600;letter-spacing:.06em;margin-bottom:5px}
+.mode.sel .mt{color:var(--cyan)}
+.mode .md{font-size:11px;line-height:1.55;color:var(--mute)}
+.seats{display:flex;gap:8px;flex-wrap:wrap}
+.seat{width:46px;height:46px;border:1px solid var(--uiLine);border-radius:11px;background:rgba(16,26,38,.6);
+  font-size:15px;font-weight:600;transition:border-color .16s,background .16s,color .16s}
+.seat:hover{border-color:var(--cyanDim)}
+.seat.sel{border-color:var(--cyan);background:rgba(31,107,102,.2);color:var(--cyan)}
+.seat:disabled{opacity:.28;cursor:default}
+.seat:disabled:hover{border-color:var(--uiLine)}
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.pill{padding:8px 14px;border:1px solid var(--uiLine);border-radius:999px;background:rgba(16,26,38,.6);
+  font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;transition:border-color .16s,background .16s,color .16s}
+.pill.sel{border-color:var(--cyan);background:rgba(31,107,102,.2);color:var(--cyan)}
+.vsnote{font-size:11.5px;line-height:1.6;color:var(--mute);margin:2px 2px 12px}
+.roster{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.rseat{display:flex;align-items:center;gap:10px;border:1px solid var(--uiLine);border-radius:10px;
+  background:rgba(16,26,38,.5);padding:9px 11px}
+.dot{width:13px;height:13px;border-radius:4px;flex:0 0 auto}
+.rname{font-size:11.5px;font-weight:600}
+.rkeys{font-size:9.5px;letter-spacing:.1em;color:var(--mute2);margin-top:2px}
+#vsStart{margin-top:22px;width:100%}
+/* boards */
+#vsStage{flex:1;position:relative;display:grid;gap:8px;padding:10px;min-height:0;place-items:stretch}
+.pane{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;
+  border:1px solid var(--uiLine);border-radius:12px;background:rgba(11,19,29,.5);overflow:hidden;
+  transition:border-color .2s,box-shadow .2s}
+.pane.turn{border-color:var(--cyan);box-shadow:0 0 0 1px rgba(79,227,210,.3),0 0 26px rgba(79,227,210,.14)}
+.pane.out{opacity:.55}
+.pane.solo{border:none;background:none}
+.phd{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid rgba(34,52,74,.5);flex:0 0 auto}
+.phd .rname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pmv{font-size:12px;font-weight:600}
+.pcv{flex:1;display:grid;place-items:center;min-height:0;padding:6px}
+.pane canvas{display:block}
+.prank{position:absolute;inset:0;display:grid;place-items:center;background:rgba(6,10,16,.72);
+  font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);
+  pointer-events:none}
+#vsBanner{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;z-index:4;
+  background:rgba(11,19,29,.94);border:1px solid var(--uiLine);border-left:2px solid var(--violet);
+  border-radius:10px;padding:10px 14px;font-size:12px;line-height:1.5;color:#cfe0e8;
+  max-width:min(620px,94vw);box-shadow:0 12px 40px rgba(0,0,0,.6);display:none}
+#vsBanner.on{display:block;animation:rise .35s ease both}
+/* ---------- lobby ---------- */
+#lobbyBody{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:16px 14px 40px;
+  max-width:680px;width:100%;margin:0 auto}
+.lobbies{display:flex;flex-direction:column;gap:9px;margin-bottom:16px}
+.lob{display:flex;align-items:center;gap:12px;border:1px solid var(--uiLine);border-radius:12px;
+  background:rgba(16,26,38,.6);padding:12px 14px;text-align:left;width:100%;
+  transition:border-color .16s,background .16s,transform .12s}
+.lob:hover{transform:translateY(-2px);border-color:var(--cyanDim);background:rgba(31,107,102,.14)}
+.lob .lmid{flex:1;min-width:0}
+.lob .ln{font-size:13.5px;font-weight:600;letter-spacing:.03em}
+.lob .lm{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute2);margin-top:4px}
+.lob .lseats{display:flex;gap:4px;flex:0 0 auto}
+.pip{width:9px;height:9px;border-radius:3px;background:var(--uiLine)}
+.lob .ldel{color:var(--mute2);font-size:11px;padding:6px 8px;border-radius:8px;flex:0 0 auto}
+.lob .ldel:hover{color:var(--red)}
+.joinrow{border-color:rgba(126,242,165,.5) !important;background:rgba(126,242,165,.08) !important}
 /* ---------- misc ---------- */
 .fin{text-align:center;padding:40px 24px}
 .fin h2{font-size:26px;letter-spacing:.06em;margin-bottom:12px}
@@ -201,6 +272,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <button class="btn" id="bSelect">Select deck</button>
     <button class="btn" id="bDaily">Daily deck</button>
     <button class="btn" id="bEndless">Endless</button>
+    <button class="btn" id="bVersus">Multiplayer</button>
     <button class="btn" id="bSand">Sandbox</button>
     <button class="btn" id="bStats">Stats</button>
     <button class="btn" id="bSound">Sound: on</button>
@@ -233,6 +305,56 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     </div>
   </div>
   <div id="stage"><canvas id="cv"></canvas></div>
+</div>
+
+<!-- ================= LOBBY LIST ================= -->
+<div class="screen" id="lobby">
+  <div class="bar">
+    <button class="ico" id="lBack" title="Title (Esc)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="barmid"><div class="lvname">Lobbies</div><div class="lvsub" id="lSub">Pick a room, then everyone presses their keys to join</div></div>
+    <div style="width:36px"></div>
+  </div>
+  <div id="lobbyBody">
+    <div class="lobbies" id="lList"></div>
+    <button class="btn" id="lNew">Create a lobby</button>
+  </div>
+</div>
+
+<!-- ================= MULTIPLAYER SETUP ================= -->
+<div class="screen" id="vs">
+  <div class="bar">
+    <button class="ico" id="vBack" title="Title (Esc)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="barmid"><div class="lvname">Multiplayer</div><div class="lvsub">One keyboard · up to seven gliders</div></div>
+    <div style="width:36px"></div>
+  </div>
+  <div id="vsSetup">
+    <div class="vsh">Mode</div>
+    <div class="modes" id="vModes"></div>
+    <div class="vsh">Gliders</div>
+    <div class="seats" id="vSeats"></div>
+    <div class="vsnote" id="vSeatNote"></div>
+    <div class="vsh">Deck</div>
+    <div class="pills" id="vSource"></div>
+    <div class="vsnote" id="vDeckNote"></div>
+    <div class="grid" id="vGrid" style="max-width:none;padding:0;overflow:visible"></div>
+    <div class="vsh">Seats</div>
+    <div class="vsnote" id="vsJoinNote"></div>
+    <div class="roster" id="vRoster"></div>
+    <button class="btn primary" id="vsStart">Start</button>
+    <button class="btn" id="vsSaveLobby" style="margin-top:9px;width:100%">Save as a lobby</button>
+  </div>
+</div>
+
+<!-- ================= MULTIPLAYER BOARD ================= -->
+<div class="screen" id="vsplay">
+  <div class="bar">
+    <button class="ico" id="vpBack" title="Setup (Esc)"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <button class="ico" id="vpReset" title="Restart the round (R)"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 6"/><path d="M20 4v7h-7"/></svg></button>
+    <div class="barmid"><div class="lvname" id="vpName"></div><div class="lvsub" id="vpSub"></div></div>
+    <div class="counts"><div class="ct"><div class="ctv mono" id="vpInfo" style="color:var(--cyan)"></div><div class="ctl" id="vpInfoL">Turn</div></div></div>
+  </div>
+  <div id="vsStage"></div>
+  <div id="vsBanner"></div>
 </div>
 
 <!-- ================= WIN ================= -->
@@ -367,6 +489,7 @@ var GLIDE = (function () {
     EXT.push(spec); EXTBY[spec.g] = spec;
     return spec;
   }
+  var NOFOE = [];                 // shared empty list, so solo play allocates none
   var DIRNAME = ['up', 'right', 'down', 'left'];
   var TURN_CW = [1, 2, 3, 0], TURN_CCW = [3, 0, 1, 2], TURN_180 = [2, 3, 0, 1];
 
@@ -656,6 +779,7 @@ var GLIDE = (function () {
   function parse(L) {
     var w = L.w, h = L.h, g = L.grid.split('');
     var terrain = new Array(w * h), start = -1, crates = [], cores = [], teles = [];
+    var spawns = [], plates = [];
     var pads = { y: [], j: [], k: [], l: [], b: [], r: [] };
     var springs = { y: [], j: [], k: [], l: [], b: [], r: [] };
     var rotors = [], rotorIndex = {}, keys = [], locks = [], lockIndex = {};
@@ -664,6 +788,12 @@ var GLIDE = (function () {
     for (var i = 0; i < w * h; i++) {
       var c = g[i];
       if (c === '@') { start = i; c = '.'; }
+      // an extra glider's spawn — one '&' per rival, up to six. Plain floor to
+      // every other rule, and to the solo game, which never reads them.
+      else if (c === '&') { spawns.push(i); c = '.'; }
+      // co-op pressure plate. It keeps its glyph so the renderer can see it —
+      // no rule anywhere treats 'P' as anything but floor, which is the point.
+      else if (c === 'P') plates.push(i);
       else if (c === 'x') { crates.push(i); c = '.'; }
       else if (c === '*') { cores.push(i); c = '.'; }
       if (c === 't') teles.push(i);
@@ -704,7 +834,8 @@ var GLIDE = (function () {
     crates.sort(function (a, b) { return a - b; });
     return {
       id: L.id, name: L.name, hint: L.hint, par: L.par, tier: L.tier,
-      w: w, h: h, terrain: terrain, start: start, cores: cores,
+      w: w, h: h, terrain: terrain, start: start, spawns: spawns, plates: plates,
+      cores: cores,
       crates0: crates, partner: partner, pads: pads, springs: springs, fixed: fixed,
       pairNo: pairLabels(L.grid), rotors: rotors, rotorIndex: rotorIndex,
       keys: keys, locks: locks, lockIndex: lockIndex,
@@ -765,6 +896,7 @@ var GLIDE = (function () {
       ck: [0, 0, 0],// coloured keys in hand
       force: 0,     // 0, or heading+1 your next move is locked into
       ord: 0,       // highest numbered core taken so far
+      plated: 0,    // co-op: the plates have been held together, so the exit is live
       mv: L.timed ? 0 : null,   // move count, tracked only where it matters
       p: L.start,
       crates: L.crates0.slice(),
@@ -786,6 +918,7 @@ var GLIDE = (function () {
            '|' + st.keysGot + '.' + st.keys + '.' + st.opened +
            '|' + st.worn.join('') + '.' + st.press + '.' + st.ck.join('') +
            '.' + st.force + '.' + st.ord + (st.mv === null ? '' : '.' + st.mv) +
+           (st.plated ? '.P' : '') + (st.foes && st.foes.length ? '.F' + st.foes.join(',') : '') +
            (st.await ? '|@' + st.await.kind + st.await.pads.join('.') : '');
   }
 
@@ -806,8 +939,13 @@ var GLIDE = (function () {
     var cores = st.cores, gates = st.gates, rot = st.rot;
     var keysGot = st.keysGot, held = st.keys, opened = st.opened;
     var worn = st.worn.slice(), press = st.press, ck = st.ck.slice();
-    var ord = st.ord, mv = st.mv;
+    var ord = st.ord, mv = st.mv, plated = st.plated || 0;
     var moved = 0, won = false, tp = false, pending = null, forceNext = 0;
+    // Where the OTHER gliders are standing, if this is a multiplayer board.
+    // Each is scenery you cannot enter: you bounce off it exactly as you would
+    // off a bumper. Empty in the solo game, so it costs solo play one test.
+    var foes = st.foes || NOFOE;
+    function isFoe(i) { return foes.length > 0 && foes.indexOf(i) >= 0; }
 
     // a gravity plate locks your next heading
     if (st.force && dir !== st.force - 1) return null;
@@ -857,9 +995,19 @@ var GLIDE = (function () {
     function blocks(i, dd) { return isSolid(i, dd) || isVoid(i); }
     // a crate cannot bounce, ride a rotor, or spend a key for you
     function stopsCrate(i, dd) {
+      if (isFoe(i)) return true;           // nor can it shove another glider
       if (isSolid(i, dd)) return true;
       var t = TE(i), sp = EXTBY[t];
       return t === 'o' || t === '+' || !!(sp && (sp.bounce || sp.rotor || sp.redirect));
+    }
+    /* The exit only takes you once every core is in. In co-op it also stays
+       shut until the plates have been held at the same moment.
+       The gate hangs off `coopGate`, not off the mere presence of plates: a
+       lone glider testing a plated deck in the sandbox could never open it,
+       and the deck would look broken when it is only being played alone. */
+    function exitLive() {
+      return cores === allCores(L) && ord >= L.maxOrder &&
+             (!L.coopGate || plated);
     }
     function facing(r) { return (rot >> (r * 2)) & 3; }
     function turn(r) {
@@ -873,6 +1021,11 @@ var GLIDE = (function () {
       var nx = x + DX[d], ny = y + DY[d];
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) break;
       var n = ny * w + nx;
+      if (isFoe(n)) {                      // a rival bounces you like a bumper
+        if (trace) trace.push({ t: 'bump', at: n, from: p });
+        d = (d + 2) & 3;
+        continue;
+      }
       // a bumper is never entered — it throws you straight back the way you came
       var nsp = EXTBY[TE(n)];
       if (TE(n) === 'o' || (nsp && nsp.bounce)) {
@@ -945,7 +1098,7 @@ var GLIDE = (function () {
         }
 
       var t = TE(p), esp = EXTBY[t];
-      if (t === 'E' && cores === allCores(L) && ord >= L.maxOrder) {
+      if (t === 'E' && exitLive()) {
         won = true;
         if (op) { op.win = 1; op.crates = crates.slice(); trace.push(op); }
         break;
@@ -970,7 +1123,7 @@ var GLIDE = (function () {
           var at = chList.indexOf(p), dest = -1;
           if (chPads.length && at >= 0) {
             var cand = chPads[at % chPads.length];
-            if (crates.indexOf(cand) < 0) dest = cand;
+            if (crates.indexOf(cand) < 0 && !isFoe(cand)) dest = cand;
           }
           wearAt(p, 'enter');
           if (dest >= 0) {
@@ -997,10 +1150,11 @@ var GLIDE = (function () {
         var col = SPRING[t], open = [];
         if (KIND[col] === 'fixed') {
           var f = L.fixed[p];
-          if (f !== undefined && crates.indexOf(f) < 0) open = [f];
+          if (f !== undefined && crates.indexOf(f) < 0 && !isFoe(f)) open = [f];
         } else {
           for (var q = 0; q < L.pads[col].length; q++)
-            if (crates.indexOf(L.pads[col][q]) < 0) open.push(L.pads[col][q]);
+            if (crates.indexOf(L.pads[col][q]) < 0 && !isFoe(L.pads[col][q]))
+              open.push(L.pads[col][q]);
         }
         if (open.length > 1) pending = { kind: KIND[col], from: p, pads: open };
         else if (open.length === 1) {
@@ -1033,7 +1187,7 @@ var GLIDE = (function () {
         var qx = (p % w) + DX[cd], qy = ((p / w) | 0) + DY[cd];
         if (qx < 0 || qy < 0 || qx >= w || qy >= h) break;
         var qn = qy * w + qx;
-        if (isSolid(qn, cd) || isVoid(qn) || crates.indexOf(qn) >= 0) break;
+        if (isFoe(qn) || isSolid(qn, cd) || isVoid(qn) || crates.indexOf(qn) >= 0) break;
         if (trace) trace.push({ t: 'm', from: p, to: qn, crates: crates.slice() });
         if (wearAt(p, 'leave')) { /* carried off a wearing plate */ }
         p = qn; wentAny = true; moved++;
@@ -1053,7 +1207,8 @@ var GLIDE = (function () {
     var out = { p: p, crates: crates, broken: broken, filled: filled, cores: cores,
                 gates: gates, rot: rot, keysGot: keysGot, keys: held,
                 opened: opened, worn: worn, press: press, ck: ck,
-                force: forceNext, ord: ord, mv: mv, won: won };
+                force: forceNext, ord: ord, mv: mv, plated: plated, won: won };
+    if (st.foes) out.foes = st.foes;
     if (pending) out.await = pending;
     return out;
   }
@@ -1063,11 +1218,14 @@ var GLIDE = (function () {
     if (!st.await) return st;
     var dest = st.await.pads[k];
     if (trace) trace.push({ t: 'sp', from: st.await.from, to: dest, kind: st.await.kind });
-    return { p: dest, crates: st.crates.slice(), broken: st.broken.slice(),
+    var out = { p: dest, crates: st.crates.slice(), broken: st.broken.slice(),
              filled: st.filled.slice(), cores: st.cores, gates: st.gates,
              rot: st.rot, keysGot: st.keysGot, keys: st.keys, opened: st.opened,
              worn: st.worn.slice(), press: st.press, ck: st.ck.slice(),
-             force: st.force, ord: st.ord, mv: st.mv, won: false };
+             force: st.force, ord: st.ord, mv: st.mv, plated: st.plated || 0,
+             won: false };
+    if (st.foes) out.foes = st.foes;
+    return out;
   }
 
   /* Every action available from `st`, with its outcomes already resolved.
@@ -1103,6 +1261,42 @@ var GLIDE = (function () {
    the fewest moves you can guarantee no matter where it drops you, and the
    deck is winnable from every pad it can pick.
    =================================================================== */
+/* Decks drawn for company. '&' is another glider's spawn and 'P' is a co-op
+   pressure plate; every one of these was generated and then proved by the
+   solver — see the header of each block for what was checked. */
+var VSDECKS = [
+  {"id":900,"w":11,"h":9,"grid":"############..E......##&...&..@.##.........##.....&..&##........>##...&.....##.*....&..############","par":5,"name":"Elbow Room","coop":0},
+  {"id":901,"w":11,"h":8,"grid":"############.&..E....##........*##......&..##.@.v&m...##.........##&..&...&.############","par":4,"name":"Right of Way","coop":0},
+  {"id":902,"w":11,"h":10,"grid":"############.^E..&..&##&.^......##>.....*..##.........##@..&....o##..v..&.m.##.........##.......&.############","par":5,"name":"Photo Finish","coop":0},
+  {"id":903,"w":11,"h":10,"grid":"############..@....&.##..^......##...o&...&##...o..#..##.#<&.....##&^...<<.E##.....&...##...*.....############","par":4,"name":"Blocked In","coop":0},
+  {"id":904,"w":11,"h":10,"grid":"############....^E..^##^&.......##....*..&.##@........##.....&...##.........##&..&.....##....<...&############","par":6,"name":"Cut Across","coop":0},
+  {"id":905,"w":10,"h":10,"grid":"###########.v...&#.##..&.^..&##.^.m....##.....&>.##*..@<..E##........##..^...&.##...&....###########","par":6,"name":"Shoulder to Shoulder","coop":0},
+  {"id":906,"w":11,"h":9,"grid":"############^*.....&.##.>...&.#.##&........##.......&.##...>.E...##&........##..@..m.&^############","par":6,"name":"Overtake","coop":0},
+  {"id":907,"w":10,"h":9,"grid":"###########.&..@..E##........##..&.....##......&.##&..&..^.##...m.&..##..*....m###########","par":4,"name":"Inside Line","coop":0},
+  {"id":908,"w":9,"h":10,"grid":"##########.......##.@...&###...E.v.##&>.....##o.&..v*##.......##...&...##.&.^..&##########","par":5,"name":"Contested","coop":0},
+  {"id":909,"w":11,"h":10,"grid":"############.....^.*.##.&...&...##...@.....##&........##..v.&....##........m##E.#......##..v&...&.############","par":6,"name":"Two Abreast","coop":0},
+  {"id":910,"w":10,"h":9,"grid":"###########.&..*.o###.......&##..v.....##@..&....##.......v##..&....&##&...E...###########","par":5,"name":"Traffic","coop":0},
+  {"id":911,"w":10,"h":10,"grid":"###########.&..&..*##..o..o..##..&..&.^##E......<##....@...##........##..&.....##.......&###########","par":5,"name":"Late Braking","coop":0},
+  {"id":912,"w":11,"h":7,"grid":"############..&.....&##....o@...##...&o..E.##&.......###..&..&..*############","par":8,"name":"Slipstream","coop":0},
+  {"id":913,"w":9,"h":10,"grid":"##########...E...##...^..&##^...@..##.&.....##.......##&..&..*##.......##.&..&..##########","par":4,"name":"The Squeeze","coop":0},
+  {"id":914,"w":10,"h":9,"grid":"###########...&...&##>....&..##..&.....##......&.##&..@....##.o......##.E....v*###########","par":4,"name":"Dead Heat","coop":0},
+  {"id":915,"w":11,"h":9,"grid":"############&..*.....##^......@.##.&..&....##......&..##&.....v..##...v&.^..##>>.<..E..############","par":5,"name":"Jostle","coop":0},
+  {"id":916,"w":8,"h":10,"grid":"#########.&v^..##.....*##..&.om##E...&.##.....^##...&..##&.....##..&..@#########","par":8,"name":"Wheel to Wheel","coop":0},
+  {"id":917,"w":11,"h":10,"grid":"############@^......&##..&......##.....&...##...>....*##.E....&..##.........##....^....##...&....&############","par":5,"name":"Undercut","coop":0},
+  {"id":950,"w":10,"h":9,"grid":"###########E....&..##..>.....##...@...P##&....&..###>&.....##....<..&##P...&...###########","par":8,"name":"Both Hands","coop":1},
+  {"id":951,"w":10,"h":9,"grid":"###########P......P##..&.....##....@...##&v.....&##..m..&..##..&..>.^##&.m.E...###########","par":11,"name":"On Three","coop":1},
+  {"id":952,"w":10,"h":9,"grid":"###########P..Pom..##.......&##.>..&...##>&....&.##...@....##.......&##.&...E..###########","par":8,"name":"Hold Together","coop":1},
+  {"id":953,"w":10,"h":9,"grid":"###########P>v&.#P.##........##.&.....&##....@...##..m...&.##.o&#....##&....E..###########","par":10,"name":"Counterweight","coop":1},
+  {"id":954,"w":10,"h":9,"grid":"###########&..E....##......<&##.<..o...##P.<...&.##..@^v...##.....&..##&..&...P###########","par":7,"name":"Double Act","coop":1},
+  {"id":955,"w":10,"h":9,"grid":"###########.<&..&..##&......E##<..o&...##..&.....##.......&##.@..P#.<##......P.###########","par":10,"name":"Two Keys","coop":1},
+  {"id":956,"w":10,"h":9,"grid":"###########.@...&..##m..&...P##...o....##.&..&...##..o...&.##...&.m..##.E.#.P..###########","par":12,"name":"In Unison","coop":1},
+  {"id":957,"w":10,"h":9,"grid":"###########Pm....E.##....&.m.##..&....&##&....&..##......#.##..@o..P.##....&#..###########","par":12,"name":"Deadman Switch","coop":1},
+  {"id":958,"w":10,"h":8,"grid":"###########&>...&..##..&...<E##....@.o.##P...m^&.##.m&...#.##....&.^P###########","par":8,"name":"Split the Load","coop":1},
+  {"id":959,"w":10,"h":9,"grid":"###########P.....&###........##...&..v&##P...m&..##..&.....##....@...##.E...>.&###########","par":7,"name":"Second Pair","coop":1},
+  {"id":960,"w":10,"h":9,"grid":"###########oE..&...##...#..@.##...&..#.##P......&##..&.^#..##........##Pv.&m.^&###########","par":14,"name":"Lockstep","coop":1},
+  {"id":961,"w":9,"h":9,"grid":"##########@..&..P##....#..##..&^...##&...&..##.......##..&...E##Po..&..##########","par":6,"name":"Mutual","coop":1}
+];
+
 var LEVELS = [
   {"id":1,"w":5,"h":5,"grid":"######@..##...##..E######","par":2,"name":"Cold Start","tierName":"Drift","hint":"Arrow keys, WASD or swipe. You never step — you slide until something stops you."},
   {"id":2,"w":6,"h":5,"grid":"#######@...#####.##E...#######","par":3,"name":"Overshoot","tierName":"Drift","hint":"Walls are your only brakes. Ride one, then turn."},
@@ -1378,7 +1572,7 @@ var DIRS = { u: 0, r: 1, d: 2, l: 3 };
 // ------------------------------------------------------------------ save
 var SAVE_KEY = 'glide.save.v1';
 var save = { best: {}, route: {}, unlocked: 1, sound: true,
-             daily: {}, endless: 0, played: 0 };
+             daily: {}, endless: 0, played: 0, lobbies: [] };
 try {
   var raw = localStorage.getItem(SAVE_KEY);
   if (raw) { var p = JSON.parse(raw); if (p && typeof p === 'object') {
@@ -1386,6 +1580,7 @@ try {
     save.sound = p.sound !== false;
     save.route = p.route || {}; save.daily = p.daily || {};
     save.endless = p.endless || 0; save.played = p.played || 0;
+    save.lobbies = p.lobbies || [];
   } }
 } catch (e) {}
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
@@ -1440,8 +1635,16 @@ var hintEl = null, stuckEl = null, flash = 0, nudgeDir = -1, nudgeT = 0;
 var awaitPick = null, pickHot = -1, nudgePad = -1;   // red-spring chooser
 
 function show(v) {
+  /* One invariant, enforced in the one place every screen change goes through:
+     leaving the multiplayer board ENDS the round. Multiplayer borrows the solo
+     game's globals — its win handler, its HUD, its drone — so a VS.on left
+     standing after you wander off to the sandbox or the title would quietly
+     hijack the next deck you played. */
+  if (v !== 'vsplay' && typeof VS !== 'undefined' && VS && VS.on) vsEnd();
   view = v;
-  ['title', 'select', 'play', 'sandbox'].forEach(function (s) { $(s).classList.toggle('on', s === v); });
+  ['title', 'select', 'play', 'sandbox', 'lobby', 'vs', 'vsplay'].forEach(function (s) {
+    $(s).classList.toggle('on', s === v);
+  });
 }
 
 // ------------------------------------------------------------------ level control
@@ -1472,6 +1675,7 @@ function loadObj(lv, mode) {
 }
 function load(i) { idx = i; loadObj(LEVELS[i], 'campaign'); }
 function updHud() {
+  if (VS.on) return;            // multiplayer keeps its own per-seat readouts
   $('pMoves').textContent = moves;
   $('ctKeys').style.display = L && L.keys.length ? '' : 'none';
   if (L && L.keys.length) $('pKeys').textContent = st.keys;
@@ -1562,7 +1766,7 @@ function value(act, V, hopeful) {
 
 // ------------------------------------------------------------------ moving
 function tryMove(d) {
-  if (view !== 'play' || anim || won || awaitPick) return;
+  if ((view !== 'play' && view !== 'vsplay') || anim || won || awaitPick) return;
   var tr = [];
   var ns = GLIDE.move(L, st, d, tr);
   if (!ns) { shake = 7; SFX.bad(); return; }
@@ -1581,6 +1785,9 @@ function tryMove(d) {
 /* The slide ended on a spring that still needs a decision. Yellow springs and
    any spring with only one free pad already resolved inside the engine. */
 function beginLaunch() {
+  // Multiplayer cannot stop and ask: seven seats have no spare number keys,
+  // and in a race the other boards would be left waiting. Red springs roll.
+  if (VS.on) { land(Math.floor(Math.random() * st.await.pads.length)); return; }
   if (st.await.kind === 'red') {
     awaitPick = st.await; pickHot = -1;
     showHint('Red spring — pick where to come down. Click a pad, or press 1–' +
@@ -1802,6 +2009,7 @@ function starsFor(m, par) { return m <= par ? 3 : m <= par + 2 ? 2 : 1; }
 function starStr(n) { return '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n); }
 
 function finish() {
+  if (VS.on) { vsFinish(); return; }   // multiplayer scores its own placings
   won = true;
   var par = CUR.par;
   SFX.win(); flash = 1;
@@ -1893,7 +2101,7 @@ function resize() {
   cv.style.width = w + 'px'; cv.style.height = h + 'px';
   OX = 0; OY = 0;
 }
-window.addEventListener('resize', function () { resize(); edResize(); });
+window.addEventListener('resize', function () { resize(); edResize(); vsResize(); });
 
 function cx(i) { return (i % L.w) * CS + CS / 2; }
 function cy(i) { return ((i / L.w) | 0) * CS + CS / 2; }
@@ -1918,6 +2126,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   var dt = Math.min(50, now - last || 16); last = now; T += dt;
   if (view === 'sandbox') { edDraw(); return; }
+  if (view === 'vsplay') { vsFrame(dt); return; }
   if (view !== 'play' || !L) return;
   step(dt);
   draw();
@@ -1975,6 +2184,7 @@ function step(dt) {
       anim = null;
       if (st.await) beginLaunch();
       else if (st.won) { if (!won) finish(); }
+      else if (VS.on) { SFX.stop(); shake = Math.max(shake, 2.2); vsSettled(); }
       else { SFX.stop(); shake = Math.max(shake, 2.2); checkStranded(); }
     }
   }
@@ -2082,7 +2292,7 @@ function draw() {
   if (shake > 0) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
 
   V = visual();
-  if (L.keys.length) $('pKeys').textContent = V.keys;   // count what you hold right now
+  if (L.keys.length && !VS.on) $('pKeys').textContent = V.keys;  // what you hold right now
   var pulse = .5 + .5 * Math.sin(T * .0032);
   var coresLeft = V.cores !== GLIDE.allCores(L);
 
@@ -2112,7 +2322,8 @@ function draw() {
     else if (t === '=') drawLock(x, y, (V.opened >> L.lockIndex[i]) & 1, pulse);
     else if (GLIDE.SPRING[t]) drawSpring(x, y, GLIDE.SPRING[t], pulse, L.pairNo[i]);
     else if (GLIDE.PAD[t]) drawLandPad(x, y, t, pulse, L.pairNo[i]);
-    else if (t === 'E') drawExit(x, y, !coresLeft, pulse);
+    else if (t === 'P') drawPlate(x, y, pulse, VS.on && VS.held.indexOf(i) >= 0);
+    else if (t === 'E') drawExit(x, y, !coresLeft && (!L.coopGate || st.plated), pulse);
   }
 
   // ---- trail ----
@@ -2137,7 +2348,8 @@ function draw() {
 
   // ---- drone ----
   var pp = playerXY();
-  drawDrone(pp.x, pp.y, pp.scale, pulse);
+  if (VS.on) vsDrawOthers(pulse);      // the seats that are not sliding right now
+  drawDrone(pp.x, pp.y, pp.scale, pulse, SKIN);
 
   // ---- red-spring chooser ----
   if (awaitPick) drawChooser(pulse);
@@ -2638,6 +2850,30 @@ function drawButton(x, y) {
   ctx.fillStyle = V.gates ? 'rgba(255,198,92,.9)' : 'rgba(93,118,145,.75)';
   ctx.beginPath(); ctx.arc(x + CS / 2, y + CS / 2, CS * .13, 0, 6.2832); ctx.fill();
 }
+/* Co-op pressure plate. Hollow and violet at rest; filled and lit while a
+   glider is actually standing on it, so a room of them reads at a glance as
+   "three down, one to go". */
+function drawPlate(x, y, pulse, held) {
+  var m = CS * .5, r = CS * .34;
+  ctx.fillStyle = held ? 'rgba(169,123,255,.32)' : 'rgba(169,123,255,.10)';
+  rr(x + m - r, y + m - r, r * 2, r * 2, r * .3); ctx.fill();
+  ctx.strokeStyle = held ? '#c9a8ff' : 'rgba(169,123,255,' + (.45 + pulse * .25) + ')';
+  ctx.lineWidth = Math.max(1.5, CS * (held ? .075 : .05));
+  rr(x + m - r, y + m - r, r * 2, r * 2, r * .3); ctx.stroke();
+  if (held) {
+    glow('#a97bff', CS * .35, function () {
+      ctx.fillStyle = '#e6d8ff';
+      ctx.beginPath(); ctx.arc(x + m, y + m, CS * .1, 0, 6.2832); ctx.fill();
+    });
+  } else {
+    ctx.strokeStyle = 'rgba(169,123,255,.5)';
+    ctx.lineWidth = Math.max(1.2, CS * .04);
+    ctx.beginPath();
+    ctx.moveTo(x + m - r * .4, y + m); ctx.lineTo(x + m + r * .4, y + m);
+    ctx.moveTo(x + m, y + m - r * .4); ctx.lineTo(x + m, y + m + r * .4);
+    ctx.stroke();
+  }
+}
 function drawGate(x, y, open, pulse) {
   if (open) {
     ctx.strokeStyle = 'rgba(79,227,210,.3)';
@@ -2718,18 +2954,25 @@ function drawCrate(x, y, sink) {
   ctx.stroke();
   ctx.restore();
 }
-function drawDrone(x, y, scale, pulse) {
+/* `skin` recolours the drone for multiplayer — every seat gets its own hull so
+   seven of them on one deck stay tellable apart. Solo play passes nothing and
+   gets the cyan drone it always had. */
+var DRONE0 = { glow: '#4fe3d2', top: '#8affee', bot: '#2ba99b', eye: '#8affee' };
+function drawDrone(x, y, scale, pulse, skin, dim) {
+  var sk = skin || DRONE0;
   var s = CS * .58 * scale;
-  glow('#4fe3d2', CS * (.3 + pulse * .18), function () {
+  if (dim) ctx.globalAlpha = .55;
+  glow(sk.glow, CS * (.3 + pulse * .18) * (dim ? .5 : 1), function () {
     var g = ctx.createLinearGradient(x, y - s / 2, x, y + s / 2);
-    g.addColorStop(0, '#8affee'); g.addColorStop(1, '#2ba99b');
+    g.addColorStop(0, sk.top); g.addColorStop(1, sk.bot);
     ctx.fillStyle = g;
     rr(x - s / 2, y - s / 2, s, s, s * .3); ctx.fill();
   });
   ctx.fillStyle = '#07131a';
   rr(x - s * .26, y - s * .26, s * .52, s * .52, s * .17); ctx.fill();
-  ctx.fillStyle = '#8affee';
+  ctx.fillStyle = sk.eye;
   ctx.beginPath(); ctx.arc(x, y, s * (.12 + pulse * .03), 0, 6.2832); ctx.fill();
+  ctx.globalAlpha = 1;
 }
 function drawNudge(x, y, d) {
   var a = Math.min(1, nudgeT / 300) * .85;
@@ -2750,6 +2993,17 @@ function drawNudge(x, y, d) {
 // ------------------------------------------------------------------ input
 window.addEventListener('keydown', function (e) {
   var k = e.key;
+  if (view === 'vsplay') { vsKey(e); return; }
+  if (view === 'vs') {
+    if (k === 'Escape') { e.preventDefault(); buildLobbies(); show('lobby'); }
+    else if (k === 'Enter') { e.preventDefault(); vsBegin(); }
+    else lobbyClaimKey(e);        // press your own keys to take a seat
+    return;
+  }
+  if (view === 'lobby') {
+    if (k === 'Escape') { e.preventDefault(); show('title'); }
+    return;
+  }
   if (view === 'play') {
     if ($('win').classList.contains('on')) {
       // a sandbox test run has no "next deck" — Enter goes back to the editor
@@ -2869,6 +3123,7 @@ var TOOLS = [
   ['t', 'Relay'], ['!', 'Button'], ['G', 'Shut'], ['g', 'Open'],
   ['o', 'Bumper'], ['+', 'Rotor'], ['/', 'Mirror'], ['\\', 'Mirror'],
   ['%', 'Key'], ['=', 'Lock'],
+  ['&', 'Rival'], ['P', 'Plate'],
   ['Y', 'Fix 1'], ['y', 'Pad 1'], ['J', 'Fix 2'], ['j', 'Pad 2'],
   ['K', 'Fix 3'], ['k', 'Pad 3'], ['L', 'Fix 4'], ['l', 'Pad 4'],
   ['B', 'Random'], ['b', 'Pad B'], ['R', 'Choose'], ['r', 'Pad R'],
@@ -2892,6 +3147,8 @@ var TIP = {
   '+': 'Rotor — steers you like a vane, then turns a quarter clockwise for next time',
   '/': 'Mirror — deflects a quarter turn; which way depends on how you arrive',
   '\\': 'Mirror — the other diagonal',
+  '&': 'Rival spawn — where the next glider starts in multiplayer. Add one per extra seat; solo play ignores them',
+  'P': 'Pressure plate — co-op only. The exit stays shut until every plate is held at the same moment',
   '%': 'Key — pick it up, spend it on one lock',
   '=': 'Lock — solid until you spend a key, then open for good',
   'Y': 'Fixed spring 1 — always throws you to pad 1',
@@ -2945,6 +3202,10 @@ function drawTile(x, y, i, ch, pulse) {
   else if (ch === '*') drawCore(x + CS / 2, y + CS / 2, pulse);
   else if (ch === 'x') drawCrate(x + CS / 2, y + CS / 2, 0);
   else if (ch === '@') drawDrone(x + CS / 2, y + CS / 2, 1, pulse);
+  // multiplayer furniture. '&' is invisible in play — a glider is standing on
+  // it — so the editor is the only place it is ever drawn.
+  else if (ch === 'P') drawPlate(x, y, pulse, false);
+  else if (ch === '&') drawDrone(x + CS / 2, y + CS / 2, 1, pulse, SKINS[1], true);
 }
 
 function edResize() {
@@ -3531,6 +3792,894 @@ $('mImport').onclick = function () {
 buildGroupSel();
 buildPal('Basics');
 edNew();
+
+/* ==================================================================
+   MULTIPLAYER — two to seven gliders on one keyboard.
+
+   Nothing here re-implements the game. Each seat owns a *bundle* of the
+   same module globals the solo game uses (L, st, anim, the effect lists,
+   its own canvas), and vsIn/vsOut swap one bundle in for the duration of
+   a step or a paint — the same trick the sandbox uses to borrow the tile
+   art. So a slide in multiplayer is the identical slide, animation and
+   sound the solo game would have given you.
+
+   RACE  — one deck each, side by side, everyone sliding at once.
+   DUEL  — one deck, turn by turn. You block each other; cores are shared.
+   CO-OP — one deck, real time. The exit stays shut until every pressure
+           plate is held at the same moment, and then everyone must get out.
+   ================================================================== */
+/* `seats` is who is holding each cross of keys: null for a person, or an AI
+   difficulty. Nobody has to find six friends before the button works, so every
+   seat past the first is the computer until a person claims it — and the game
+   says so on the pane, in the roster and in the opening line, rather than
+   letting you wonder who you just lost to. */
+var VS = { on: false, mode: 'race', n: 2, src: 'pack', pick: 0,
+           players: [], board: null, turn: 0, over: false, mover: 0,
+           held: [], deck: null, ranks: 0,
+           seats: [null, 'normal', 'normal', 'normal', 'normal', 'normal', 'normal'],
+           claimed: [true, false, false, false, false, false, false], lobby: -1 };
+var SKIN = null;              // whose hull the drone is painted in right now
+
+var SKINS = [
+  { name: 'Teal',   css: '#4fe3d2', glow: '#4fe3d2', top: '#8affee', bot: '#2ba99b', eye: '#8affee' },
+  { name: 'Amber',  css: '#ffc65c', glow: '#ffc65c', top: '#ffe3a8', bot: '#c08a20', eye: '#ffe9bd' },
+  { name: 'Violet', css: '#a97bff', glow: '#a97bff', top: '#d7c2ff', bot: '#6f43c4', eye: '#e2d5ff' },
+  { name: 'Coral',  css: '#ff6b6b', glow: '#ff6b6b', top: '#ffb3b3', bot: '#c23c3c', eye: '#ffc9c9' },
+  { name: 'Lime',   css: '#7ef2a5', glow: '#7ef2a5', top: '#c2ffd6', bot: '#3aa564', eye: '#d6ffe4' },
+  { name: 'Ice',    css: '#9fd4ff', glow: '#9fd4ff', top: '#d6ecff', bot: '#4d8fc4', eye: '#e4f4ff' },
+  { name: 'Rose',   css: '#ff8fd0', glow: '#ff8fd0', top: '#ffcfe9', bot: '#c4508f', eye: '#ffdff0' }
+];
+
+/* Seven seats have to share one keyboard, so each gets a cross of keys far
+   enough from the others to elbow nobody. The digit seats are matched on
+   e.code, or the number row and the numpad would fight over "5". */
+var KEYSETS = [
+  { label: 'W A S D',        by: 'key',  up: 'w', left: 'a', down: 's', right: 'd' },
+  { label: 'Arrow keys',     by: 'key',  up: 'arrowup', left: 'arrowleft', down: 'arrowdown', right: 'arrowright' },
+  { label: 'I J K L',        by: 'key',  up: 'i', left: 'j', down: 'k', right: 'l' },
+  { label: 'T F G H',        by: 'key',  up: 't', left: 'f', down: 'g', right: 'h' },
+  { label: 'Numpad 8 4 5 6', by: 'code', up: 'Numpad8', left: 'Numpad4', down: 'Numpad5', right: 'Numpad6' },
+  { label: '5 1 2 3',        by: 'code', up: 'Digit5', left: 'Digit1', down: 'Digit2', right: 'Digit3' },
+  { label: '9 7 8 0',        by: 'code', up: 'Digit9', left: 'Digit7', down: 'Digit8', right: 'Digit0' }
+];
+
+var VSMODES = [
+  { id: 'race', t: 'Race',
+    d: 'A deck each, side by side. Everybody slides at once — first one out wins.' },
+  { id: 'duel', t: 'Duel',
+    d: 'One deck, turn by turn. Gliders block each other and cores are shared, so the exit is the only prize.' },
+  { id: 'coop', t: 'Co-op',
+    d: 'One deck, together. The door stays shut until every pressure plate is held at the same moment — then everyone has to get out.' }
+];
+
+// ---------------------------------------------------------------- bundles
+/* The globals a seat owns. Swapped wholesale rather than passed around,
+   because step() and draw() are the solo game's and read exactly these. */
+function vsBundle(lv, skin, canvas) {
+  var PL = GLIDE.parse(lv);
+  PL.coopGate = VS.mode === 'coop' && PL.plates.length > 0;
+  return { L: PL, CUR: lv, st: GLIDE.initial(PL), anim: null, moves: 0, hist: [],
+           trail: [], parts: [], shake: 0, flash: 0, won: false,
+           awaitPick: null, pickHot: -1, nudgeT: 0, nudgeDir: -1, nudgePad: -1,
+           route: [], CS: 34, DPR: 1, cv: canvas, ctx: canvas.getContext('2d'),
+           skin: skin };
+}
+function vsIn(b) {
+  L = b.L; CUR = b.CUR; st = b.st; anim = b.anim; moves = b.moves; hist = b.hist;
+  trail = b.trail; parts = b.parts; shake = b.shake; flash = b.flash; won = b.won;
+  awaitPick = b.awaitPick; pickHot = b.pickHot;
+  nudgeT = b.nudgeT; nudgeDir = b.nudgeDir; nudgePad = b.nudgePad;
+  route = b.route; CS = b.CS; DPR = b.DPR; cv = b.cv; ctx = b.ctx; SKIN = b.skin;
+}
+function vsOut(b) {
+  b.L = L; b.st = st; b.anim = anim; b.moves = moves; b.hist = hist;
+  b.trail = trail; b.parts = parts; b.shake = shake; b.flash = flash; b.won = won;
+  b.awaitPick = awaitPick; b.pickHot = pickHot;
+  b.nudgeT = nudgeT; b.nudgeDir = nudgeDir; b.nudgePad = nudgePad;
+  b.route = route; b.CS = CS; b.DPR = DPR;
+}
+
+/* Where everyone else is standing — what the engine treats as unenterable. */
+function vsFoes(exceptIx) {
+  var out = [];
+  for (var i = 0; i < VS.players.length; i++) {
+    var P = VS.players[i];
+    if (i === exceptIx || P.done || P.pos < 0) continue;
+    out.push(P.pos);
+  }
+  return out;
+}
+
+/* Extra spawns for a deck that was never drawn for company: the cells that
+   are as far from the start, and from each other, as the deck allows. */
+function vsSpawns(PL, n) {
+  var w = PL.w, h = PL.h, size = w * h;
+  function open(i) {
+    var t = PL.terrain[i];
+    return t !== '#' && t !== '0' && PL.crates0.indexOf(i) < 0;
+  }
+  function bfs(from) {
+    var d = new Array(size), q = [from], qi = 0;
+    d[from] = 0;
+    while (qi < q.length) {
+      var c = q[qi++], x = c % w, y = (c / w) | 0;
+      for (var k = 0; k < 4; k++) {
+        var nx = x + GLIDE.DX[k], ny = y + GLIDE.DY[k];
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        var nb = ny * w + nx;
+        if (d[nb] !== undefined || !open(nb)) continue;
+        d[nb] = d[c] + 1; q.push(nb);
+      }
+    }
+    return d;
+  }
+  var taken = [PL.start], out = [];
+  var reach = bfs(PL.start);
+  var cand = [];
+  for (var i = 0; i < size; i++) {
+    if (reach[i] === undefined || i === PL.start) continue;
+    if (PL.terrain[i] !== '.' && PL.terrain[i] !== 'P') continue;   // no launching from furniture
+    if (PL.cores.indexOf(i) >= 0 || PL.keys.indexOf(i) >= 0) continue;
+    cand.push(i);
+  }
+  var dists = { };
+  while (out.length < n && cand.length) {
+    var best = -1, bv = -1;
+    for (var c2 = 0; c2 < cand.length; c2++) {
+      var cell = cand[c2], worst = Infinity;
+      for (var t2 = 0; t2 < taken.length; t2++) {
+        var key = taken[t2];
+        if (!dists[key]) dists[key] = bfs(key);
+        var dd = dists[key][cell];
+        if (dd === undefined) { worst = -1; break; }
+        if (dd < worst) worst = dd;
+      }
+      if (worst > bv) { bv = worst; best = c2; }
+    }
+    if (best < 0 || bv <= 0) break;
+    out.push(cand[best]); taken.push(cand[best]); cand.splice(best, 1);
+  }
+  return out;
+}
+
+/* Every seat's start cell: the deck's own '@' and '&' marks first, then
+   derived ones for any seat the deck did not plan for. */
+function vsStarts(PL, n) {
+  var out = [PL.start].concat(PL.spawns.slice(0, n - 1));
+  if (out.length < n) out = out.concat(vsSpawns(PL, n - out.length));
+  while (out.length < n) out.push(PL.start);   // a deck too cramped to spread out
+  return out.slice(0, n);
+}
+
+// ---------------------------------------------------------------- start
+function vsDeckList() {
+  if (VS.src === 'campaign') return LEVELS;
+  return VSDECKS.filter(function (d) {
+    return VS.mode === 'coop' ? d.coop : !d.coop;
+  });
+}
+function vsBegin() {
+  var list = vsDeckList();
+  // Never fail silently: if this source has nothing for this mode, say which
+  // one does rather than leaving Start looking broken.
+  if (!list.length) {
+    $('vDeckNote').textContent = VS.mode === 'coop'
+      ? 'No co-op decks in the pack — switch to Campaign decks, or pick another mode.'
+      : 'No versus decks in the pack — switch to Campaign decks.';
+    $('vDeckNote').style.color = 'var(--red)';
+    SFX.bad();
+    return;
+  }
+  $('vDeckNote').style.color = '';
+  var lv = list[Math.min(VS.pick, list.length - 1)];
+  VS.deck = lv; VS.on = true; VS.over = false; VS.ranks = 0;
+  VS.turn = 0; VS.mover = 0; VS.held = [];
+  VS.players = []; VS.board = null;
+  var stage = $('vsStage');
+  stage.innerHTML = '';
+  var n = VS.n;
+
+  if (VS.mode === 'race') {
+    stage.style.gridTemplateColumns = 'repeat(' + (n <= 2 ? n : n <= 4 ? 2 : n <= 6 ? 3 : 4) + ',1fr)';
+    stage.style.gridAutoRows = '1fr';
+    for (var i = 0; i < n; i++) {
+      var pane = vsPane(i, false);
+      stage.appendChild(pane.el);
+      var b = vsBundle(lv, SKINS[i], pane.cv);
+      VS.players.push({ ix: i, skin: SKINS[i], keys: KEYSETS[i], pane: pane,
+                        bundle: b, moves: 0, done: false, rank: 0, pos: b.L.start,
+                        ai: VS.seats[i] || null, think: 0, aiPlate: -1 });
+    }
+  } else {
+    stage.style.gridTemplateColumns = '1fr';
+    stage.style.gridAutoRows = '1fr';
+    var pane0 = vsPane(-1, true);
+    stage.appendChild(pane0.el);
+    var B = vsBundle(lv, SKINS[0], pane0.cv);
+    VS.board = B; VS.board.pane = pane0;
+    var starts = vsStarts(B.L, n);
+    for (var j = 0; j < n; j++)
+      VS.players.push({ ix: j, skin: SKINS[j], keys: KEYSETS[j], pane: null,
+                        bundle: null, moves: 0, done: false, rank: 0, pos: starts[j],
+                        ai: VS.seats[j] || null, think: 0, aiPlate: -1 });
+    B.st.p = starts[0];
+  }
+  $('vpName').textContent = lv.name;
+  $('vpSub').textContent = (VS.mode === 'race' ? 'Race' : VS.mode === 'duel' ? 'Duel' : 'Co-op') +
+    ' · ' + n + ' gliders' + (VS.src === 'campaign' ? ' · campaign deck' : '');
+  $('vpReset').style.display = '';
+  show('vsplay');
+  vsResize();
+  vsBanner(vsOpeningLine() + vsWhoLine(), 5200);
+  vsHud();
+}
+function vsOpeningLine() {
+  if (VS.mode === 'race') return 'Same deck, one each. Everybody slides at the same time — first glider out takes it.';
+  if (VS.mode === 'duel') return 'One deck, one at a time. You bounce off each other, and cores count for whoever grabs them — only the exit decides it.';
+  var plates = VS.board && VS.board.L.plates.length;
+  return plates
+    ? 'The door is sealed. Every one of the ' + plates + ' plates has to be held at the same moment — come to rest on them together, then get everyone out.'
+    : 'This deck has no plates, so the door is already live. Nobody wins until every glider is out.';
+}
+/* Never leave anybody guessing which of these gliders is a person. */
+function vsWhoLine() {
+  var bots = [], people = [];
+  for (var i = 0; i < VS.players.length; i++)
+    (VS.players[i].ai ? bots : people).push('P' + (i + 1));
+  if (!bots.length) return '';
+  if (!people.length) return '  ·  Every seat is the computer — this one plays itself.';
+  var verb = bots.length === 1 ? ' is' : ' are';
+  return '  ·  ' + bots.join(', ') + verb + ' the computer (' +
+         aiLevel(VS.players[VS.players.length - 1].ai).t.toLowerCase() + '). You are ' +
+         people.join(', ') + '.';
+}
+function vsPane(ix, solo) {
+  var el = document.createElement('div');
+  el.className = 'pane' + (solo ? ' solo' : '');
+  var mv = null;
+  if (!solo) {
+    var P = SKINS[ix], K = KEYSETS[ix];
+    var head = document.createElement('div');
+    head.className = 'phd';
+    var dot = document.createElement('span');
+    dot.className = 'dot'; dot.style.background = P.css;
+    var nm = document.createElement('div');
+    nm.className = 'rname';
+    var who = VS.seats[ix] ? 'Computer · ' + aiLevel(VS.seats[ix]).t : K.label;
+    nm.innerHTML = 'P' + (ix + 1) + ' <span style="color:var(--mute2);font-weight:400">' + who + '</span>';
+    mv = document.createElement('div');
+    mv.className = 'pmv mono'; mv.style.color = P.css; mv.textContent = '0';
+    head.appendChild(dot); head.appendChild(nm); head.appendChild(mv);
+    el.appendChild(head);
+  }
+  var host = document.createElement('div');
+  host.className = 'pcv';
+  var cv2 = document.createElement('canvas');
+  host.appendChild(cv2);
+  el.appendChild(host);
+  return { el: el, cv: cv2, host: host, mv: mv || { textContent: '' } };
+}
+
+// ---------------------------------------------------------------- layout
+function vsResize() {
+  if (!VS.on) return;
+  var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  function fit(b, host) {
+    var aw = host.clientWidth - 12, ah = host.clientHeight - 12;
+    if (aw <= 0 || ah <= 0) return;
+    var cs = Math.max(9, Math.floor(Math.min(aw / b.L.w, ah / b.L.h)));
+    cs = Math.min(cs, 78);
+    b.CS = cs; b.DPR = dpr;
+    b.cv.width = Math.round(cs * b.L.w * dpr);
+    b.cv.height = Math.round(cs * b.L.h * dpr);
+    b.cv.style.width = (cs * b.L.w) + 'px';
+    b.cv.style.height = (cs * b.L.h) + 'px';
+  }
+  if (VS.mode === 'race') {
+    for (var i = 0; i < VS.players.length; i++) fit(VS.players[i].bundle, VS.players[i].pane.host);
+  } else if (VS.board) {
+    fit(VS.board, VS.board.pane.host);
+  }
+}
+
+// ---------------------------------------------------------------- moving
+function vsPress(d, seat) {
+  if (!VS.on || VS.over) return;
+  var P = VS.players[seat];
+  if (!P || P.done) return;
+  if (VS.mode === 'race') {
+    var b = P.bundle;
+    vsIn(b); VS.mover = seat;
+    tryMove(d);
+    P.moves = moves;
+    vsOut(b);
+    P.pane.mv.textContent = P.moves;
+    return;
+  }
+  // one shared board: turn order in a duel, and only ever one slide at a time
+  if (VS.mode === 'duel' && VS.turn !== seat) return;
+  var B = VS.board;
+  vsIn(B);
+  if (anim || awaitPick) { vsOut(B); return; }
+  st.p = P.pos;
+  st.foes = vsFoes(seat);
+  moves = P.moves;
+  VS.mover = seat; SKIN = P.skin; B.skin = P.skin;
+  var before = P.pos;
+  tryMove(d);
+  P.pos = st.p; P.moves = moves;
+  vsOut(B);
+  if (P.pos !== before || anim) vsHud();
+}
+
+/* Called by step() once a slide has settled, in place of the solo game's
+   stranded check — with seven gliders shuffling the board about, "no route
+   from here" is not a fact anyone could act on anyway. */
+function vsSettled() {
+  if (VS.mode === 'race') return;
+  var B = VS.board;
+  if (VS.mode === 'coop') vsPlates();
+  if (VS.mode === 'duel' && !VS.over) vsNextTurn();
+  vsHud();
+}
+/* The plates, checked where it matters: at rest. Every plate covered at the
+   same moment and the door opens for good. */
+/* Runs inside a swapped-in bundle, so the live board is the module globals —
+   writing to VS.board.st here would be undone by the next vsOut(). */
+function vsPlates() {
+  if (!L.plates.length || st.plated) return;
+  for (var i = 0; i < L.plates.length; i++) {
+    var on = false;
+    for (var j = 0; j < VS.players.length; j++) {
+      var P = VS.players[j];
+      if (!P.done && P.pos === L.plates[i]) { on = true; break; }
+    }
+    if (!on) return;
+  }
+  st.plated = 1;
+  SFX.unlock(); flash = 1; shake = 6;
+  for (var k = 0; k < L.plates.length; k++)
+    for (var q = 0; q < 14; q++) burst(L.plates[k], '#a97bff');
+  vsBanner('Plates held together — the door is open. Now get everyone out.', 3800);
+}
+function vsNextTurn() {
+  var n = VS.players.length;
+  for (var k = 1; k <= n; k++) {
+    var ix = (VS.turn + k) % n;
+    if (!VS.players[ix].done) { VS.turn = ix; return; }
+  }
+}
+
+/* A glider reached the exit. In a race or a duel that is a placing; in co-op
+   it only parks that player safely outside while the others finish. */
+function vsFinish() {
+  var seat = VS.mover, P = VS.players[seat];
+  if (!P || P.done) return;
+  P.done = true;
+  P.rank = ++VS.ranks;
+  SFX.win(); flash = 1;
+  for (var b2 = 0; b2 < 26; b2++) burst(st.p, P.skin.css);
+  if (VS.mode === 'coop') {
+    P.pos = -1;                       // out of the way, and no longer a wall
+    st.won = false; won = false;      // the deck is not finished, only they are
+    var left = 0;
+    for (var i = 0; i < VS.players.length; i++) if (!VS.players[i].done) left++;
+    if (left === 0) { vsOver('Everyone made it out.'); return; }
+    vsBanner('P' + (seat + 1) + ' is out — ' + left + ' still inside.', 2600);
+    vsHud();
+    return;
+  }
+  won = true;                          // this seat's board is finished with
+  if (VS.mode === 'race') {
+    if (P.rank === 1) vsOver('P' + (seat + 1) + ' wins the race.');
+    else vsHud();
+    return;
+  }
+  P.pos = -1;
+  vsOver('P' + (seat + 1) + ' takes the deck.');
+}
+function vsOver(line) {
+  VS.over = true;
+  var order = VS.players.slice().sort(function (a, b) {
+    return (a.rank || 99) - (b.rank || 99);
+  });
+  var parts2 = order.map(function (P) {
+    return P.rank ? '#' + P.rank + ' P' + (P.ix + 1) + ' (' + P.moves + ')' : 'P' + (P.ix + 1) + ' —';
+  });
+  vsBanner(line + '  ·  ' + parts2.join('   ') + '  ·  R to run it again.', 0);
+  for (var i = 0; i < VS.players.length; i++) {
+    var P2 = VS.players[i];
+    if (P2.pane && P2.rank) {
+      var tag = document.createElement('div');
+      tag.className = 'prank';
+      tag.textContent = P2.rank === 1 ? 'Winner' : '#' + P2.rank;
+      P2.pane.el.appendChild(tag);
+    }
+  }
+  vsHud();
+}
+function vsRestart() {
+  if (!VS.on) return;
+  vsBegin();
+}
+
+// ---------------------------------------------------------------- hud
+function vsHud() {
+  if (!VS.on) return;
+  if (VS.over) { $('vpInfoL').textContent = 'Result'; $('vpInfo').textContent = 'Done'; }
+  else if (VS.mode === 'duel') {
+    var T2 = VS.players[VS.turn];
+    $('vpInfoL').textContent = T2 && T2.ai ? 'Computer' : 'Turn';
+    $('vpInfo').textContent = 'P' + (VS.turn + 1);
+    $('vpInfo').style.color = SKINS[VS.turn].css;
+  } else if (VS.mode === 'coop') {
+    var left = 0;
+    for (var i = 0; i < VS.players.length; i++) if (!VS.players[i].done) left++;
+    $('vpInfoL').textContent = 'Inside';
+    $('vpInfo').textContent = left + ' / ' + VS.players.length;
+    $('vpInfo').style.color = 'var(--cyan)';
+  } else {
+    $('vpInfoL').textContent = 'Racing';
+    var out = 0;
+    for (var j = 0; j < VS.players.length; j++) if (VS.players[j].done) out++;
+    $('vpInfo').textContent = (VS.players.length - out) + ' / ' + VS.players.length;
+    $('vpInfo').style.color = 'var(--cyan)';
+  }
+  if (VS.mode !== 'race') return;
+  for (var k = 0; k < VS.players.length; k++) {
+    var P = VS.players[k];
+    P.pane.el.classList.toggle('out', P.done);
+    P.pane.mv.textContent = P.moves;
+  }
+}
+var vsBannerT = 0;
+function vsBanner(text, ms) {
+  var el = $('vsBanner');
+  el.textContent = text;
+  el.classList.add('on');
+  vsBannerT = ms || 0;
+}
+
+// ---------------------------------------------------------------- frame
+function vsFrame(dt) {
+  if (!VS.on) return;
+  vsThink(dt);
+  if (vsBannerT > 0) {
+    vsBannerT -= dt;
+    if (vsBannerT <= 0) $('vsBanner').classList.remove('on');
+  }
+  if (VS.mode === 'race') {
+    for (var i = 0; i < VS.players.length; i++) {
+      var P = VS.players[i];
+      var b = P.bundle;
+      vsIn(b); VS.mover = i;
+      step(dt); draw();
+      P.moves = moves;
+      vsOut(b);
+      P.pane.mv.textContent = P.moves;
+    }
+    return;
+  }
+  var B = VS.board;
+  if (!B) return;
+  VS.held = [];
+  for (var q = 0; q < B.L.plates.length; q++)
+    for (var j = 0; j < VS.players.length; j++)
+      if (!VS.players[j].done && VS.players[j].pos === B.L.plates[q]) { VS.held.push(B.L.plates[q]); break; }
+  vsIn(B); SKIN = VS.players[VS.mover] ? VS.players[VS.mover].skin : SKINS[0];
+  step(dt); draw();
+  vsOut(B);
+  if (VS.mode === 'duel' && !VS.over) {
+    for (var t = 0; t < VS.players.length; t++)
+      if (VS.players[t].pane) VS.players[t].pane.el.classList.toggle('turn', t === VS.turn);
+  }
+}
+
+/* Everyone who is not the glider currently sliding. Drawn dimmer, so the
+   board still reads as "that one is moving, these are parked". */
+function vsDrawOthers(pulse) {
+  if (VS.mode === 'race' || !VS.players.length) return;
+  for (var i = 0; i < VS.players.length; i++) {
+    var P = VS.players[i];
+    if (P.done || P.pos < 0) continue;
+    if (i === VS.mover && anim) continue;      // the mover is drawn by draw()
+    if (i === VS.mover) continue;
+    drawDrone(cx(P.pos), cy(P.pos), 1, pulse, P.skin, true);
+    if (VS.players.length > 2) {
+      ctx.fillStyle = '#07131a';
+      ctx.font = '600 ' + Math.max(8, CS * .24) + 'px ui-sans-serif,system-ui,sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), cx(P.pos), cy(P.pos) + CS * .01);
+      ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+    }
+  }
+}
+
+// ---------------------------------------------------------------- the AI
+/* An AI seat plays with the same solver the hint button uses — it is not
+   cheating and it is not scripted, it just looks the position up. What the
+   difficulty actually changes is how often it declines to play the best move
+   and how deep it is allowed to look, which is a far more honest dial than
+   handing it extra moves.
+
+   Co-op is the interesting case: until the plates are held there is nothing
+   for the solver to solve, because the exit is shut. So a co-op AI first goes
+   and stands on a plate nobody has claimed, and only then reads the exit. */
+var AILEVELS = [
+  { id: 'easy',   t: 'Easy',   cap: 1200,  slip: .45, wait: 520 },
+  { id: 'normal', t: 'Normal', cap: 5000,  slip: .16, wait: 330 },
+  { id: 'hard',   t: 'Hard',   cap: 14000, slip: 0,   wait: 190 }
+];
+function aiLevel(id) {
+  for (var i = 0; i < AILEVELS.length; i++) if (AILEVELS[i].id === id) return AILEVELS[i];
+  return AILEVELS[1];
+}
+/* Every direction that actually does something from `s`. */
+function aiLegal(PL, s) {
+  var out = [];
+  for (var d = 0; d < 4; d++) if (GLIDE.move(PL, s, d)) out.push(d);
+  return out;
+}
+/* Shortest slide-path to a cell, as the first move of that path. Used for the
+   co-op plate run, where "get to that square and stop" is the whole job. */
+function aiRouteTo(PL, s0, cell, cap) {
+  if (s0.p === cell) return -2;                 // already standing on it
+  var seen = {}, cur = [{ s: s0, first: -1 }], depth = 0;
+  seen[GLIDE.key(s0)] = 1;
+  while (cur.length && depth < 14) {
+    var next = [];
+    for (var i = 0; i < cur.length; i++) {
+      var legal = aiLegal(PL, cur[i].s);
+      for (var j = 0; j < legal.length; j++) {
+        var ns = GLIDE.move(PL, cur[i].s, legal[j]);
+        if (!ns || ns.await) continue;
+        var first = cur[i].first < 0 ? legal[j] : cur[i].first;
+        if (ns.p === cell) return first;
+        var k = GLIDE.key(ns);
+        if (seen[k]) continue;
+        seen[k] = 1;
+        if (Object.keys(seen).length > cap) return -1;
+        next.push({ s: ns, first: first });
+      }
+    }
+    cur = next; depth++;
+  }
+  return -1;
+}
+/* Which plate this seat should be running for: the nearest one that no other
+   glider is already sitting on or heading to. */
+function aiPlateFor(seat) {
+  var PL = VS.board.L, best = -1, bv = Infinity;
+  for (var i = 0; i < PL.plates.length; i++) {
+    var cell = PL.plates[i], claimed = false;
+    for (var j = 0; j < VS.players.length; j++) {
+      var Q = VS.players[j];
+      if (j === seat && Q.pos === cell) return cell;      // keep your own plate
+      if (j !== seat && !Q.done && (Q.pos === cell || Q.aiPlate === cell)) claimed = true;
+    }
+    if (claimed) continue;
+    var P = VS.players[seat];
+    var d = Math.abs((cell % PL.w) - (P.pos % PL.w)) +
+            Math.abs(((cell / PL.w) | 0) - ((P.pos / PL.w) | 0));
+    if (d < bv) { bv = d; best = cell; }
+  }
+  return best;
+}
+/* The move an AI seat wants to make, or -1 if it cannot find one. */
+function aiChoose(seat, PL, s, lvl) {
+  var legal = aiLegal(PL, s);
+  if (!legal.length) return -1;
+  if (Math.random() < lvl.slip) return legal[Math.floor(Math.random() * legal.length)];
+
+  if (VS.mode === 'coop' && PL.plates.length && !s.plated) {
+    var cell = aiPlateFor(seat);
+    VS.players[seat].aiPlate = cell;
+    if (cell >= 0) {
+      if (s.p === cell) return -1;             // hold still, you are the plate
+      var d1 = aiRouteTo(PL, s, cell, lvl.cap);
+      if (d1 >= 0) return d1;
+    }
+    // no line to a plate right now — shuffle rather than freeze the round
+    return legal[Math.floor(Math.random() * legal.length)];
+  }
+  var r = solveFrom(PL, s, lvl.cap);
+  if (r.big || r.par === null) r = solveFrom(PL, s, lvl.cap, true);
+  if (!r.big && r.par !== null && r.dir >= 0) return r.dir;
+  return legal[Math.floor(Math.random() * legal.length)];
+}
+/* Ticked every frame: gives each AI seat its beat, then its move. */
+function vsThink(dt) {
+  if (!VS.on || VS.over) return;
+  for (var i = 0; i < VS.players.length; i++) {
+    var P = VS.players[i];
+    if (!P.ai || P.done) continue;
+    var lvl = aiLevel(P.ai);
+    if (VS.mode === 'race') {
+      if (P.bundle.anim || P.bundle.won) { P.think = lvl.wait; continue; }
+    } else {
+      if (VS.mode === 'duel' && VS.turn !== i) continue;
+      if (VS.board.anim || VS.board.awaitPick) { P.think = lvl.wait; continue; }
+    }
+    P.think = (P.think || 0) - dt;
+    if (P.think > 0) continue;
+    P.think = lvl.wait;
+    var PL, s;
+    if (VS.mode === 'race') { PL = P.bundle.L; s = P.bundle.st; }
+    else {
+      PL = VS.board.L;
+      s = Object.assign({}, VS.board.st, { p: P.pos, foes: vsFoes(i) });
+    }
+    var d = aiChoose(i, PL, s, lvl);
+    if (d >= 0) vsPress(d, i);
+    else if (VS.mode === 'duel') { vsNextTurn(); vsHud(); }   // stuck: pass it on
+  }
+}
+
+// ---------------------------------------------------------------- setup ui
+function vsBuildModes() {
+  var host = $('vModes');
+  host.innerHTML = '';
+  VSMODES.forEach(function (m) {
+    var b = document.createElement('button');
+    b.className = 'mode' + (VS.mode === m.id ? ' sel' : '');
+    b.innerHTML = '<div class="mt">' + m.t + '</div><div class="md">' + m.d + '</div>';
+    b.onclick = function () { VS.mode = m.id; VS.pick = 0; vsBuildSetup(); };
+    host.appendChild(b);
+  });
+}
+function vsBuildSeats() {
+  var host = $('vSeats');
+  host.innerHTML = '';
+  for (var i = 2; i <= 7; i++) (function (n) {
+    var b = document.createElement('button');
+    b.className = 'seat' + (VS.n === n ? ' sel' : '');
+    b.textContent = n;
+    b.onclick = function () { VS.n = n; vsBuildSetup(); };
+    host.appendChild(b);
+  })(i);
+  $('vSeatNote').textContent = VS.mode === 'race'
+    ? VS.n + ' boards side by side, one keyboard. Seven is a squeeze — the panes get small.'
+    : VS.n + ' gliders on one deck. Any seat the deck did not draw a spawn for is placed as far from the others as the deck allows.';
+}
+function vsBuildSource() {
+  var host = $('vSource');
+  host.innerHTML = '';
+  [['pack', 'Versus pack'], ['campaign', 'Campaign decks']].forEach(function (s) {
+    var b = document.createElement('button');
+    b.className = 'pill' + (VS.src === s[0] ? ' sel' : '');
+    b.textContent = s[1];
+    b.onclick = function () { VS.src = s[0]; VS.pick = 0; vsBuildSetup(); };
+    host.appendChild(b);
+  });
+  var list = vsDeckList();
+  $('vDeckNote').textContent = VS.src === 'pack'
+    ? (VS.mode === 'coop'
+        ? list.length + ' co-op decks, each with plates that need holding at once.'
+        : list.length + ' decks drawn for company, with a spawn for every seat.')
+    : 'Any of the ' + LEVELS.length + ' campaign decks. ' +
+      (VS.mode === 'coop' ? 'None of them have plates, so the door starts open and it is a race to get everyone out.'
+                          : 'Spawns are placed for you.');
+}
+function vsBuildDecks() {
+  var g = $('vGrid'), list = vsDeckList();
+  g.innerHTML = '';
+  list.forEach(function (lv, i) {
+    var b = document.createElement('button');
+    b.className = 'cell' + (VS.pick === i ? ' perfect' : '');
+    b.innerHTML = '<div class="n">' + (i + 1) + '</div><div class="m">' +
+      (lv.name.length > 11 ? lv.name.slice(0, 10) + '…' : lv.name) + '</div>' +
+      '<div class="s" style="font-size:9px;color:var(--mute2)">' + lv.w + '×' + lv.h + '</div>';
+    b.onclick = function () { VS.pick = i; vsBuildDecks(); };
+    g.appendChild(b);
+  });
+}
+function vsBuildRoster() {
+  var host = $('vRoster');
+  host.innerHTML = '';
+  for (var i = 0; i < VS.n; i++) (function (ix) {
+    var d = document.createElement('div');
+    d.className = 'rseat';
+    var dot = document.createElement('span');
+    dot.className = 'dot'; dot.style.background = SKINS[ix].css;
+    var mid = document.createElement('div');
+    mid.style.flex = '1'; mid.style.minWidth = '0';
+    var nm = document.createElement('div');
+    nm.className = 'rname'; nm.style.color = SKINS[ix].css;
+    nm.textContent = 'P' + (ix + 1) + ' · ' + SKINS[ix].name;
+    var ks = document.createElement('div');
+    ks.className = 'rkeys';
+    ks.textContent = VS.seats[ix]
+      ? 'Computer · ' + aiLevel(VS.seats[ix]).t + ' · press ' + KEYSETS[ix].label + ' to take it'
+      : 'Joined · ' + KEYSETS[ix].label;
+    if (!VS.seats[ix]) d.className = 'rseat joinrow';
+    mid.appendChild(nm); mid.appendChild(ks);
+    // one button cycling human → easy → normal → hard → human
+    var b = document.createElement('button');
+    b.className = 'pill' + (VS.seats[ix] ? ' sel' : '');
+    b.style.padding = '5px 10px';
+    b.textContent = VS.seats[ix] ? aiLevel(VS.seats[ix]).t : 'Human';
+    b.onclick = function () {
+      var order = [null, 'easy', 'normal', 'hard'];
+      var at = order.indexOf(VS.seats[ix]);
+      VS.seats[ix] = order[(at + 1) % order.length];
+      VS.claimed[ix] = !VS.seats[ix];
+      vsBuildRoster();
+    };
+    d.appendChild(dot); d.appendChild(mid); d.appendChild(b);
+    host.appendChild(d);
+  })(i);
+  var any = false;
+  for (var j = 0; j < VS.n; j++) if (VS.seats[j]) any = true;
+  var note = document.createElement('div');
+  note.className = 'vsnote';
+  note.style.gridColumn = '1/-1';
+  note.textContent = any
+    ? 'Computer seats play with the same solver the hint button uses — Hard reads the deck properly, Easy talks itself out of the best move about half the time.'
+    : 'Tap a seat to hand it to the computer, so you can play a full deck on your own.';
+  host.appendChild(note);
+}
+function vsBuildSetup() {
+  vsBuildModes(); vsBuildSeats(); vsBuildSource(); vsBuildDecks(); vsBuildRoster();
+}
+
+// ---------------------------------------------------------------- input
+/* One handler for every seat. A keydown is offered to each seat's cross in
+   turn, so two players hitting keys in the same frame both get their move. */
+function vsKey(e) {
+  if (VS.over) {
+    if (e.key === 'r' || e.key === 'R') { e.preventDefault(); vsRestart(); }
+    if (e.key === 'Escape') { e.preventDefault(); vsLeave(); }
+    return;
+  }
+  if (e.key === 'Escape') { e.preventDefault(); vsLeave(); return; }
+  if (e.key === 'r' || e.key === 'R') {
+    // R is P4's neighbour, not P4's key — safe to keep as restart
+    e.preventDefault(); vsRestart(); return;
+  }
+  var kl = (e.key || '').toLowerCase();
+  for (var i = 0; i < VS.players.length; i++) {
+    var K = VS.players[i].keys;
+    var v = K.by === 'code' ? e.code : kl;
+    var d = v === K.up ? 0 : v === K.right ? 1 : v === K.down ? 2 : v === K.left ? 3 : -1;
+    if (d >= 0) { e.preventDefault(); vsPress(d, i); return; }
+  }
+}
+/* Tear the round down and hand the globals back to the solo game. Safe to call
+   twice; show() calls it for every exit that is not the board itself. */
+function vsEnd() {
+  VS.on = false; VS.over = false;
+  VS.players = []; VS.board = null; VS.held = [];
+  SKIN = null; won = false; anim = null; awaitPick = null; pickHot = -1;
+  $('vsBanner').classList.remove('on');
+  $('vsStage').innerHTML = '';
+}
+function vsLeave() {
+  vsEnd();
+  vsBuildSetup();
+  show('vs');
+}
+
+/* ==================================================================
+   LOBBIES
+
+   A lobby is a saved room — a mode, a deck and a number of seats — kept
+   in the same save the campaign uses. You join one by *pressing your own
+   keys*: the seat lights up as yours, and any seat nobody claims by the
+   time you start is handed to the computer.
+
+   This is a lobby for the machine the game is running on, because that
+   is what a single file on disk can honestly offer: there is no server
+   behind glide.html, so there is nothing for another computer to dial.
+   ================================================================== */
+var PRESETS = [
+  { name: 'Open Race',  mode: 'race', n: 4, src: 'pack', pick: 0 },
+  { name: 'The Duel',   mode: 'duel', n: 2, src: 'pack', pick: 0 },
+  { name: 'Vault Crew', mode: 'coop', n: 3, src: 'pack', pick: 0 }
+];
+function lobbyAll() {
+  if (!save.lobbies || !save.lobbies.length) save.lobbies = PRESETS.map(function (p) {
+    return { name: p.name, mode: p.mode, n: p.n, src: p.src, pick: p.pick, preset: 1 };
+  });
+  return save.lobbies;
+}
+function lobbyName(m) {
+  return m === 'race' ? 'Race' : m === 'duel' ? 'Duel' : 'Co-op';
+}
+function lobbyDeckName(lob) {
+  var list = lob.src === 'campaign' ? LEVELS : VSDECKS.filter(function (d) {
+    return lob.mode === 'coop' ? d.coop : !d.coop;
+  });
+  var lv = list[Math.min(lob.pick, list.length - 1)];
+  return lv ? lv.name : 'deck';
+}
+function buildLobbies() {
+  var host = $('lList'), all = lobbyAll();
+  host.innerHTML = '';
+  all.forEach(function (lob, i) {
+    var row = document.createElement('button');
+    row.className = 'lob';
+    var mid = document.createElement('div');
+    mid.className = 'lmid';
+    var n1 = document.createElement('div');
+    n1.className = 'ln'; n1.textContent = lob.name;
+    var n2 = document.createElement('div');
+    n2.className = 'lm';
+    n2.textContent = lobbyName(lob.mode) + ' · ' + lob.n + ' seats · ' + lobbyDeckName(lob);
+    mid.appendChild(n1); mid.appendChild(n2);
+    var pips = document.createElement('div');
+    pips.className = 'lseats';
+    for (var s = 0; s < lob.n; s++) {
+      var p = document.createElement('span');
+      p.className = 'pip'; p.style.background = SKINS[s].css;
+      pips.appendChild(p);
+    }
+    row.appendChild(mid); row.appendChild(pips);
+    row.onclick = function () { lobbyJoin(i); };
+    host.appendChild(row);
+    if (!lob.preset) {
+      var del = document.createElement('button');
+      del.className = 'ldel'; del.textContent = 'Delete';
+      del.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        save.lobbies.splice(i, 1); persist(); buildLobbies();
+      };
+      row.appendChild(del);
+    }
+  });
+  $('lSub').textContent = all.length + ' rooms · everyone presses their own keys to join';
+}
+/* Open a room: load its settings, then wait for people to claim seats. */
+function lobbyJoin(i) {
+  var lob = lobbyAll()[i];
+  VS.mode = lob.mode; VS.n = lob.n; VS.src = lob.src; VS.pick = lob.pick;
+  VS.lobby = i;
+  VS.seats = [];
+  for (var s = 0; s < 7; s++) VS.seats.push(s === 0 ? null : 'normal');
+  VS.claimed = [true, false, false, false, false, false, false];
+  vsBuildSetup();
+  show('vs');
+  $('vsJoinNote').textContent =
+    'Room open. Press your own keys to take a seat — any seat still empty when you start is played by the computer.';
+}
+/* A keypress on the setup screen claims (or frees) the seat that owns it. */
+function lobbyClaimKey(e) {
+  var kl = (e.key || '').toLowerCase();
+  for (var i = 0; i < VS.n; i++) {
+    var K = KEYSETS[i];
+    var v = K.by === 'code' ? e.code : kl;
+    if (v !== K.up && v !== K.down && v !== K.left && v !== K.right) continue;
+    e.preventDefault();
+    VS.claimed[i] = !VS.claimed[i];
+    VS.seats[i] = VS.claimed[i] ? null : 'normal';
+    blip(VS.claimed[i] ? 680 : 320, .09, 'sine', .05);
+    vsBuildSetup();
+    return true;
+  }
+  return false;
+}
+function lobbySaveCurrent() {
+  var all = lobbyAll();
+  all.push({ name: lobbyName(VS.mode) + ' · ' + lobbyDeckName(VS) + ' · ' + VS.n,
+             mode: VS.mode, n: VS.n, src: VS.src, pick: VS.pick });
+  persist();
+}
+
+$('lBack').onclick = function () { show('title'); };
+$('lNew').onclick = function () { VS.lobby = -1; vsBuildSetup(); show('vs'); };
+
+/* A seam for tools/vscheck.js, which drives this file headlessly. The game
+   itself never reads it. */
+try { window.__glideVS = VS; } catch (e) {}
+
+$('bVersus').onclick = function () { buildLobbies(); show('lobby'); };
+$('vBack').onclick = function () { buildLobbies(); show('lobby'); };
+$('vsSaveLobby').onclick = function () {
+  lobbySaveCurrent();
+  $('vsJoinNote').textContent = 'Saved to your lobby list.';
+};
+$('vpBack').onclick = vsLeave;
+$('vpReset').onclick = vsRestart;
+$('vsStart').onclick = vsBegin;
 
 // ------------------------------------------------------------------ screens
 function openSelect() {

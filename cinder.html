@@ -1,0 +1,2915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CINDER</title>
+<style>
+  :root{
+    --bg:#0a0c10; --panel:#141821; --panel2:#1b2130; --line:#2a3244;
+    --ink:#e6ecf5; --dim:#8d99ad; --hot:#ff8a3d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI",system-ui,sans-serif;overflow:hidden}
+  #wrap{display:flex;height:100%;gap:0}
+
+  /* ---- side panel ---- */
+  #panel{width:210px;flex:none;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;padding:10px;gap:10px;overflow-y:auto}
+  h1{margin:0;font-size:19px;letter-spacing:3px;font-weight:600;color:var(--hot)}
+  h1 small{display:block;font-size:10px;letter-spacing:1px;color:var(--dim);
+    font-weight:400;margin-top:3px}
+  .sec{font-size:10px;letter-spacing:1.4px;color:var(--dim);text-transform:uppercase;
+    border-bottom:1px solid var(--line);padding-bottom:4px}
+
+  #pal{display:flex;flex-direction:column;gap:2px}
+  .grp{font-size:9px;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase;
+    margin:8px 0 2px;padding-bottom:2px;border-bottom:1px solid var(--line)}
+  .grp:first-child{margin-top:0}
+  .mb{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;
+    cursor:pointer;border:1px solid transparent;background:none;color:var(--ink);
+    font-size:12px;text-align:left;width:100%;font-family:inherit}
+  .mb:hover{background:var(--panel2)}
+  .mb.on{background:var(--panel2);border-color:var(--hot)}
+  .sw{width:14px;height:14px;border-radius:3px;flex:none;border:1px solid #0006}
+  .mb .k{margin-left:auto;font-size:10px;color:var(--dim);font-family:ui-monospace,monospace}
+
+  label.row{display:flex;justify-content:space-between;font-size:11px;color:var(--dim)}
+  input[type=range]{width:100%;accent-color:var(--hot)}
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+  button.act{padding:5px;font-size:11px;background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:4px;cursor:pointer;font-family:inherit}
+  button.act:hover{border-color:var(--hot)}
+  button.act.on{border-color:var(--hot);color:var(--hot)}
+  #stat{font-size:10px;color:var(--dim);font-family:ui-monospace,monospace;line-height:1.6}
+  #hint{font-size:10px;color:var(--dim);line-height:1.5;margin-top:auto}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-radius:3px;
+    padding:0 3px;font-size:9px;font-family:ui-monospace,monospace}
+
+  /* ---- stage ---- */
+  #stage{flex:1;display:flex;align-items:center;justify-content:center;position:relative;
+    background:#06080b;min-width:0}
+  canvas{image-rendering:pixelated;cursor:crosshair;background:#0d0f14;
+    box-shadow:0 0 0 1px var(--line),0 10px 40px #000a}
+  #toast{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+    background:#000b;border:1px solid var(--line);padding:5px 12px;border-radius:4px;
+    font-size:11px;color:var(--dim);opacity:0;transition:opacity .25s;pointer-events:none}
+  #toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="panel">
+    <h1>CINDER<small>falling-sand sandbox</small></h1>
+
+    <div class="sec">Material</div>
+    <div id="pal"></div>
+
+    <div class="sec">Brush</div>
+    <label class="row"><span>Size</span><span id="bsz">6</span></label>
+    <input type="range" id="brush" min="1" max="40" value="6">
+
+    <div class="sec">Simulation</div>
+    <div class="btns">
+      <button class="act" id="bPause">Pause</button>
+      <button class="act" id="bStep">Step</button>
+      <button class="act" id="bClear">Clear</button>
+      <button class="act" id="bLow">30 FPS</button>
+      <button class="act" id="bWild">Wild hearts</button>
+      <button class="act" id="bWeather">Weather: off</button>
+      <button class="act" id="bSave">Save</button>
+      <button class="act" id="bLoad">Load</button>
+      <button class="act" id="bFit">Reset view</button>
+      <button class="act" id="bZoom">Zoom +</button>
+    </div>
+
+    <div class="sec">Status</div>
+    <div id="stat"></div>
+
+    <div id="hint">
+      <kbd>LMB</kbd> draw &nbsp; <kbd>RMB</kbd> erase<br>
+      <kbd>wheel</kbd> zoom &nbsp; <kbd>shift+wheel</kbd> brush<br>
+      <kbd>MMB</kbd> drag to pan &nbsp; <kbd>arrows</kbd> pan<br>
+      <kbd>Home</kbd> reset view &nbsp; <kbd>[</kbd><kbd>]</kbd> brush<br>
+      <kbd>space</kbd> pause &nbsp; <kbd>.</kbd> step<br>
+      <kbd>C</kbd> clear &nbsp; <kbd>S</kbd>/<kbd>L</kbd> save/load
+    </div>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="toast"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ==========================================================================
+   CINDER - a 2D falling-sand sandbox.
+
+   The world is a flat grid of material ids. Every frame we scan bottom-to-top
+   (so falling things do not fall more than one cell per frame) and let each
+   cell run its material's update rule. A `moved` flag stops a cell that has
+   already relocated this frame from being processed a second time.
+
+   Movement is decided purely by density:
+     - powders and liquids sink into anything LESS dense (empty counts as 0)
+     - gases rise into anything MORE dense, so smoke climbs through water
+   Solids get density 999 and movable=false, so nothing displaces them.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- grid --- */
+const W = 400, H = 240, N = W * H;
+
+const mat   = new Uint8Array(N);   // material id per cell
+const life  = new Uint8Array(N);   // countdown for fire / smoke / steam
+const moved = new Uint8Array(N);   // "already acted this frame"
+const noise = new Uint8Array(N);   // per-cell colour jitter, fixed for the run
+for (let i = 0; i < N; i++) noise[i] = (Math.random() * 256) | 0;
+
+const rnd = n => (Math.random() * n) | 0;
+const inb = (x, y) => x >= 0 && x < W && y >= 0 && y < H;
+
+/* ------------------------------------------------------ activity chunks --
+   A chunk in which nothing changed last step cannot change this step either,
+   so we skip it wholesale. This is what makes a screen full of *settled* sand
+   nearly free, while a screen full of churning liquid stays honest work.
+
+   CHUNK[i] is the chunk of cell i, and EDGE[i] flags cells sitting on a chunk
+   boundary - only those need to wake their neighbouring chunks, so the common
+   interior case costs one array write. */
+const CW = 32;
+const CX = Math.ceil(W / CW), CY = Math.ceil(H / CW), NC = CX * CY;
+const actNow  = new Uint8Array(NC).fill(1);
+const actNext = new Uint8Array(NC);
+const CHUNK = new Uint16Array(N);
+const EDGE  = new Uint8Array(N);          // bits: 1=left 2=right 4=up 8=down
+for (let y = 0; y < H; y++) {
+  for (let x = 0; x < W; x++) {
+    const i = y * W + x, cx = (x / CW) | 0, cy = (y / CW) | 0;
+    CHUNK[i] = cy * CX + cx;
+    let e = 0;
+    if (x === cx * CW)                      e |= 1;
+    if (x === Math.min(W, cx * CW + CW) - 1) e |= 2;
+    if (y === cy * CW)                      e |= 4;
+    if (y === Math.min(H, cy * CW + CW) - 1) e |= 8;
+    EDGE[i] = e;
+  }
+}
+function touch(i) {
+  const c = CHUNK[i];
+  actNext[c] = 1;
+  const e = EDGE[i];
+  if (e === 0) return;
+  const cx = c % CX, cy = (c / CX) | 0;
+  const L = (e & 1) && cx > 0,      R = (e & 2) && cx < CX - 1;
+  const U = (e & 4) && cy > 0,      D = (e & 8) && cy < CY - 1;
+  if (L) actNext[c - 1]  = 1;
+  if (R) actNext[c + 1]  = 1;
+  if (U) actNext[c - CX] = 1;
+  if (D) actNext[c + CX] = 1;
+  if (L && U) actNext[c - CX - 1] = 1;
+  if (R && U) actNext[c - CX + 1] = 1;
+  if (L && D) actNext[c + CX - 1] = 1;
+  if (R && D) actNext[c + CX + 1] = 1;
+}
+/* wakeAll is the "the world changed wholesale" signal (clear, load, seed), so
+   the heart count is stale by definition and must be dropped with it. */
+const wakeAll = () => { actNow.fill(1); heartsPrev = heartsNow = 0; heartAge = 0; };
+
+/* ----------------------------------------------------------- materials --- */
+const MATS = [];
+function def(o) {
+  o.id = MATS.length;
+  o.density     = o.density     ?? 999;
+  o.movable     = o.movable     ?? false;
+  o.flammable   = o.flammable   ?? false;
+  o.flammability= o.flammability?? 0;
+  o.burn        = o.burn        ?? 0;
+  o.dissolvable = o.dissolvable ?? true;
+  o.disperse    = o.disperse    ?? 0;
+  o.blast       = o.blast       ?? 9;
+  o.fuse        = o.fuse        ?? 0;    // 0 = short random fuse
+  o.nuclear     = o.nuclear     ?? false;
+  o.mega        = o.mega        ?? false;
+  o.powered     = o.powered     ?? false;  // accepts charge from a live wire
+  o.hidden      = o.hidden      ?? false;  // internal state, not in the palette
+  o.wet         = o.wet         ?? false;  // counts as water to everything else
+  o.hops        = o.hops        ?? 1;      // cells the charge crosses per step
+  o.slow        = o.slow        ?? false;  // conducts only every other step
+  o.glow        = o.glow        ?? null;   // colour it fades to when charged
+  o.update      = o.update      ?? null;
+  MATS.push(o);
+  return o.id;
+}
+
+const EMPTY = def({ name:"Eraser", key:"X", col:"#0d0f14", density:0,
+                    movable:true, dissolvable:false });
+
+const SAND  = def({ name:"Sand",   key:"1", col:"#d8b25e", density:20,
+                    movable:true });
+
+const WATER = def({ name:"Water",  key:"2", col:"#3f74d6", density:10,
+                    movable:true, disperse:6, wet:true });
+
+const STONE = def({ name:"Stone",  key:"3", col:"#767d89" });
+
+const WOOD  = def({ name:"Wood",   key:"4", col:"#7c4f2b",
+                    flammable:true, flammability:0.05, burn:90 });
+
+const OIL   = def({ name:"Oil",    key:"5", col:"#4a3a26", density:8,
+                    movable:true, disperse:4, flammable:true,
+                    flammability:0.35, burn:70 });
+
+const LAVA  = def({ name:"Lava",   key:"6", col:"#ff6a1e", density:14,
+                    movable:true, disperse:1, dissolvable:false });
+
+const FIRE  = def({ name:"Fire",   key:"7", col:"#ffa32c", density:3,
+                    movable:true, dissolvable:false });
+
+const ACID  = def({ name:"Acid",   key:"8", col:"#8dff4a", density:11,
+                    movable:true, disperse:5, dissolvable:false });
+
+const PLANT = def({ name:"Plant",  key:"9", col:"#3fae4a",
+                    flammable:true, flammability:0.25, burn:50 });
+
+const POWDR = def({ name:"Gunpowder", key:"0", col:"#54545e", density:19,
+                    movable:true, flammable:true, flammability:0.9, burn:6,
+                    explosive:true });
+
+/* Bomb: falls like a heavy powder and does nothing until something lights it,
+   then takes out a crater. Its blast deliberately spares other explosives so
+   they cook off on their own fuse next step - that is what makes chains feel
+   like a cascade instead of one flat bang. */
+const BOMB  = def({ name:"Bomb",   key:"Y", col:"#8f2020", density:22,
+                    movable:true, flammable:true, flammability:1, burn:4,
+                    explosive:true, blast:24 });
+
+/* Nuke: a two-second fuse you can watch tick, then a blast big enough to
+   redraw the map. Unlike the bomb it flash-fuses sand into glass, boils water
+   straight to steam, and leaves a scorched fringe of smoke and fire. */
+const NUKE  = def({ name:"Nuke",   key:"U", col:"#d5e04a", density:23,
+                    movable:true, flammable:true, flammability:1, burn:4,
+                    explosive:true, nuclear:true, blast:90, fuse:60 });
+
+/* Mega nuke: the largest blast this world can hold. 400x240 is only 96k cells
+   and a normal nuke already clears ~15k, so the ceiling is "reaches every cell"
+   - about 6x, not 100x. Delivered as an expanding shockwave over ~40 frames
+   instead of one flash, which reads far bigger AND keeps any single frame cheap. */
+const MEGA  = def({ name:"Mega Nuke", key:"I", col:"#ff4fd0", density:24,
+                    movable:true, flammable:true, flammability:1, burn:4,
+                    explosive:true, nuclear:true, mega:true, blast:480, fuse:150 });
+
+/* Lightning is a tool, not a substance: clicking it calls strike(), which draws
+   a branching bolt down from the sky. The SPARK cells it leaves are what do the
+   damage, and they burn out in a few frames. */
+const SPARK = def({ name:"Lightning", key:"P", col:"#cfe9ff",
+                    dissolvable:false });
+
+/* Black hole: drags everything within reach inward and devours what arrives.
+   It GROWS as it feeds (its `life` counts what it has eaten), so a hole fed a
+   whole map ends up with roughly triple its starting reach. It will not eat
+   Wall, deliberately - otherwise the arena border goes and the world drains. */
+const HOLE  = def({ name:"Black Hole", key:"H", col:"#08060f", dissolvable:false });
+
+/* Electricity: Metal is an inert wire until something charges it, then the
+   charge walks along the wire one cell per step, fading as it goes. Battery
+   holds any wire it touches at full charge forever. */
+/* Three conductors, and the difference is speed, not reach: copper carries a
+   charge three cells per step, plain metal one, iron only on alternate steps.
+   A cell hands on exactly one unit less than it holds, whichever conductor it
+   is, so all three reach the same 119 cells (measured) - a slow wire is late,
+   not weak. */
+const METAL = def({ name:"Metal",  key:"M", col:"#98a2b3", powered:true,
+                    glow:"#e6ffff" });
+const COPPER= def({ name:"Copper", key:"O", col:"#c07a42", powered:true,
+                    hops:3, glow:"#ffd9a0" });
+const IRON  = def({ name:"Iron",   key:"Z", col:"#6b6f78", powered:true,
+                    slow:true, glow:"#cfe6ff" });
+const BATT  = def({ name:"Battery", key:"B", col:"#d9c246", dissolvable:false });
+
+/* Rest of the electronics set. Sources: Battery (always on), Dynamo (pulses, so
+   it works as a clock), Sensor (fires when it sees fire/lava/sparks - the piece
+   that closes the loop and lets a circuit react to the world). Routing: Switch,
+   which is two materials rather than a state bit, and Rubber, which conducts
+   nothing. Outputs: Lamp (shows charge) and Heater (turns charge back into heat). */
+const RUBBER = def({ name:"Rubber",  key:"N", col:"#2b2f3a" });
+const SWITCH = def({ name:"Switch",  key:"K", col:"#37624a" });
+const SWITCHON = def({ name:"Switch on", key:"", col:"#5fe08a",
+                      hidden:true, powered:true });
+const LAMP   = def({ name:"Lamp",    key:"G", col:"#4a4630", powered:true,
+                     glow:"#fff0c0" });
+const LEDR   = def({ name:"LED red",   key:"", col:"#3a1414", powered:true,
+                     glow:"#ff4040" });
+const LEDG   = def({ name:"LED green", key:"", col:"#143a18", powered:true,
+                     glow:"#48ff60" });
+const LEDB   = def({ name:"LED blue",  key:"", col:"#14243a", powered:true,
+                     glow:"#4aa8ff" });
+const HEATER = def({ name:"Heater",  key:"F", col:"#5a2b22", powered:true,
+                     glow:"#ff8a3d" });
+const COOLER = def({ name:"Cooler",  key:"D", col:"#22415e", powered:true,
+                     glow:"#a8ecff" });
+const FAN    = def({ name:"Fan",     key:"A", col:"#6f7886", powered:true,
+                     glow:"#e4eefb" });
+const DYNAMO = def({ name:"Dynamo",  key:"J", col:"#b96ad9", dissolvable:false });
+const SENSOR = def({ name:"Sensor",  key:"V", col:"#3fd0bd", dissolvable:false });
+
+/* ---- life ---------------------------------------------------------------
+   A small food chain rather than a set of unrelated props: Dirt holds a Seed,
+   a wet seed becomes a Sapling, the sapling climbs into a trunk and throws a
+   Leaf crown, Moss creeps over damp stone, Algae fills still water - and Bugs
+   graze the greenery while Fish graze the algae. Everything here burns except
+   the fish, and everything here can starve. */
+const DIRT  = def({ name:"Dirt",    key:"", col:"#6b4a2f", density:18, movable:true });
+const SEED  = def({ name:"Seed",    key:"", col:"#c9a24a", density:16, movable:true,
+                    flammable:true, flammability:0.3, burn:20 });
+const SAPLING = def({ name:"Sapling", key:"", col:"#5fb04a",
+                    flammable:true, flammability:0.3, burn:40 });
+const LEAF  = def({ name:"Leaf",    key:"", col:"#3f8f3a",
+                    flammable:true, flammability:0.45, burn:26 });
+const MOSS  = def({ name:"Moss",    key:"", col:"#4a7a3a",
+                    flammable:true, flammability:0.3, burn:30 });
+const ALGAE = def({ name:"Algae",   key:"", col:"#3d7a5c",
+                    flammable:true, flammability:0.1, burn:18 });
+/* Yellow mold: moss that hunts. Dry mold looks for the nearest water and grows
+   straight at it, chewing through stone on the way; once it reaches water it
+   colonises around the source like moss does. */
+const MOLD  = def({ name:"Yellow mold", key:"", col:"#d4c22e", unreal:true,
+                    flammable:true, flammability:0.25, burn:24 });
+const BUG   = def({ name:"Bug",     key:"", col:"#9a5a28",
+                    flammable:true, flammability:0.6, burn:12 });
+const FISH  = def({ name:"Fish",    key:"", col:"#c86a3a" });
+
+/* Predators and world-changers. Bug and Fish were prey with nothing hunting
+   them; these close the chain. Worm and Bee also *change* the map - the worm
+   turns sand into soil as it tunnels, the bee spreads greenery - so an
+   ecosystem left alone slowly improves its own ground. */
+const WEB    = def({ name:"Web",    key:"", col:"#c2c7d1",
+                     flammable:true, flammability:0.7, burn:10 });
+const WORM   = def({ name:"Worm",   key:"", col:"#c98a90" });
+const BIRD   = def({ name:"Bird",   key:"", col:"#dfe6f0" });
+const SPIDER = def({ name:"Spider", key:"", col:"#26262f" });
+const FROG   = def({ name:"Frog",   key:"", col:"#57a83d" });
+const SHARK  = def({ name:"Shark",  key:"", col:"#7f8c9e" });
+const BEE    = def({ name:"Bee",    key:"", col:"#e8c23a" });
+
+/* ---- UNREAL -------------------------------------------------------------
+   The mold heart grows on its own inside a big enough mold mass. While one is
+   alive the mold is "awake": it no longer needs water at all, and everything it
+   touches turns into a yellow infected copy of itself. Infected things keep
+   behaving as they always did - infected bees still fly, infected fish still
+   swim - but they carry the infection with them, which is what makes it spread
+   across a map instead of creeping outward from one spot.
+   Burn the heart and the mold goes back to being an ordinary thirsty plant. */
+const HEART   = def({ name:"Mold heart", key:"", col:"#f5e13a", glow:"#fffbb0", unreal:true,
+                      flammable:true, flammability:0.25, burn:60 });
+const INFDIRT = def({ name:"Infected dirt",  key:"", col:"#8a7a2a", density:18,
+                      movable:true });
+const INFWATER= def({ name:"Infected water", key:"", col:"#9a9a35", density:10,
+                      movable:true, disperse:6, wet:true });
+const INFPLANT= def({ name:"Infected plant", key:"", col:"#a8b02e", unreal:true,
+                      flammable:true, flammability:0.35, burn:40 });
+const INFLEAF = def({ name:"Infected leaf",  key:"", col:"#9aa82c", unreal:true,
+                      flammable:true, flammability:0.45, burn:26 });
+const INFBEE  = def({ name:"Infected bee",   key:"", col:"#f0e04a" });
+const INFBIRD = def({ name:"Infected bird",  key:"", col:"#e8e07a" });
+const INFSPIDER=def({ name:"Infected spider",key:"", col:"#7a7226" });
+const INFBUG  = def({ name:"Infected bug",   key:"", col:"#b09a2e" });
+const INFFISH = def({ name:"Infected fish",  key:"", col:"#d4c25a" });
+/* Spores are the reason the infection jumps gaps instead of only creeping. The
+   heart pumps them out, infected animals trail them, and they drift on the air
+   until they touch something they can take. Flammable, so fire clears the air. */
+const SPORE   = def({ name:"Spore",  key:"", col:"#e8dc72", density:2, gas:true, unreal:true,
+                      movable:true, flammable:true, flammability:0.5, burn:8 });
+const INFSTONE= def({ name:"Infected stone", key:"", col:"#8a8450" });
+const INFWOOD = def({ name:"Infected wood",  key:"", col:"#8a7030", unreal:true,
+                      flammable:true, flammability:0.05, burn:90 });
+const INFMETAL= def({ name:"Infected wire",  key:"", col:"#a8a04a",
+                      powered:true, glow:"#fff7a0" });
+const INFWORM = def({ name:"Infected worm",  key:"", col:"#d0c060" });
+const INFFROG = def({ name:"Infected frog",  key:"", col:"#a8b83a" });
+const INFSHARK= def({ name:"Infected shark", key:"", col:"#b0a860" });
+/* Tendril: awakened mold throws these out, and unlike the mold they hunt
+   *animals* rather than water - they crawl toward the nearest living thing and
+   take it. Each has a finite reach so a nest cannot tendril the whole map. */
+const TENDRIL = def({ name:"Tendril",  key:"", col:"#b8c235", unreal:true,
+                      flammable:true, flammability:0.4, burn:20 });
+/* Mold sac: laid by the heart, hatches infected bugs on a timer. */
+const EGG     = def({ name:"Mold sac", key:"", col:"#cbbb3c", unreal:true,
+                      flammable:true, flammability:0.3, burn:30 });
+
+const ICE   = def({ name:"Ice",    key:"Q", col:"#a6dcff" });
+
+const STEAM = def({ name:"Steam",  key:"W", col:"#c3cfdd", density:2, gas:true,
+                    movable:true, dissolvable:false });
+
+const SMOKE = def({ name:"Smoke",  key:"E", col:"#5c6270", density:2, gas:true,
+                    movable:true, dissolvable:false });
+
+const GLASS = def({ name:"Glass",  key:"R", col:"#bfe8f0" });
+
+const WALL  = def({ name:"Wall",   key:"T", col:"#464c58", dissolvable:false });
+
+/* These two are defined LAST on purpose. A save is RLE over raw material ids,
+   so inserting a def in the middle would renumber everything after it and turn
+   every existing save into nonsense. New materials go on the end. */
+
+/* Husk: what an infected animal leaves behind when it dies of anything except
+   fire. It shambles toward the living, takes what it touches, and bursts into
+   spores when it finally falls apart - so killing a host is not the end of it,
+   and starving the infection out is worse than burning it. */
+const HUSK  = def({ name:"Husk", key:"", col:"#9a8f4e", density:60, movable:true,
+                    unreal:true, flammable:true, flammability:0.35, burn:22 });
+
+/* Pale fire: what infected fuel burns with. It consumes exactly as fire does -
+   burning is still the answer - but it throws spores the whole time it burns,
+   so a careless burn seeds the thing it was lit to clear. Spreading into CLEAN
+   fuel it becomes ordinary fire again (see ignite), which is what stops a
+   single pale flame from taking the whole map. */
+const PFIRE = def({ name:"Pale fire", key:"", col:"#e9ff9c", glow:"#ffffc8",
+                    density:3, movable:true, unreal:true, dissolvable:false });
+
+/* Bloom: what a heart becomes if you leave it alone long enough. Everything the
+   heart does, harder and further - it takes ground at RANGE rather than by
+   contact, and it is the reason a nest you ignored is a different problem from
+   the one you found. It burns like the heart, just slower. */
+const BLOOM = def({ name:"Bloom", key:"", col:"#fff36a", glow:"#ffffd8",
+                    unreal:true, flammable:true, flammability:0.18, burn:110 });
+
+/* Snow: piles like sand, melts near anything warm, and packs into ice under a
+   Cooler. It is the only powder that answers to temperature. */
+const SNOW  = def({ name:"Snow", key:"", col:"#e8f2ff", density:14, movable:true,
+                    disperse:1 });
+
+/* Moth: flies at the nearest light and burns for it. Feeds on leaves, so a
+   lantern over a garden is a moth trap. */
+const MOTH  = def({ name:"Moth", key:"", col:"#c9bda4", flammable:true,
+                    flammability:0.7, burn:10 });
+
+/* Infected oil: still floats on water and still burns - but it burns PALE, so
+   a slick of it is a spore delivery system waiting for a spark. */
+const INFOIL = def({ name:"Infected oil", key:"", col:"#6b6420", density:8,
+                     movable:true, disperse:4, unreal:true,
+                     flammable:true, flammability:0.35, burn:70 });
+
+const INFMOTH = def({ name:"Infected moth", key:"", col:"#d8cf6a", unreal:true,
+                      flammable:true, flammability:0.7, burn:10 });
+
+/* Cloner: shows it something once and it makes that forever. `life` holds the
+   material it learned, so a cloner is armed by whatever touches it first -
+   press it against water for a spring, against lava for a volcano. */
+const CLONER = def({ name:"Cloner", key:"", col:"#7a5ea8", dissolvable:false });
+
+/* Void: the opposite. Everything that touches it is gone - no blast, no smoke,
+   no trace. The clean way to drain a flood or cut a fire line. */
+const VOID  = def({ name:"Void", key:"", col:"#2a2333", dissolvable:false });
+
+/* Cure: the answer to the yellow. A liquid that turns infected things back into
+   what they were and is used up doing it, so it is a supply you spend rather
+   than a switch you flip. It will not raise the dead - a husk or a spore is
+   simply gone. */
+const CURE  = def({ name:"Cure", key:"", col:"#8fe6d2", density:9, movable:true,
+                    disperse:5, dissolvable:false });
+
+/* Magnet: drags loose metal to it. An area scan per magnet per step, so paint()
+   places ONE per click, exactly like the black hole. */
+const MAGNET= def({ name:"Magnet", key:"", col:"#b4384c", dissolvable:false });
+
+/* Firework: a charge that climbs before it bursts, and bursts into colour
+   rather than a crater. `life` is the fuse, as with every other explosive. */
+const FWORK = def({ name:"Firework", key:"", col:"#e35da8", density:20,
+                    movable:true, explosive:true, fuse:34 });
+
+/* Spider hive: a nest that breeds ORDINARY spiders and hangs silk around itself.
+   Nothing to do with the yellow - a hive is just where spiders come from. Where
+   a mold sac hatches one bug and re-clutches, a hive is permanent: it keeps
+   producing as long as it has room, and the web it spins catches the prey they
+   feed on. It can be infected like anything else, and then it is a problem. */
+const HIVE  = def({ name:"Spider hive", key:"", col:"#8d7f72",
+                    flammable:true, flammability:0.3, burn:70 });
+
+/* Infected silk. Web had been mapping to infected LEAF, which does not catch
+   anything - so a hive spun 112 cells of silk, its own spiders infected it, and
+   every trap it built quietly stopped working. Infected web still catches. */
+const INFWEB= def({ name:"Infected web", key:"", col:"#c3bd7a", unreal:true,
+                    flammable:true, flammability:0.6, burn:14 });
+
+/* Honey: a slow, thick liquid that holds whatever wades into it - the same grip
+   a web has, which is why both are asked about in one place (see stuck()). Bugs
+   and bees feed on it, and it burns. */
+const HONEY = def({ name:"Honey", key:"", col:"#d99a20", density:12, movable:true,
+                    disperse:1, flammable:true, flammability:0.2, burn:60 });
+
+/* Beehive: the bees' answer to the spider hive. Breeds bees and drips honey,
+   and like the spider hive it is permanent and sleeps when it has no room. */
+const BEEHIVE=def({ name:"Beehive", key:"", col:"#caa53f",
+                    flammable:true, flammability:0.3, burn:70 });
+
+/* Mushroom: grows on damp dirt and dead wood rather than in the light, so it
+   fills the caves and undersides that nothing else uses. Food, like anything
+   else green. */
+const SHROOM= def({ name:"Mushroom", key:"", col:"#c88d84",
+                    flammable:true, flammability:0.3, burn:18 });
+
+/* Torch: a light that does not spread. Moths come to it, it melts ice and it
+   glows - but it will not set the room on fire, which is what makes it usable
+   as furniture rather than as a weapon. */
+const TORCH = def({ name:"Torch", key:"", col:"#c8823a", glow:"#ffd08a",
+                    dissolvable:false });
+
+/* Balloon: rises until something stops it, and pops into fire when anything hot
+   touches it. Fill a cave roof with them and light one. */
+const BALLOON=def({ name:"Balloon", key:"", col:"#d84f6a", density:1,
+                    movable:true, flammable:true, flammability:0.9, burn:14 });
+
+/* Flat typed-array mirrors of the fields the inner loop touches. Reading a
+   Uint8Array is far cheaper than walking MATS[id].density for every one of the
+   ~96k cells we visit each step. */
+const DENS = new Uint16Array(MATS.length);
+const MOVE = new Uint8Array(MATS.length);
+const DISP = new Uint8Array(MATS.length);
+const EXPL = new Uint8Array(MATS.length);
+const PWR  = new Uint8Array(MATS.length);
+const HOPS = new Uint8Array(MATS.length);
+const SLOW = new Uint8Array(MATS.length);
+/* WET lets infected water behave as water everywhere without a second check at
+   every call site. */
+const WET  = new Uint8Array(MATS.length);
+MATS.forEach(m => { WET[m.id] = m.wet ? 1 : 0; });
+/* Flammability and fuse length, flattened for the same reason as DENS and MOVE:
+   the blast loops touch every cell in a ring and were reading MATS[m].flammable
+   off the object each time. With 86 materials that lookup is megamorphic, and it
+   showed - a mega-nuke frame drifted from ~22 ms to ~33 ms, right on the 30 FPS
+   budget. FUSE is 0 for anything with no fuse of its own; callers keep their own
+   fallback. */
+const FLAM  = new Uint8Array(MATS.length);
+const FUSE  = new Uint8Array(MATS.length);
+const FLAMY = new Float32Array(MATS.length);   // chance to catch
+const BURN  = new Uint16Array(MATS.length);    // how long it burns for
+MATS.forEach(m => {
+  FLAM[m.id]  = m.flammable ? 1 : 0;
+  FUSE[m.id]  = m.fuse || 0;
+  FLAMY[m.id] = m.flammability || 0;
+  BURN[m.id]  = m.burn || 30;
+});
+
+/* Gases are the one thing a liquid will not shove SIDEWAYS - see updLiquid. */
+const GAS  = new Uint8Array(MATS.length);
+MATS.forEach(m => { GAS[m.id] = m.gas ? 1 : 0; });
+/* Which materials belong to the infection - decides pale fire vs ordinary. */
+const UNREAL = new Uint8Array(MATS.length);
+MATS.forEach(m => { UNREAL[m.id] = m.unreal ? 1 : 0; });
+
+/* What each thing becomes when the awakened mold takes it. 0 = immune. */
+const INFECT = new Uint8Array(MATS.length);
+INFECT[DIRT]  = INFDIRT;  INFECT[SAND]   = INFDIRT;  INFECT[WATER]  = INFWATER;
+INFECT[PLANT] = INFPLANT; INFECT[SAPLING]= INFPLANT; INFECT[ALGAE]  = INFPLANT;
+INFECT[LEAF]  = INFLEAF;  INFECT[MOSS]   = MOLD;     INFECT[SEED]   = INFPLANT;
+INFECT[BEE]   = INFBEE;   INFECT[BIRD]   = INFBIRD;  INFECT[SPIDER] = INFSPIDER;
+INFECT[BUG]   = INFBUG;   INFECT[FISH]   = INFFISH;  INFECT[FROG]   = INFFROG;
+INFECT[STONE] = INFSTONE; INFECT[GLASS]  = INFSTONE; INFECT[WOOD]   = INFWOOD;
+INFECT[METAL] = INFMETAL; INFECT[COPPER] = INFMETAL; INFECT[IRON]   = INFMETAL;
+INFECT[WORM]  = INFWORM;  INFECT[SHARK]  = INFSHARK; INFECT[WEB]    = INFWEB;
+/* Oil, moths, and every powered part - a whole machine can be taken now, and an
+   infected lamp still lights, it just lights something that is no longer yours. */
+INFECT[OIL]   = INFOIL;   INFECT[MOTH]   = INFMOTH;  INFECT[SNOW]   = INFWATER;
+/* A hive is not part of the yellow - but it can be taken like anything else. */
+INFECT[HIVE]  = MOLD;     INFECT[BEEHIVE]= MOLD;    INFECT[SHROOM] = MOLD;
+INFECT[BATT]  = INFMETAL; INFECT[LAMP]   = INFMETAL; INFECT[SWITCH] = INFMETAL;
+INFECT[DYNAMO]= INFMETAL; INFECT[SENSOR] = INFMETAL; INFECT[HEATER] = INFMETAL;
+INFECT[COOLER]= INFMETAL; INFECT[FAN]    = INFMETAL; INFECT[LEDR]   = INFMETAL;
+INFECT[LEDG]  = INFMETAL; INFECT[LEDB]   = INFMETAL;
+MATS.forEach(m => { DENS[m.id] = m.density; MOVE[m.id] = m.movable ? 1 : 0;
+                    DISP[m.id] = m.disperse; EXPL[m.id] = m.explosive ? 1 : 0;
+                    PWR[m.id]  = m.powered ? 1 : 0; HOPS[m.id] = m.hops;
+                    SLOW[m.id] = m.slow ? 1 : 0; });
+
+/* Anything with a `glow` fades from its base colour to that colour as charge
+   rises, which is how current is made visible travelling down a wire. */
+const GLOWS = new Uint8Array(MATS.length);
+const BR = new Uint8Array(MATS.length), BG = new Uint8Array(MATS.length), BB = new Uint8Array(MATS.length);
+const GR = new Uint8Array(MATS.length), GG = new Uint8Array(MATS.length), GB = new Uint8Array(MATS.length);
+MATS.forEach(m => {
+  BR[m.id] = parseInt(m.col.slice(1, 3), 16);
+  BG[m.id] = parseInt(m.col.slice(3, 5), 16);
+  BB[m.id] = parseInt(m.col.slice(5, 7), 16);
+  if (m.glow) {
+    GLOWS[m.id] = 1;
+    GR[m.id] = parseInt(m.glow.slice(1, 3), 16);
+    GG[m.id] = parseInt(m.glow.slice(3, 5), 16);
+    GB[m.id] = parseInt(m.glow.slice(5, 7), 16);
+  }
+});
+
+/* ------------------------------------------------------------- palette --- */
+/* Eight pre-shaded variants per material, picked with the per-cell noise, so
+   large fills look grainy instead of flat. */
+const PAL = MATS.map(m => {
+  const out = new Uint32Array(8);
+  const r = parseInt(m.col.slice(1, 3), 16),
+        g = parseInt(m.col.slice(3, 5), 16),
+        b = parseInt(m.col.slice(5, 7), 16);
+  const spread = (m.id === EMPTY) ? 3 : 16;
+  for (let k = 0; k < 8; k++) {
+    const d = ((k - 3.5) / 3.5) * spread;
+    const cl = v => Math.max(0, Math.min(255, Math.round(v + d)));
+    out[k] = (255 << 24) | (cl(b) << 16) | (cl(g) << 8) | cl(r);
+  }
+  return out;
+});
+
+function glowColor(m, l) {                   // base colour -> its glow colour
+  const t = Math.min(1, l / 40);
+  const r = Math.round(BR[m] + (GR[m] - BR[m]) * t);
+  const g = Math.round(BG[m] + (GG[m] - BG[m]) * t);
+  const b = Math.round(BB[m] + (GB[m] - BB[m]) * t);
+  return (255 << 24) | (b << 16) | (g << 8) | r;
+}
+
+function fireColor(l) {                      // hot core fading to dull red
+  const t = Math.min(1, l / 70);
+  const r = 255,
+        g = Math.round(60 + 150 * t),
+        b = Math.round(20 + 40 * t);
+  return (255 << 24) | (b << 16) | (g << 8) | r;
+}
+
+/* --------------------------------------------------------- move helpers --- */
+function swap(i, j) {
+  const m = mat[i];  mat[i]  = mat[j];  mat[j]  = m;
+  const l = life[i]; life[i] = life[j]; life[j] = l;
+  moved[i] = 1; moved[j] = 1;
+  touch(i);     touch(j);
+}
+// a sinking cell (powder/liquid) may enter anything lighter than itself
+function canSink(d, t) { return MOVE[t] === 1 && DENS[t] < d; }
+// a rising cell (gas/fire) may enter anything heavier than itself
+function canRise(d, t) { return MOVE[t] === 1 && DENS[t] > d; }
+
+const DX4 = [0, 0, -1, 1], DY4 = [-1, 1, 0, 0];
+
+/* ------------------------------------------------------------- rules ----- */
+/* All rules take the material id `m` rather than the MATS entry, so the hot
+   path reads DENS[m] / DISP[m] out of a typed array instead of chasing an
+   object property. They are also plain declarations, not arrow wrappers -
+   a `(...a) => fn(...a)` shim allocates an argument array per cell per step. */
+
+function updPowder(x, y, i, m) {
+  const d0 = DENS[m];
+  if (y + 1 < H && canSink(d0, mat[i + W])) { swap(i, i + W); return; }
+  if (y + 1 >= H) return;
+  let d = Math.random() < 0.5 ? -1 : 1;
+  for (let t = 0; t < 2; t++, d = -d) {
+    const nx = x + d;
+    if (nx < 0 || nx >= W) continue;
+    const j = i + W + d;
+    if (canSink(d0, mat[j])) { swap(i, j); return; }
+  }
+}
+
+function updLiquid(x, y, i, m) {
+  const d0 = DENS[m];
+  if (y + 1 < H) {
+    if (canSink(d0, mat[i + W])) { swap(i, i + W); return; }
+    let d = Math.random() < 0.5 ? -1 : 1;
+    for (let t = 0; t < 2; t++, d = -d) {
+      const nx = x + d;
+      if (nx < 0 || nx >= W) continue;
+      const j = i + W + d;
+      if (canSink(d0, mat[j])) { swap(i, j); return; }
+    }
+  }
+  /* Spread sideways, as far as the path stays clear - but never THROUGH a gas.
+     A gas is lighter than any liquid, so density alone said "flow into it", and
+     surface water was swapping the same bubble aside every single step. A cell
+     displaced by someone else is skipped by cell(), so that bubble never got a
+     turn of its own: it never aged, never germinated and never took the roll
+     that is supposed to drown it. Spores were surviving a pool indefinitely.
+     Gases still get displaced VERTICALLY, so bubbles rise as before. */
+  const span = DISP[m];
+  let d = Math.random() < 0.5 ? -1 : 1;
+  for (let t = 0; t < 2; t++, d = -d) {
+    let last = -1;
+    for (let k = 1; k <= span; k++) {
+      const nx = x + d * k;
+      if (nx < 0 || nx >= W) break;
+      const j = i + d * k;
+      if (!canSink(d0, mat[j]) || GAS[mat[j]]) break;
+      last = j;
+    }
+    if (last >= 0) { swap(i, last); return; }
+  }
+}
+
+function updGas(x, y, i, m) {
+  const d0 = DENS[m];
+  if (y > 0) {
+    if (canRise(d0, mat[i - W])) { swap(i, i - W); return; }
+    const d = Math.random() < 0.5 ? -1 : 1;      // one random diagonal
+    const nx = x + d;
+    if (nx >= 0 && nx < W && canRise(d0, mat[i - W + d])) { swap(i, i - W + d); return; }
+  }
+  if (Math.random() < 0.5) {                     // drift
+    const d = Math.random() < 0.5 ? -1 : 1;
+    const nx = x + d;
+    if (nx >= 0 && nx < W && canRise(d0, mat[i + d])) swap(i, i + d);
+  }
+}
+
+/* Rules below act on a random roll or on a timer, so "did nothing this step"
+   does NOT mean settled - they must keep their own chunk awake by hand, or the
+   scheduler would put a burning fire or a ticking cloud of smoke to sleep. */
+
+/* life is a Uint8Array, so test before decrementing - 0-- would wrap to 255 */
+function updSmoke(x, y, i, m) {
+  touch(i);
+  if (life[i] <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  life[i]--;
+  updGas(x, y, i, m);
+}
+
+function updSteam(x, y, i, m) {
+  touch(i);
+  if (life[i] <= 1) {                              // condenses back to water
+    mat[i] = Math.random() < 0.6 ? WATER : EMPTY;
+    life[i] = 0;
+    return;
+  }
+  life[i]--;
+  updGas(x, y, i, m);
+}
+
+/* Explosives are not detonated on the spot - fire lights a short fuse and the
+   charge goes off a few steps later. That is what lets a blast light every
+   charge it reaches and have them cook off in a ragged cascade. */
+function ignite(j, nm) {
+  if (EXPL[nm] === 1) {
+    if (life[j] === 0) life[j] = FUSE[nm] || (1 + rnd(4));
+    moved[j] = 1; touch(j);
+  } else {
+    // infected fuel burns pale, and everything else burns clean - which is why
+    // pale fire dies out at the edge of the infection instead of eating a map
+    mat[j] = UNREAL[nm] === 1 ? PFIRE : FIRE;
+    life[j] = BURN[nm]; moved[j] = 1; touch(j);
+  }
+}
+
+function updExplosive(x, y, i, m) {
+  if (life[i] > 0) {                       // fuse burning - and still falling
+    touch(i);
+    if (life[i] === 1) {
+      life[i] = 0;
+      const M = MATS[m];
+      if (M.mega) {                          // staged shockwave, not one flash
+        mat[i] = FIRE; life[i] = 150; moved[i] = 1; touch(i);
+        // slower ring = more frames, each doing less work, so no frame spikes
+        startWave(x, y, M.blast, 8);
+      } else {
+        explode(x, y, M.blast, M.nuclear);
+      }
+      return;
+    }
+    life[i]--;
+  }
+  updPowder(x, y, i, m);
+}
+
+function updFire(x, y, i, m) {
+  touch(i);
+  let l = life[i] - 1;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (WET[nm] === 1) {                           // doused -> steam + smoke
+      mat[i] = SMOKE; life[i] = 40 + rnd(40);
+      mat[j] = STEAM; life[j] = 90 + rnd(60); moved[j] = 1; touch(j);
+      return;
+    }
+    if (nm === ICE) { mat[j] = WATER; life[j] = 0; touch(j); l -= 12; continue; }
+    if (FLAM[nm] === 1 && Math.random() < FLAMY[nm]) ignite(j, nm);
+  }
+  if (l <= 0) {
+    if (Math.random() < 0.7) { mat[i] = SMOKE; life[i] = 50 + rnd(60); }
+    else { mat[i] = EMPTY; life[i] = 0; }
+    return;
+  }
+  life[i] = l;
+  if (Math.random() < 0.6) updGas(x, y, i, m);
+}
+
+function updLava(x, y, i, m) {
+  touch(i);
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (WET[nm] === 1) {                           // quenched into stone
+      mat[i] = STONE; life[i] = 0;
+      mat[j] = STEAM; life[j] = 110 + rnd(60); moved[j] = 1; touch(j);
+      return;
+    }
+    if (nm === ICE) { mat[j] = WATER; life[j] = 0; touch(j); continue; }
+    if (nm === SAND && Math.random() < 0.02) { mat[j] = GLASS; touch(j); continue; }
+    if (FLAM[nm] === 1 && Math.random() < FLAMY[nm] * 1.5) ignite(j, nm);
+  }
+  if (Math.random() < 0.55) updLiquid(x, y, i, m);  // lava creeps slowly
+}
+
+function updAcid(x, y, i, m) {
+  touch(i);
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (nm === EMPTY || !MATS[nm].dissolvable) continue;
+    if (Math.random() < 0.06) {
+      mat[j] = EMPTY; life[j] = 0; touch(j);
+      if (Math.random() < 0.5) {                   // acid is used up
+        mat[i] = SMOKE; life[i] = 30 + rnd(30);
+        return;
+      }
+    }
+  }
+  updLiquid(x, y, i, m);
+}
+
+/* Plant works exactly like moss: `life` is hydration, water sets it full, and
+   each cell hands its neighbours one less - so a vine that touches water at a
+   single point can grow along its whole connected length. It creeps into open
+   air as well as water, and stops where it is already crowded so it grows as
+   runners rather than a solid green slab. */
+function updPlant(x, y, i, m) {
+  touch(i);
+  let h = life[i], best = 0, kin = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (WET[nm] === 1 || nm === ICE) best = MOSS_WET;
+    else if (nm === PLANT) { kin++; if (life[j] > best + 1) best = life[j] - 1; }
+  }
+  if (best > h) h = best;
+  else if (h > 0 && (frame & 7) === 0) h--;    // cut off from water: dries back
+  life[i] = h;
+  if (h === 0 || kin >= 3) return;
+  if (Math.random() > 0.03) return;
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx, t = mat[j];
+  if (t === EMPTY || t === WATER) { mat[j] = PLANT; life[j] = h - 1; moved[j] = 1; touch(j); }
+}
+
+/* Rule lookup by material id - a flat array, so step() never touches MATS. */
+const RULES = new Array(MATS.length).fill(null);
+RULES[SAND]  = updPowder;
+RULES[POWDR] = updExplosive; RULES[BOMB] = updExplosive;
+RULES[NUKE]  = updExplosive; RULES[MEGA] = updExplosive;
+RULES[SPARK] = updSpark;     RULES[HOLE] = updHole;
+RULES[METAL] = updMetal;     RULES[BATT]   = updBatt;
+RULES[SWITCHON] = updMetal;  RULES[LAMP]   = updLamp;
+RULES[HEATER]   = updHeater; RULES[DYNAMO] = updDynamo;
+RULES[SENSOR]   = updSensor; RULES[COPPER] = updMetal;
+RULES[IRON]     = updMetal;  RULES[COOLER] = updCooler;
+RULES[FAN]      = updFan;
+RULES[LEDR]     = updLamp;   RULES[LEDG]   = updLamp;
+RULES[LEDB]     = updLamp;
+RULES[DIRT]     = updPowder; RULES[SEED]   = updSeed;
+RULES[SAPLING]  = updSapling; RULES[MOSS]  = updMoss;
+RULES[MOLD]     = updMold;   RULES[HEART]  = updHeart;
+RULES[INFDIRT]  = updInfDirt;   RULES[INFWATER]  = updInfWater;
+RULES[INFPLANT] = updInfPlant;  RULES[INFLEAF]   = updInfLeaf;
+RULES[INFBEE]   = updInfBee;    RULES[INFBIRD]   = updInfBird;
+RULES[INFSPIDER]= updInfSpider; RULES[INFBUG]    = updInfBug;
+RULES[INFFISH]  = updInfFish;   RULES[SPORE]     = updSpore;
+RULES[INFSTONE] = updInfStone;  RULES[INFWOOD]   = updInfStone;
+RULES[INFMETAL] = updInfMetal;  RULES[INFWORM]   = updInfWorm;
+RULES[INFFROG]  = updInfFrog;   RULES[INFSHARK]  = updInfShark;
+RULES[TENDRIL]  = updTendril;   RULES[EGG]       = updEgg;
+RULES[HUSK]     = updHusk;      RULES[PFIRE]     = updPFire;
+RULES[SNOW]     = updSnow;      RULES[MOTH]      = updMoth;
+RULES[CLONER]   = updCloner;    RULES[VOID]      = updVoid;
+RULES[CURE]     = updCure;      RULES[MAGNET]    = updMagnet;
+RULES[TORCH]    = updTorch;     RULES[BALLOON]   = updGas;
+RULES[WEB]      = updWeb;      RULES[HIVE]      = updHive;
+RULES[BEEHIVE]  = updBeehive;  RULES[SHROOM]    = updShroom;
+RULES[HONEY]    = updLiquid;
+RULES[INFWEB]   = updInfWeb;
+RULES[FWORK]    = updFwork;
+RULES[INFOIL]   = updInfOil;    RULES[INFMOTH]   = updInfMoth;
+RULES[BLOOM]    = updBloom;
+RULES[ALGAE]    = updAlgae;  RULES[BUG]    = updBug;
+RULES[FISH]     = updFish;   RULES[BIRD]   = updBird;
+RULES[BEE]      = updBee;    RULES[WORM]   = updWorm;
+RULES[SPIDER]   = updSpider; RULES[FROG]   = updFrog;
+RULES[SHARK]    = updShark;
+RULES[WATER] = updLiquid;  RULES[OIL]   = updLiquid;
+RULES[ACID]  = updAcid;    RULES[LAVA]  = updLava;
+RULES[FIRE]  = updFire;    RULES[PLANT] = updPlant;
+RULES[SMOKE] = updSmoke;   RULES[STEAM] = updSteam;
+
+function explode(cx, cy, r, nuke) {
+  const ci = cy * W + cx;                  // the spent charge itself
+  const core = r * (nuke ? 0.28 : 0.45);   // everything here becomes fire
+  const mid  = r * (nuke ? 0.60 : 1.00);   // scoured
+  for (let y = cy - r; y <= cy + r; y++) {
+    if (y < 0 || y >= H) continue;
+    for (let x = cx - r; x <= cx + r; x++) {
+      if (x < 0 || x >= W) continue;
+      const dx = x - cx, dy = y - cy, d = Math.sqrt(dx * dx + dy * dy);
+      if (d > r) continue;
+      const i = y * W + x, m = mat[i];
+      if (m === WALL || m === HOLE) continue;    // a black hole shrugs off blasts
+      // other charges are lit, not erased, so the blast chains outward in a
+      // cascade instead of flattening everything in a single frame
+      if (i !== ci && EXPL[m] === 1) {
+        if (life[i] === 0) { life[i] = FUSE[m] || (2 + rnd(10)); touch(i); }
+        continue;
+      }
+      if (d < core) {
+        mat[i] = FIRE; life[i] = nuke ? 90 + rnd(60) : 30 + rnd(30);
+        moved[i] = 1; touch(i);
+      } else if (d < mid) {
+        if (!nuke && Math.random() >= 0.6) continue;   // patchy edge, small charges
+        if      (nuke && m === SAND)  { mat[i] = GLASS; life[i] = 0; }
+        else if (nuke && m === WATER) { mat[i] = STEAM; life[i] = 150 + rnd(90); }
+        else if (FLAM[m] === 1)       { mat[i] = FIRE;  life[i] = 18 + rnd(20); }
+        else                          { mat[i] = EMPTY; life[i] = 0; }
+        moved[i] = 1; touch(i);
+      } else if (nuke && Math.random() < 0.5) {
+        // scorched fringe: nothing survives cleanly, and it smokes afterwards
+        if (m === EMPTY) {
+          if (Math.random() < 0.15) { mat[i] = SMOKE; life[i] = 120 + rnd(100); }
+          else continue;
+        }
+        else if (FLAM[m] === 1)     { mat[i] = FIRE;  life[i] = 15 + rnd(20); }
+        else                        { mat[i] = EMPTY; life[i] = 0; }
+        moved[i] = 1; touch(i);
+      }
+    }
+  }
+}
+
+/* ---------------------------------------------------------- shockwave ---- */
+/* A mega blast is spread over many frames as an expanding ring. Only the thin
+   annulus between last frame's radius and this frame's is touched, so the cost
+   per frame stays flat no matter how large the blast grows. */
+const waves = [];
+
+function startWave(cx, cy, max, speed) {
+  waves.push({ cx, cy, r: 0, max, speed });
+}
+
+function waveRing(w, r0, r1) {
+  const cx = w.cx, cy = w.cy;
+  const y0 = Math.max(0, Math.floor(cy - r1)), y1 = Math.min(H - 1, Math.ceil(cy + r1));
+  const x0 = Math.max(0, Math.floor(cx - r1)), x1 = Math.min(W - 1, Math.ceil(cx + r1));
+  const rr0 = r0 * r0, rr1 = r1 * r1;
+  for (let y = y0; y <= y1; y++) {
+    const dy = y - cy, row = y * W;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x - cx, d2 = dx * dx + dy * dy;
+      if (d2 < rr0 || d2 >= rr1) continue;
+      const i = row + x, m = mat[i];
+      if (m === WALL || m === HOLE) continue;    // a black hole shrugs off blasts
+      if (EXPL[m] === 1) {                       // chain any charge it sweeps
+        if (life[i] === 0) { life[i] = FUSE[m] || (2 + rnd(10)); touch(i); }
+        continue;
+      }
+      const f = Math.sqrt(d2) / w.max;
+      if (f < 0.12) { mat[i] = FIRE; life[i] = 120 + rnd(80); }
+      else if (f < 0.45) {
+        if      (m === SAND)        { mat[i] = GLASS; life[i] = 0; }
+        else if (m === WATER)       { mat[i] = STEAM; life[i] = 160 + rnd(90); }
+        else if (FLAM[m] === 1)     { mat[i] = FIRE;  life[i] = 25 + rnd(30); }
+        else                        { mat[i] = EMPTY; life[i] = 0; }
+      } else {
+        if (m === EMPTY) {
+          if (Math.random() < 0.10) { mat[i] = SMOKE; life[i] = 140 + rnd(110); }
+          else continue;
+        }
+        else if (FLAM[m] === 1)          { mat[i] = FIRE;  life[i] = 20 + rnd(25); }
+        else if (Math.random() < 0.85)   { mat[i] = EMPTY; life[i] = 0; }
+        else continue;
+      }
+      moved[i] = 1; touch(i);
+    }
+  }
+}
+
+function stepWaves() {
+  for (let k = waves.length - 1; k >= 0; k--) {
+    const w = waves[k];
+    const r1 = Math.min(w.max, w.r + w.speed);
+    waveRing(w, w.r, r1);
+    w.r = r1;
+    if (r1 >= w.max) waves.splice(k, 1);
+  }
+}
+
+/* ---------------------------------------------------------- lightning ---- */
+function sparkAt(x, y, l) {
+  if (x < 0 || x >= W || y < 0 || y >= H) return false;
+  const i = y * W + x;
+  if (mat[i] === WALL) return false;
+  mat[i] = SPARK; life[i] = l; moved[i] = 1;
+  touch(i); actNow[CHUNK[i]] = 1;
+  return true;
+}
+
+/* Draws a jagged bolt downward from the sky, branching as it goes, and stops on
+   the first thing solid enough to earth it. */
+function bolt(sx, sy, l, depth) {
+  let x = sx, y = sy;
+  for (let guard = 0; guard < H * 2 && y < H; guard++) {
+    sparkAt(x, y, l);
+    if (depth === 0) { sparkAt(x - 1, y, l - 2); sparkAt(x + 1, y, l - 2); }
+    const below = y + 1 < H ? mat[(y + 1) * W + x] : WALL;
+    if (below !== EMPTY && below !== SMOKE && below !== STEAM && below !== SPARK) {
+      strikeGround(x, y, depth === 0 ? 7 : 4);   // earthed
+      return;
+    }
+    y++;
+    x += rnd(3) - 1;
+    if (x < 0) x = 0; else if (x >= W) x = W - 1;
+    if (depth === 0 && Math.random() < 0.05) bolt(x, y, Math.max(4, l - 3), 1);
+  }
+}
+
+function strikeGround(cx, cy, r) {
+  for (let y = cy - r; y <= cy + r; y++) {
+    if (y < 0 || y >= H) continue;
+    for (let x = cx - r; x <= cx + r; x++) {
+      if (x < 0 || x >= W) continue;
+      const dx = x - cx, dy = y - cy;
+      if (dx * dx + dy * dy > r * r) continue;
+      const i = y * W + x, m = mat[i];
+      if (m === WALL || m === SPARK || m === HOLE) continue;
+      const M = MATS[m];
+      if (PWR[m] === 1) { if (life[i] < CHARGE_MAX) { life[i] = CHARGE_MAX; touch(i); } }
+      else if (M.explosive) { if (life[i] === 0) { life[i] = M.fuse || (1 + rnd(4)); touch(i); } }
+      else if (M.flammable && Math.random() < 0.6) { mat[i] = FIRE; life[i] = M.burn || 30; touch(i); }
+      else if (m === SAND && Math.random() < 0.5)  { mat[i] = GLASS; touch(i); }
+      else if (m === WATER && Math.random() < 0.6) { mat[i] = STEAM; life[i] = 120 + rnd(80); touch(i); }
+      else if (m === ICE)                          { mat[i] = WATER; life[i] = 0; touch(i); }
+      moved[i] = 1;
+    }
+  }
+}
+
+const strike = sx => bolt(sx, 0, 12, 0);
+
+function updSpark(x, y, i, m) {
+  touch(i);
+  const l = life[i];
+  if (l <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  life[i] = l - 1;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (nm === EMPTY || nm === SPARK || nm === WALL) continue;
+    if (PWR[nm] === 1) {                         // a strike energises the wire
+      if (life[j] < CHARGE_MAX) { life[j] = CHARGE_MAX; touch(j); }
+      continue;
+    }
+    const NM = MATS[nm];
+    if (EXPL[nm] === 1) { if (life[j] === 0) { life[j] = FUSE[nm] || (1 + rnd(4)); touch(j); } }
+    else if (FLAM[nm] === 1 && Math.random() < 0.35) ignite(j, nm);
+    else if (nm === SAND  && Math.random() < 0.15) { mat[j] = GLASS; touch(j); }
+    else if (nm === WATER && Math.random() < 0.30) { mat[j] = STEAM; life[j] = 110 + rnd(70); touch(j); }
+    else if (nm === ICE)                           { mat[j] = WATER; life[j] = 0; touch(j); }
+  }
+}
+
+/* --------------------------------------------------------- black hole ---- */
+function updHole(x, y, i, m) {
+  touch(i);
+  let eaten = life[i];
+  const R = 12 + Math.min(26, eaten >> 2);      // reach grows with what it ate
+  const R2 = R * R;
+  for (let yy = y - R; yy <= y + R; yy++) {
+    if (yy < 0 || yy >= H) continue;
+    const dy = yy - y;
+    for (let xx = x - R; xx <= x + R; xx++) {
+      if (xx < 0 || xx >= W) continue;
+      const dx = xx - x, d2 = dx * dx + dy * dy;
+      if (d2 === 0 || d2 > R2) continue;
+      const j = yy * W + xx, mm = mat[j];
+      if (mm === EMPTY || mm === WALL || mm === HOLE) continue;
+      if (d2 <= 4) {                             // inside the throat: gone
+        mat[j] = EMPTY; life[j] = 0; moved[j] = 1; touch(j);
+        if (eaten < 255) eaten++;
+        continue;
+      }
+      if (moved[j]) continue;
+      const pull = 1 - Math.sqrt(d2) / R;        // 1 at the throat, 0 at the rim
+      if (Math.random() > 0.12 + pull * 0.78) continue;
+      const sx = dx > 0 ? -1 : dx < 0 ? 1 : 0;
+      const sy = dy > 0 ? -1 : dy < 0 ? 1 : 0;
+      // lead with the dominant axis so matter spirals in instead of jittering
+      let tx = xx, ty = yy;
+      if (Math.abs(dx) > Math.abs(dy)) { tx += sx; if (Math.random() < 0.35) ty += sy; }
+      else                             { ty += sy; if (Math.random() < 0.35) tx += sx; }
+      if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue;
+      const t = ty * W + tx, tm = mat[t];
+      if (tm === HOLE || tm === WALL) continue;
+      if (tm === EMPTY || (MOVE[tm] === 1 && Math.random() < 0.3)) swap(j, t);
+    }
+  }
+  life[i] = eaten;
+}
+
+/* -------------------------------------------------------------- life ----- */
+function nearMat(x, y, r, want) {
+  for (let yy = y - r; yy <= y + r; yy++) {
+    if (yy < 0 || yy >= H) continue;
+    for (let xx = x - r; xx <= x + r; xx++) {
+      if (xx < 0 || xx >= W) continue;
+      if (mat[yy * W + xx] === want) return true;
+    }
+  }
+  return false;
+}
+
+/* Seed: falls like grain, then germinates only if it came to rest on soil with
+   water within reach. Dry ground stays bare. */
+function updSeed(x, y, i, m) {
+  const d0 = DENS[m];
+  if (y + 1 < H) {
+    if (canSink(d0, mat[i + W])) { swap(i, i + W); return; }
+    let d = Math.random() < 0.5 ? -1 : 1;
+    for (let t = 0; t < 2; t++, d = -d) {
+      const nx = x + d;
+      if (nx < 0 || nx >= W) continue;
+      if (canSink(d0, mat[i + W + d])) { swap(i, i + W + d); return; }
+    }
+  }
+  touch(i);
+  if (Math.random() > 0.03) return;
+  const below = y + 1 < H ? mat[i + W] : WALL;
+  if (below !== DIRT && below !== SAND && below !== MOSS) return;
+  if (!nearMat(x, y, 4, WATER)) return;
+  mat[i] = SAPLING; life[i] = 1; touch(i);
+}
+
+/* Sapling: climbs one cell at a time, leaving trunk behind it, and opens into a
+   leaf crown when it tops out or hits something. */
+function updSapling(x, y, i, m) {
+  touch(i);
+  if (Math.random() > 0.07) return;
+  const h = life[i];
+  if (h >= 14 || y === 0) { mat[i] = LEAF; life[i] = 0; touch(i); crown(x, y, 4); return; }
+  const up = i - W;
+  if (mat[up] !== EMPTY) { mat[i] = LEAF; life[i] = 0; touch(i); crown(x, y, 3); return; }
+  mat[up] = SAPLING; life[up] = h + 1; moved[up] = 1; touch(up);
+  mat[i] = WOOD; life[i] = 0;                  // trunk left behind
+}
+
+function crown(cx, cy, r) {
+  for (let y = cy - r; y <= cy + r; y++) {
+    if (y < 0 || y >= H) continue;
+    for (let x = cx - r; x <= cx + r; x++) {
+      if (x < 0 || x >= W) continue;
+      const dx = x - cx, dy = y - cy;
+      if (dx * dx + dy * dy > r * r) continue;
+      const j = y * W + x;
+      if (mat[j] === EMPTY && Math.random() < 0.7) { mat[j] = LEAF; life[j] = 0; touch(j); }
+    }
+  }
+}
+
+/* Moss: creeps over stone, and stays alive on water carried through the patch.
+   `life` is hydration. A cell touching water is fully wet (255) and hands its
+   neighbours one less, so wetness travels along the moss itself - touch water
+   at one point and the whole connected patch can grow, up to 255 cells away.
+   Cut it off from water and it dries from the far end inward, because a cell
+   only ever passes on LESS than it holds. */
+const MOSS_WET = 255;
+
+function updMoss(x, y, i, m) {
+  touch(i);
+  let h = life[i];
+  let best = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (WET[nm] === 1 || nm === ICE) { best = MOSS_WET; break; }
+    if (nm === MOSS && life[j] > best + 1) best = life[j] - 1;
+  }
+  if (best > h) h = best;
+  else if (h > 0 && (frame & 7) === 0) h--;    // no source: slowly dries out
+  life[i] = h;
+  if (h === 0) return;                         // dry moss cannot spread
+  if (Math.random() > 0.02) return;
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx;
+  if (mat[j] === STONE) { mat[j] = MOSS; life[j] = h - 1; touch(j); }
+}
+
+/* Algae: fills still water and withers out of it. Fish food. */
+function updAlgae(x, y, i, m) {
+  touch(i);
+  // 4 neighbours only - an area scan here runs for every algae cell every step
+  // and a pond full of algae turned that into hundreds of millions of checks
+  let water = 0, kin = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const nm = mat[ny * W + nx];
+    if (WET[nm] === 1) water++;
+    else if (nm === ALGAE) kin++;
+  }
+  if (water === 0) {                           // withers in air
+    if (Math.random() < 0.04) { mat[i] = EMPTY; life[i] = 0; }
+    return;
+  }
+  if (kin >= 3) return;                        // crowded: grows in strands, not slabs
+  if (Math.random() > 0.02) return;
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx;
+  if (mat[j] === WATER) { mat[j] = ALGAE; life[j] = 0; touch(j); }
+}
+
+/* Nearest cell of `want` within r, as a one-step direction. This is an area
+   scan - callers MUST gate it behind a random roll. `step` samples every Nth
+   cell, which buys a much wider search for the same cost; water bodies are
+   several cells across, so a coarse sweep still finds them. */
+function nearestDir(x, y, r, step, pred) {
+  let bx = 0, by = 0, best = 1e9;
+  for (let yy = y - r; yy <= y + r; yy += step) {
+    if (yy < 0 || yy >= H) continue;
+    for (let xx = x - r; xx <= x + r; xx += step) {
+      if (xx < 0 || xx >= W) continue;
+      if (!pred(mat[yy * W + xx])) continue;
+      const d = (xx - x) * (xx - x) + (yy - y) * (yy - y);
+      if (d < best) { best = d; bx = xx; by = yy; }
+    }
+  }
+  if (best === 1e9) return null;
+  return [bx > x ? 1 : bx < x ? -1 : 0, by > y ? 1 : by < y ? -1 : 0];
+}
+
+/* Mold takes soft ground freely and has to grind through rock. */
+function moldGrow(j, h) {
+  const t = mat[j];
+  if (t === EMPTY || t === DIRT || t === SAND) {
+    mat[j] = MOLD; life[j] = h > 0 ? h - 1 : 0; touch(j); return true;
+  }
+  if (t === STONE || t === GLASS) {                // breaking rock is slow
+    if (Math.random() < 0.3) { mat[j] = MOLD; life[j] = h > 0 ? h - 1 : 0; touch(j); }
+    return true;
+  }
+  return false;
+}
+
+/* Is a mold heart alive anywhere? Counted during the previous step, because a
+   rule cannot know what the rest of this step will find. */
+let heartsPrev = 0, heartsNow = 0;
+
+/* Turn neighbours into their infected selves. */
+/* Returns 1 if anything next door COULD still be taken (whether or not the roll
+   went its way this step). Callers use that as their touch() condition: an
+   infected cell with nothing left to infect is as settled as a stone, and if it
+   keeps touching, its chunk never sleeps. A slab of infected stone was holding
+   44 of 104 chunks awake at 17 ms/step for doing nothing at all. */
+function infectAround(x, y, i, chance) {
+  let live = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx;
+    const t = INFECT[mat[j]];
+    if (t === 0) continue;
+    live = 1;
+    if (Math.random() < chance) {
+      mat[j] = t; touch(j);                      // keeps its energy, loses itself
+    }
+  }
+  return live;
+}
+
+/* Is this cell exposed at all? Four neighbours only - deliberately NOT a scan of
+   the spore's radius 3, because this runs per cell per step and that is the
+   shape of mistake `updAlgae` already made once. A leaf sealed on all four sides
+   has nowhere to cough that is not more leaf, so it may as well sleep. */
+function exposed(x, y) {
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny) && mat[ny * W + nx] === EMPTY) return 1;
+  }
+  return 0;
+}
+
+/* Cough a spore into open air. This is what lets the infection cross a gap. */
+function emitSpore(x, y, chance) {
+  if (Math.random() > chance) return;
+  // look a little way out, not just at the four neighbours - a heart is usually
+  // walled in by its own mold, and testing showed it emitting almost nothing
+  for (let a = 0; a < 3; a++) {
+    const nx = x + rnd(7) - 3, ny = y + rnd(7) - 3;
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx;
+    if (mat[j] === EMPTY) {
+      mat[j] = SPORE; life[j] = 70 + rnd(70); moved[j] = 1; touch(j);
+      return;
+    }
+  }
+}
+
+function updSpore(x, y, i, m) {
+  touch(i);
+  if (life[i] <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  life[i]--;
+  /* Clean water drowns a spore, and is checked FIRST - a spore must not be able
+     to convert the very water that is supposed to stop it, or a pool becomes a
+     breeding ground instead of a barrier. Infected water is already lost. */
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny) && mat[ny * W + nx] === WATER && Math.random() < 0.5) {
+      mat[i] = EMPTY; life[i] = 0; return;
+    }
+  }
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (nm === WATER) continue;                      // never the barrier itself
+    const t = INFECT[nm];
+    if (t !== 0 && Math.random() < 0.10) {
+      mat[j] = t; touch(j);
+      if (Math.random() < 0.5) { mat[i] = EMPTY; life[i] = 0; return; }  // spent
+    }
+  }
+
+  /* Settled on something solid: it can take root. This is what turns spores
+     from a delivery mechanism into an infestation - every drifting spore is a
+     potential colony far from the nest that made it. */
+  if (y + 1 < H) {
+    const b = mat[i + W];
+    if (b !== EMPTY && MOVE[b] === 0 && Math.random() < 0.005) {
+      mat[i] = MOLD; life[i] = 0; touch(i);
+      return;
+    }
+  }
+  /* Spores DRIFT - they do not rise like smoke. A strict riser pins itself to
+     the ceiling and can never settle, so it never takes root. Mostly sideways,
+     a little up, a little down, and it moves only into open air so it comes to
+     rest on top of whatever it lands on. */
+  const r = Math.random();
+  let dx = 0, dy = 0;
+  if (r < 0.22)      dy = -1;
+  else if (r < 0.42) dy = 1;
+  else               dx = Math.random() < 0.5 ? -1 : 1;
+  const nx = x + dx, ny = y + dy;
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx;
+  if (mat[j] === EMPTY) swap(i, j);
+}
+
+/* Only one heart ever exists at a time, so its age is a single global rather
+   than a per-cell field - and `life` is spoken for, it drives the pulse the
+   renderer draws. Reset wherever the world changes wholesale. */
+let heartAge = 0;
+
+/* Whether a heart may grow on its own inside a big mold mass. Off by default -
+   see the note in updMold. Toggled by "Wild hearts" under Simulation. */
+let wildHearts = false;
+
+function updHeart(x, y, i, m) {
+  touch(i);
+  heartsNow++;
+  heartAge++;
+  /* Left alone long enough, a heart matures. ~1800 frames is a minute at 30 FPS
+     - long enough that you had every chance to burn it. */
+  if (heartAge > 1800 && Math.random() < 0.02) {
+    mat[i] = BLOOM; life[i] = 60; touch(i);
+    return;
+  }
+  life[i] = 12 + ((frame >> 2) & 27);            // visible pulse
+  infectAround(x, y, i, 0.06);
+  emitSpore(x, y, 0.35);                         // pumps spores into the air
+  emitSpore(x, y, 0.35);
+  /* The heart grows its own tentacles, and long ones - a nest should visibly
+     reach out for things rather than waiting for them to wander in. */
+  if (Math.random() < 0.015) {
+    for (let a = 0; a < 4; a++) {
+      const nx = x + rnd(5) - 2, ny = y + rnd(5) - 2;
+      if (!inb(nx, ny)) continue;
+      const j = ny * W + nx;
+      if (mat[j] === EMPTY || mat[j] === MOLD) {
+        mat[j] = TENDRIL; life[j] = 60; touch(j);
+        break;
+      }
+    }
+  }
+  if (Math.random() < 0.004) {                   // lays a sac now and then
+    const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny)) {
+      const j = ny * W + nx;
+      if (mat[j] === EMPTY || mat[j] === MOLD) {
+        mat[j] = EGG; life[j] = 120 + rnd(120); touch(j);
+      }
+    }
+  }
+  if (Math.random() < 0.10) {                    // keeps its own body growing
+    const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny)) moldGrow(ny * W + nx, MOSS_WET);
+  }
+}
+
+/* The bloom. An area scan every step would normally be banned outright in this
+   file, but there is at most ONE of these in the world - that is the whole
+   reason it is allowed to reach. */
+function updBloom(x, y, i, m) {
+  touch(i);
+  heartsNow++;
+  heartAge++;
+  life[i] = 40 + ((frame >> 1) & 60);            // a faster, brighter pulse
+  for (let yy = y - 4; yy <= y + 4; yy++) {
+    if (yy < 0 || yy >= H) continue;
+    for (let xx = x - 4; xx <= x + 4; xx++) {
+      if (xx < 0 || xx >= W) continue;
+      const j = yy * W + xx, t = INFECT[mat[j]];
+      if (t !== 0 && Math.random() < 0.02) { mat[j] = t; touch(j); }
+    }
+  }
+  emitSpore(x, y, 0.6); emitSpore(x, y, 0.6);
+  emitSpore(x, y, 0.6); emitSpore(x, y, 0.6);
+  if (Math.random() < 0.05) {                    // tentacles, and long ones
+    for (let a = 0; a < 6; a++) {
+      const nx = x + rnd(9) - 4, ny = y + rnd(9) - 4;
+      if (!inb(nx, ny)) continue;
+      const j = ny * W + nx;
+      if (mat[j] === EMPTY || mat[j] === MOLD) { mat[j] = TENDRIL; life[j] = 110; touch(j); break; }
+    }
+  }
+  if (Math.random() < 0.02) {                    // and it clutches far more often
+    const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny)) {
+      const j = ny * W + nx;
+      if (mat[j] === EMPTY || mat[j] === MOLD) { mat[j] = EGG; life[j] = 90 + rnd(90); touch(j); }
+    }
+  }
+  if (Math.random() < 0.20) {
+    const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny)) moldGrow(ny * W + nx, MOSS_WET);
+  }
+}
+
+function updMold(x, y, i, m) {
+  touch(i);
+  const awake = heartsPrev > 0;
+  let h = life[i], best = 0;
+  let walled = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (WET[nm] === 1 || nm === ICE) best = MOSS_WET;
+    else if (nm === MOLD) { walled++; if (life[j] > best + 1) best = life[j] - 1; }
+  }
+  if (best > h) h = best;
+  else if (h > 0 && (frame & 7) === 0) h--;
+  life[i] = h;
+
+  /* `awake` is checked at decision time and never written into `life`. Writing
+     it as hydration made the mold stay empowered for ~2000 steps after its
+     heart was killed, which defeats the point of being able to kill it. */
+  const fed = awake || h > 0;
+  if (awake) {
+    infectAround(x, y, i, 0.02);
+    if (Math.random() < 0.0008) {                // throws out a hunting tendril
+      const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+      if (inb(nx, ny)) {
+        const j = ny * W + nx;
+        if (mat[j] === EMPTY) { mat[j] = TENDRIL; life[j] = 30; touch(j); }
+      }
+    }
+  }
+
+  /* Deep inside a big mass a heart can form - but only if you asked for it.
+     OFF by default (the user's call, 2026-08-14): at 2e-6 per walled-in cell
+     per step, a large mold patch used to wake itself up with no warning and
+     nothing you did, and everything downstream of a heart - the awakening,
+     tendrils, sacs, the Bloom - arrived uninvited. With it off, a heart is
+     something you place. Turn "Wild hearts" on in Simulation for the old
+     behaviour. */
+  if (wildHearts && !awake && heartsNow === 0 && walled === 4 && Math.random() < 0.000002) {
+    mat[i] = HEART; life[i] = 20; heartsNow++; touch(i);
+    return;
+  }
+
+  if (Math.random() > 0.03) return;              // gate BEFORE the area scan
+  if (fed) {                                     // colonise outward
+    const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny)) moldGrow(ny * W + nx, h);
+    return;
+  }
+  // dry: find water and drive straight at it, through whatever is in the way
+  const dir = nearestDir(x, y, 40, 2, isWetT);
+  if (!dir) return;                              // nothing to reach for
+  const nx = x + dir[0], ny = y + dir[1];
+  if (!inb(nx, ny)) return;
+  moldGrow(ny * W + nx, 0);
+}
+
+/* The infected. Each keeps the behaviour of what it used to be and adds a slow
+   infectious touch, so an infected bird spreads it wherever it flies. */
+/* These only stay awake while they still have something to take (or, for the
+   leaf, open air to cough a spore into). swap() wakes the chunk on any actual
+   movement, so the falling half needs no touch of its own. */
+function updInfDirt(x, y, i, m)  { if (infectAround(x, y, i, 0.015)) touch(i); updPowder(x, y, i, m); }
+function updInfWater(x, y, i, m) { if (infectAround(x, y, i, 0.015)) touch(i); updLiquid(x, y, i, m); }
+function updInfLeaf(x, y, i, m)  { if (infectAround(x, y, i, 0.010) | exposed(x, y)) touch(i); emitSpore(x, y, 0.004); }
+/* Infected rock and timber: inert, but they keep taking whatever leans on them. */
+function updInfStone(x, y, i, m) { if (infectAround(x, y, i, 0.006)) touch(i); }
+
+/* Death, for an infected animal, is a change of job. EMPTY with no `moved` flag
+   is the tell: a creature that walked away leaves EMPTY too, but swap() sets
+   moved on both cells, so only a death leaves an untouched empty behind. Fire
+   is the exception - it leaves FIRE, never a husk - so burning a host is still
+   the clean way to end it, and starving one out is the careless way. */
+function leaveHusk(i) {
+  if (mat[i] === EMPTY && moved[i] === 0) { mat[i] = HUSK; life[i] = 150; touch(i); }
+}
+
+/* A husk shambles at the nearest living thing and takes it. When it finally
+   falls apart it does not simply vanish - it bursts, so a corpse left lying
+   where it fell is a spore bomb on a timer. */
+function updHusk(x, y, i, m) {
+  touch(i);
+  if (life[i] <= 1) {                            // falls apart
+    mat[i] = EMPTY; life[i] = 0;
+    for (let k = 0; k < 4; k++) emitSpore(x, y, 0.8);
+    return;
+  }
+  life[i]--;
+  infectAround(x, y, i, 0.05);
+  if (Math.random() < 0.10) {                    // gate BEFORE the area scan
+    const dir = nearestDir(x, y, 24, 2, isCreature);
+    if (dir) {
+      const nx = x + dir[0], ny = y + dir[1];
+      if (inb(nx, ny) && mat[ny * W + nx] === EMPTY) { swap(i, ny * W + nx); return; }
+    }
+  }
+  updPowder(x, y, i, m);                         // otherwise it just falls
+}
+
+/* Pale fire is fire that coughs while it burns. Everything else about it -
+   spreading, dousing to steam, guttering out into smoke - is updFire. */
+function updPFire(x, y, i, m) {
+  emitSpore(x, y, 0.07);
+  updFire(x, y, i, m);
+}
+
+/* Snow. Piles like any powder, but anything warm next to it takes it back to
+   water - which is what makes a snowfield over lava worth watching. */
+/* Torch. Melts ice and snow beside it and nothing else - deliberately not a
+   fire source, so it can be used as a lamp without burning the world down. */
+function updTorch(x, y, i, m) {
+  let warm = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (nm === ICE)  { mat[j] = WATER; life[j] = 0; touch(j); warm = 1; }
+    if (nm === SNOW) { mat[j] = WATER; life[j] = 0; touch(j); warm = 1; }
+  }
+  if (warm) touch(i);
+}
+
+function updSnow(x, y, i, m) {
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const nm = mat[ny * W + nx];
+    if (nm === FIRE || nm === LAVA || nm === PFIRE || nm === SPARK || nm === HEATER) {
+      mat[i] = WATER; life[i] = 0; touch(i);
+      return;
+    }
+  }
+  updPowder(x, y, i, m);
+}
+
+/* Moth. Flies at the nearest light and will happily fly into it - fire, lava
+   and a lit lamp all pull, and only one of them is survivable. It feeds on
+   leaves, so a lantern hung over a garden collects them. */
+const isLight = t => t === FIRE || t === LAVA || t === PFIRE || t === TORCH ||
+                     ((t === LAMP || t === LEDR || t === LEDG || t === LEDB) && true);
+function updMoth(x, y, i, m) {
+  touch(i);
+  const got = creatureScan(x, y, i, true, t => t === LEAF || t === PLANT, 30, EMPTY);
+  if (got < 0) return;                           // burned or drowned
+  let e = life[i] + got;
+  if (e <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  if ((frame & 3) === 0) e--;                    // burns energy every 4th step
+  life[i] = Math.min(250, e);
+  if (webbed(x, y) && Math.random() < 0.995) return;   // a moth in a web is a spider's dinner
+  if (Math.random() < 0.18) {                    // gate BEFORE the area scan
+    const dir = nearestDir(x, y, 26, 2, isLight);
+    if (dir) {
+      const nx = x + dir[0], ny = y + dir[1];
+      if (inb(nx, ny) && mat[ny * W + nx] === EMPTY) { swap(i, ny * W + nx); return; }
+    }
+  }
+  flyStep(x, y, i);
+}
+
+/* What a web can hold: anything alive except the spiders themselves - a spider
+   walks its own web, and an infected one still walks an infected web. */
+const isWebbable = t => (isCreature(t) || t === INFBUG  || t === INFBEE  ||
+                         t === INFBIRD || t === INFFROG || t === INFFISH ||
+                         t === INFWORM || t === INFMOTH) &&
+                        t !== SPIDER && t !== INFSPIDER;
+
+/* Is this creature in contact with a web? Creatures ask this themselves rather
+   than the web pinning them: the scan runs bottom-up, so a bug on the floor has
+   always had its turn before the web above it is reached, and a flag set there
+   arrives a step too late to stop anything. Measured: with the web doing the
+   pinning, a bug still wandered 8.5 cells. */
+function webbed(x, y) {
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    const t = inb(nx, ny) ? mat[ny * W + nx] : EMPTY;
+    if (t === WEB || t === INFWEB || t === HONEY) return 1;   // honey grips too
+  }
+  return 0;
+}
+
+/* Web catches what walks into it. A held creature gets `moved` set - the same
+   flag the scan uses for "this cell already acted" - so it simply never gets
+   its turn and cannot crawl, fly or swim away. It can still be eaten, which is
+   the entire point: a spider that spins a web is laying a trap rather than
+   decorating. Nothing is held forever - each step it may tear free, and it
+   takes the web with it when it does. An empty web never wakes its chunk. */
+function updInfWeb(x, y, i, m) { infectAround(x, y, i, 0.01); updWeb(x, y, i, m); }
+
+function updWeb(x, y, i, m) {
+  let held = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx;
+    if (!isWebbable(mat[j])) continue;
+    /* The web is NEVER destroyed by what it catches. It tore on every escape at
+       first, which from the outside looked exactly like the bugs eating it -
+       "bugs eat the web" was the report. Even a 0.2%-per-step wear still lost
+       half of them inside 400 steps, which reads the same way. Creatures get
+       loose through the escape roll above WITHOUT taking the silk with them, so
+       nothing here needs to break. Fire and acid still remove a web. */
+    moved[j] = 1; touch(j);
+    held = 1;
+  }
+  if (held) touch(i);
+}
+
+/* The hive. `life` counts down to the next brood, so a fresh hive does not
+   empty the palette onto the floor the instant you place it. It only stays
+   awake while it has somewhere to put something - a hive sealed in rock is as
+   settled as the rock. */
+function updHive(x, y, i, m) {
+  let room = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny) && mat[ny * W + nx] === EMPTY) { room = 1; break; }
+  }
+  if (!room) return;                             // walled in: nothing to do
+  touch(i);
+  if (life[i] > 1) { life[i]--; return; }
+  life[i] = 90 + rnd(110);                       // the next brood is a while off
+  // hatch a spider, and hang some silk for it to hunt over
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (inb(nx, ny)) {
+    const j = ny * W + nx;
+    if (mat[j] === EMPTY) { mat[j] = SPIDER; life[j] = 220; moved[j] = 1; touch(j); }
+  }
+  for (let a = 0; a < 6; a++) {
+    const sx = x + rnd(11) - 5, sy = y + rnd(11) - 5;
+    if (!inb(sx, sy)) continue;
+    const j = sy * W + sx;
+    if (mat[j] === EMPTY && Math.random() < 0.7) { mat[j] = WEB; life[j] = 0; touch(j); }
+  }
+}
+
+/* Beehive. Same shape as the spider hive - permanent, sleeps when walled in -
+   but it breeds bees and drips honey instead of spiders and silk. */
+function updBeehive(x, y, i, m) {
+  let room = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny) && mat[ny * W + nx] === EMPTY) { room = 1; break; }
+  }
+  if (!room) return;
+  touch(i);
+  if (life[i] > 1) { life[i]--; return; }
+  life[i] = 110 + rnd(120);
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (inb(nx, ny)) {
+    const j = ny * W + nx;
+    if (mat[j] === EMPTY) { mat[j] = BEE; life[j] = 200; moved[j] = 1; touch(j); }
+  }
+  // and a little honey, which runs downhill and pools under the nest
+  if (y + 1 < H && mat[i + W] === EMPTY && Math.random() < 0.7) {
+    mat[i + W] = HONEY; life[i + W] = 0; touch(i + W);
+  }
+}
+
+/* Mushroom. Wants damp ground and no sunlight to speak of - it spreads across
+   dirt and dead wood, and stops where three of its own kind already touch it so
+   it grows in clusters rather than sheets. Dries out and dies in the open. */
+function updShroom(x, y, i, m) {
+  if (Math.random() > 0.04) return;              // gate before anything else
+  touch(i);
+  let damp = 0, kin = 0, ground = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const nm = mat[ny * W + nx];
+    if (WET[nm] === 1 || nm === ICE) damp = 1;
+    else if (nm === SHROOM) kin++;
+    else if (nm === DIRT || nm === WOOD || nm === MOSS) ground = 1;
+  }
+  if (!ground && !damp) {                        // nothing to live on
+    if (Math.random() < 0.02) { mat[i] = EMPTY; life[i] = 0; }
+    return;
+  }
+  if (kin >= 3) return;                          // clusters, not sheets
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx, nm = mat[j];
+  if (nm === DIRT || nm === WOOD) { mat[j] = SHROOM; life[j] = 0; touch(j); }
+}
+
+/* Cloner. `life` is the material it has learned - 0 means it has not been shown
+   anything yet. It only stays awake while it has somewhere to put a copy, so a
+   cloner buried in rock costs nothing. */
+function updCloner(x, y, i, m) {
+  const learned = life[i];
+  let room = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (nm === EMPTY) { room = 1; continue; }
+    // learn the first real thing it is shown, but never another tool
+    if (learned === 0 && nm !== CLONER && nm !== VOID && nm !== WALL) {
+      life[i] = nm; touch(i);
+      return;
+    }
+  }
+  if (learned === 0 || room === 0) return;       // nothing to make, or nowhere
+  touch(i);
+  if (Math.random() < 0.25) {
+    const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) return;
+    const j = ny * W + nx;
+    if (mat[j] === EMPTY) { mat[j] = learned; life[j] = 0; moved[j] = 1; touch(j); }
+  }
+}
+
+/* Void. Eats its four neighbours and nothing else - no reach, no pull, so it
+   drains exactly what you lay it against. */
+function updVoid(x, y, i, m) {
+  let ate = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (nm === EMPTY || nm === VOID || nm === WALL) continue;
+    mat[j] = EMPTY; life[j] = 0; touch(j);
+    ate = 1;
+  }
+  if (ate) touch(i);
+}
+
+/* What each infected thing goes back to. Written out rather than derived from
+   INFECT, because INFECT is many-to-one (sand and dirt both become infected
+   dirt) and a cure has to pick one. Anything the infection MADE rather than
+   took - spores, tendrils, sacs, husks - is simply removed. */
+const CLEAN = new Uint8Array(MATS.length);
+CLEAN[INFDIRT] = DIRT;   CLEAN[INFWATER] = WATER;  CLEAN[INFPLANT] = PLANT;
+CLEAN[INFLEAF] = LEAF;   CLEAN[INFSTONE] = STONE;  CLEAN[INFWOOD]  = WOOD;
+CLEAN[INFMETAL]= METAL;  CLEAN[INFBUG]   = BUG;    CLEAN[INFBEE]   = BEE;
+CLEAN[INFBIRD] = BIRD;   CLEAN[INFSPIDER]= SPIDER; CLEAN[INFFISH]  = FISH;
+CLEAN[INFFROG] = FROG;   CLEAN[INFSHARK] = SHARK;  CLEAN[INFWORM]  = WORM;
+CLEAN[INFOIL]  = OIL;    CLEAN[INFMOTH]  = MOTH;   CLEAN[MOLD]     = MOSS;
+CLEAN[INFWEB]  = WEB;
+/* EMPTY is 0, which is also "not infected" - so these need their own list. */
+const ERASE = new Uint8Array(MATS.length);
+ERASE[SPORE] = 1; ERASE[TENDRIL] = 1; ERASE[EGG] = 1; ERASE[HUSK] = 1;
+ERASE[HEART] = 1; ERASE[BLOOM] = 1; ERASE[PFIRE] = 1;
+
+/* Cure. Flows like any liquid and spends itself curing - one cell of cure for
+   one cell of infection, so clearing a big nest takes a real bucket. */
+function updCure(x, y, i, m) {
+  /* Cures every infected neighbour at once, not one and then done. Curing them
+     singly lost outright: a cell cured next to infection is simply re-infected
+     next step, and 900 cure cells poured onto a nest converted THREE. Clearing
+     all four sides at once means a cure front advances instead of dissolving. */
+  let worked = 0, spread = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    const back = CLEAN[nm];
+    if (back === 0 && ERASE[nm] !== 1) continue;
+    worked = 1;
+    /* Half the time the cure ADVANCES into the cell it just cleared instead of
+       leaving the clean material behind. Without this it loses: a cell cured
+       beside infection is re-infected within a few steps, and 900 cure cells
+       poured on a nest cleaned eleven. Advancing makes it a front that eats
+       inward - it still dies out the moment it runs out of infection. */
+    if (Math.random() < 0.5) { mat[j] = CURE;  life[j] = 0; spread = 1; }
+    else                     { mat[j] = back;  life[j] = 0; }   // back = 0 is EMPTY, which is what ERASE wants
+    touch(j);
+  }
+  if (worked) {
+    touch(i);
+    if (spread || Math.random() < 0.5) { mat[i] = EMPTY; life[i] = 0; }
+    return;
+  }
+  updLiquid(x, y, i, m);
+}
+
+/* Magnet. Drags loose metal one cell closer each step - the same shape as the
+   black hole's pull, and priced the same way: one per click. */
+function updMagnet(x, y, i, m) {
+  const R = 16;
+  let pulled = 0;
+  for (let yy = y - R; yy <= y + R; yy++) {
+    if (yy < 0 || yy >= H) continue;
+    for (let xx = x - R; xx <= x + R; xx++) {
+      if (xx < 0 || xx >= W) continue;
+      const j = yy * W + xx, nm = mat[j];
+      if (nm !== METAL && nm !== IRON && nm !== COPPER && nm !== INFMETAL) continue;
+      const dx = Math.sign(x - xx), dy = Math.sign(y - yy);
+      if (dx === 0 && dy === 0) continue;
+      const tx = xx + dx, ty = yy + dy;
+      if (!inb(tx, ty)) continue;
+      const t = ty * W + tx;
+      if (mat[t] === EMPTY || MOVE[mat[t]] === 1) { swap(j, t); pulled = 1; }
+    }
+  }
+  if (pulled) touch(i);
+}
+
+/* Firework. Climbs while its fuse burns - that is the whole point of it - then
+   throws a ring of sparks instead of a crater. */
+function updFwork(x, y, i, m) {
+  if (life[i] > 0) {
+    touch(i);
+    life[i]--;
+    if (life[i] === 0) {
+      mat[i] = EMPTY; life[i] = 0;
+      for (let a = 0; a < 44; a++) {             // a ring, not a blast
+        const ang = a * 0.1428, r = 3 + rnd(6);
+        const nx = x + Math.round(Math.cos(ang) * r), ny = y + Math.round(Math.sin(ang) * r);
+        if (!inb(nx, ny)) continue;
+        const j = ny * W + nx;
+        if (mat[j] === EMPTY) { mat[j] = FIRE; life[j] = 8 + rnd(14); touch(j); }
+      }
+      return;
+    }
+    if (y > 0 && mat[i - W] === EMPTY) { swap(i, i - W); return; }   // climbs
+    return;
+  }
+  updPowder(x, y, i, m);                         // unlit, it just sits there
+}
+
+/* Infected oil and moth: same behaviour, plus the infection. */
+function updInfOil(x, y, i, m)  { if (infectAround(x, y, i, 0.012)) touch(i); updLiquid(x, y, i, m); }
+function updInfMoth(x, y, i, m) { infectAround(x, y, i, 0.03); emitSpore(x, y, 0.03); updMoth(x, y, i, m); leaveHusk(i); }
+
+/* Infected animals trail spores as they go - a flying one seeds a whole map. */
+function updInfBee(x, y, i, m)   { infectAround(x, y, i, 0.03); emitSpore(x, y, 0.03); updBee(x, y, i, m); leaveHusk(i); }
+function updInfBird(x, y, i, m)  { infectAround(x, y, i, 0.03); emitSpore(x, y, 0.03); updBird(x, y, i, m); leaveHusk(i); }
+function updInfSpider(x, y, i, m){ infectAround(x, y, i, 0.03); emitSpore(x, y, 0.02); updSpider(x, y, i, m); leaveHusk(i); }
+function updInfBug(x, y, i, m)   { infectAround(x, y, i, 0.03); emitSpore(x, y, 0.02); updBug(x, y, i, m); leaveHusk(i); }
+function updInfFish(x, y, i, m)  { infectAround(x, y, i, 0.03); updFish(x, y, i, m); leaveHusk(i); }
+function updInfWorm(x, y, i, m)  { infectAround(x, y, i, 0.03); updWorm(x, y, i, m); leaveHusk(i); }
+function updInfFrog(x, y, i, m)  { infectAround(x, y, i, 0.03); emitSpore(x, y, 0.02); updFrog(x, y, i, m); leaveHusk(i); }
+function updInfShark(x, y, i, m) { infectAround(x, y, i, 0.03); updShark(x, y, i, m); leaveHusk(i); }
+
+/* Infected wire still carries current - and the current carries the infection,
+   so a single infected cell can take a whole circuit and everything wired to it. */
+/* Tendril: crawls toward the nearest animal and infects what it reaches.
+   `life` is how much further it can grow, so a nest cannot cover the map. */
+function updTendril(x, y, i, m) {
+  const live = infectAround(x, y, i, 0.15);
+  if (life[i] <= 1) { if (live) touch(i); return; }  // spent - it just sits there
+  touch(i);
+  if (Math.random() > 0.25) return;              // gate BEFORE the area scan
+  const dir = nearestDir(x, y, 34, 2, isCreature);
+  if (!dir) return;
+  const nx = x + dir[0], ny = y + dir[1];
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx, t = mat[j];
+  // a tentacle pushes through soft stuff, not just air
+  if (t === EMPTY || t === DIRT || t === SAND || t === WATER ||
+      t === MOSS  || t === LEAF || t === PLANT || t === WEB || t === SPORE) {
+    mat[j] = TENDRIL; life[j] = life[i] - 1; moved[j] = 1; touch(j);
+  }
+}
+
+/* Mold sac: counts down and hatches an infected bug, over and over. */
+function updEgg(x, y, i, m) {
+  touch(i);
+  if (life[i] > 1) { life[i]--; return; }
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx;
+    if (mat[j] === EMPTY) {
+      mat[j] = INFBUG; life[j] = 120; moved[j] = 1; touch(j);
+      life[i] = 140 + rnd(140);                  // clutch again
+      return;
+    }
+  }
+  life[i] = 40;                                  // nowhere to hatch: wait
+}
+
+function updInfMetal(x, y, i, m) {
+  // updMetal already keeps a LIVE wire awake and a dead one costs nothing, so
+  // the only reason to touch here is having a neighbour left to take.
+  if (infectAround(x, y, i, life[i] > 0 ? 0.06 : 0.01)) touch(i);
+  if (life[i] > 0) emitSpore(x, y, 0.05);
+  updMetal(x, y, i, m);
+}
+
+/* Infected plant needs no water at all - that is the whole point of it. */
+function updInfPlant(x, y, i, m) {
+  touch(i);
+  infectAround(x, y, i, 0.015);
+  if (Math.random() > 0.02) return;
+  let kin = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny) && mat[ny * W + nx] === m) kin++;
+  }
+  if (kin >= 3) return;
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx;
+  if (mat[j] === EMPTY) { mat[j] = m; life[j] = 0; touch(j); }
+}
+
+/* What a grazer will eat. Mushrooms and honey count - a bug that finds either
+   is fed, which is what makes a beehive worth building next to a meadow. */
+const isGreen = t => t === PLANT || t === LEAF || t === MOSS || t === ALGAE ||
+                     t === SEED  || t === SAPLING || t === MOLD ||
+                     t === SHROOM || t === HONEY;
+
+/* Bug: grazes greenery, walks and climbs, drowns in water, burns in fire, and
+   breeds when it has eaten well. `life` is its energy. */
+function updBug(x, y, i, m) {
+  touch(i);
+  let e = life[i];
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (nm === FIRE || nm === LAVA || nm === SPARK) { mat[i] = FIRE; life[i] = 12; touch(i); return; }
+    if (WET[nm] === 1 || nm === ACID) { mat[i] = EMPTY; life[i] = 0; touch(i); return; }
+    if (isGreen(nm) && Math.random() < 0.25) {   // graze
+      mat[j] = EMPTY; life[j] = 0; touch(j);
+      e = Math.min(250, e + 40);
+    }
+  }
+  if (e <= 1) { mat[i] = EMPTY; life[i] = 0; return; }   // starved
+  if ((frame & 1) === 0) { e--; life[i] = e; }           // burns energy every 2nd step
+  if (e > 170 && Math.random() < 0.03) {                 // breed
+    const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny)) {
+      const j = ny * W + nx;
+      if (mat[j] === EMPTY) {
+        mat[j] = m; life[j] = 80; moved[j] = 1; touch(j);   // breeds its own kind
+        life[i] = e - 70;
+        return;
+      }
+    }
+  }
+  if (y + 1 < H && mat[i + W] === EMPTY) { swap(i, i + W); return; }   // falls
+  if (webbed(x, y) && Math.random() < 0.995) return;    // caught - it can still eat and starve
+  if (Math.random() < 0.55) {
+    const d = Math.random() < 0.5 ? -1 : 1, nx = x + d;
+    if (nx < 0 || nx >= W) return;
+    if (mat[i + d] === EMPTY) { swap(i, i + d); return; }
+    if (y > 0 && mat[i - W + d] === EMPTY) swap(i, i - W + d);         // climbs
+  }
+}
+
+/* Fish: swims in water, suffocates out of it, and eats algae. */
+function updFish(x, y, i, m) {
+  touch(i);
+  let e = life[i];
+  let wet = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (WET[nm] === 1) wet++;
+    else if (nm === LAVA || nm === FIRE || nm === SPARK) { mat[i] = EMPTY; life[i] = 0; touch(i); return; }
+    else if (nm === ALGAE && Math.random() < 0.3) {
+      mat[j] = WATER; life[j] = 0; touch(j);
+      e = Math.min(250, e + 50);
+    }
+  }
+  if (wet === 0) e = e > 4 ? e - 4 : 0;                  // drowning in air
+  if (e <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  // a fish burns energy slowly - every 4th step, so it can cross open water
+  // looking for algae rather than starving on the way
+  life[i] = ((frame & 3) === 0) ? e - 1 : e;
+  if (wet === 0) {                                       // flops downward
+    if (y + 1 < H && mat[i + W] === EMPTY) swap(i, i + W);
+    return;
+  }
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx;
+  if (WET[mat[j]] === 1) swap(i, j);
+}
+
+/* ------------------------------------------------------------ animals ---- */
+/* One pass over the four neighbours doing hazards first, then food.
+   Returns -1 if the creature died, otherwise the energy it gained. */
+function creatureScan(x, y, i, drowns, isFood, gain, leave) {
+  let got = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (nm === FIRE || nm === LAVA || nm === SPARK) {
+      mat[i] = FIRE; life[i] = 12; touch(i); return -1;
+    }
+    if (drowns && (WET[nm] === 1 || nm === ACID)) {
+      mat[i] = EMPTY; life[i] = 0; touch(i); return -1;
+    }
+    if (got === 0 && isFood(nm) && Math.random() < 0.4) {
+      mat[j] = leave; life[j] = 0; touch(j);
+      got = gain;
+    }
+  }
+  return got;
+}
+
+/* Drift one cell, favouring level flight. Only enters empty air, so a flier
+   never blunders into water. */
+function flyStep(x, y, i) {
+  const r = Math.random();
+  const nx = x + (Math.random() < 0.5 ? -1 : 1);
+  const ny = y + (r < 0.3 ? -1 : r < 0.55 ? 1 : 0);
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx;
+  if (mat[j] === EMPTY) swap(i, j);
+}
+
+/* Head one cell toward the nearest food in range. Gated by the caller, because
+   this is an area scan. */
+function seekStep(x, y, i, r, isFood, passable) {
+  let bx = 0, by = 0, best = 1e9;
+  for (let yy = y - r; yy <= y + r; yy++) {
+    if (yy < 0 || yy >= H) continue;
+    for (let xx = x - r; xx <= x + r; xx++) {
+      if (xx < 0 || xx >= W) continue;
+      if (!isFood(mat[yy * W + xx])) continue;
+      const d = (xx - x) * (xx - x) + (yy - y) * (yy - y);
+      if (d > 0 && d < best) { best = d; bx = xx; by = yy; }
+    }
+  }
+  if (best === 1e9) return false;
+  const nx = x + (bx > x ? 1 : bx < x ? -1 : 0);
+  const ny = y + (by > y ? 1 : by < y ? -1 : 0);
+  if (!inb(nx, ny)) return false;
+  const j = ny * W + nx;
+  if (passable(mat[j])) { swap(i, j); return true; }
+  return false;
+}
+
+const isEmpty = t => t === EMPTY;
+const isWetT  = t => WET[t] === 1;
+const isCreature = t => t === BUG || t === BEE || t === BIRD || t === SPIDER ||
+                        t === FROG || t === FISH || t === WORM || t === SHARK ||
+                        t === MOTH;
+const isWater = t => WET[t] === 1;
+const isBug   = t => t === BUG;
+
+/* Bird: hunts bugs and seeds on the wing, drowns if it touches water. */
+function updBird(x, y, i, m) {
+  touch(i);
+  const got = creatureScan(x, y, i, true, t => t === BUG || t === SEED, 70, EMPTY);
+  if (got < 0) return;
+  let e = Math.min(250, life[i] + got);
+  if (e <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  if ((frame & 3) === 0) e--;
+  life[i] = e;
+  if (webbed(x, y) && Math.random() < 0.995) return;
+  if (Math.random() < 0.25 && seekStep(x, y, i, 5, t => t === BUG || t === SEED, isEmpty)) return;
+  flyStep(x, y, i);
+}
+
+/* Bee: feeds on greenery and pollinates it, so a planted patch spreads. */
+function updBee(x, y, i, m) {
+  touch(i);
+  const got = creatureScan(x, y, i, true, () => false, 0, EMPTY);
+  if (got < 0) return;
+  let e = life[i];
+  let onFlower = false;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const nm = mat[ny * W + nx];
+    if (nm === PLANT || nm === LEAF) { onFlower = true; break; }
+  }
+  if (onFlower) {
+    e = Math.min(250, e + 6);
+    if (Math.random() < 0.04) {                // pollinate into open air
+      const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+      if (inb(nx, ny)) {
+        const j = ny * W + nx;
+        if (mat[j] === EMPTY) { mat[j] = LEAF; life[j] = 0; touch(j); }
+      }
+    }
+  }
+  if (e <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  if ((frame & 3) === 0) e--;
+  life[i] = e;
+  if (Math.random() < 0.2 &&
+      seekStep(x, y, i, 5, t => t === PLANT || t === LEAF, isEmpty)) return;
+  if (webbed(x, y) && Math.random() < 0.995) return;
+  flyStep(x, y, i);
+}
+
+/* Worm: tunnels through soil and turns the sand it passes into dirt. */
+function updWorm(x, y, i, m) {
+  touch(i);
+  const got = creatureScan(x, y, i, false, () => false, 0, EMPTY);
+  if (got < 0) return;
+  let e = life[i];
+  if (e <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  if ((frame & 7) === 0) e--;                  // very slow metabolism
+  life[i] = e;
+  if (Math.random() > 0.45) return;
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx, nm = mat[j];
+  if (nm === DIRT || nm === SAND) {
+    swap(i, j);
+    if (nm === SAND) mat[i] = DIRT;            // aerated into soil behind it
+    return;
+  }
+  if (nm === EMPTY && y + 1 < H && mat[i + W] === EMPTY) swap(i, i + W);
+}
+
+/* Spider: climbs anything solid, eats bugs, and trails web behind it. */
+function updSpider(x, y, i, m) {
+  touch(i);
+  const got = creatureScan(x, y, i, true, isBug, 140, EMPTY);
+  if (got < 0) return;
+  let e = Math.min(250, life[i] + got);
+  if (e <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  /* Every 4th step, not every 2nd. At 1 per 2 steps a spider starved inside ~500
+     steps even sitting in a web full of prey, which reads as "spiders just die".
+     A bug is worth 140 now as well - a spider that catches something should be
+     set up for a while. */
+  if ((frame & 3) === 0) e--;
+  life[i] = e;
+  let anchored = false;
+  for (let dy = -1; dy <= 1 && !anchored; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const nx = x + dx, ny = y + dy;
+      if (!inb(nx, ny)) continue;
+      const nm = mat[ny * W + nx];
+      if (nm !== EMPTY && MOVE[nm] === 0) { anchored = true; break; }
+    }
+  }
+  if (!anchored) {                             // nothing to hold: it drops
+    if (y + 1 < H && mat[i + W] === EMPTY) swap(i, i + W);
+    return;
+  }
+  // a spider walks its own silk - without this its web blocks its route to the
+  // prey the web just caught, and it actually took FEWER bugs (1.8 vs 2.3)
+  if (Math.random() < 0.25 && seekStep(x, y, i, 5, isBug, t => t === EMPTY || t === WEB || t === INFWEB)) return;
+  if (Math.random() > 0.5) return;
+  const dx = rnd(3) - 1, dy = rnd(3) - 1;
+  if (!dx && !dy) return;
+  const nx = x + dx, ny = y + dy;
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx;
+  if (mat[j] !== EMPTY) return;
+  swap(i, j);
+  if (Math.random() < 0.18) { mat[i] = WEB; life[i] = 0; touch(i); }
+}
+
+/* Frog: hops on land, swims in water, eats bugs. */
+function updFrog(x, y, i, m) {
+  touch(i);
+  const got = creatureScan(x, y, i, false, isBug, 90, EMPTY);
+  if (got < 0) return;
+  let e = Math.min(250, life[i] + got);
+  if (e <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  if ((frame & 3) === 0) e--;
+  life[i] = e;
+  let wet = false;
+  for (let k = 0; k < 4 && !wet; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny) && WET[mat[ny * W + nx]] === 1) wet = true;
+  }
+  if (wet) {
+    const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) return;
+    const j = ny * W + nx;
+    if (WET[mat[j]] === 1) swap(i, j);
+    return;
+  }
+  if (Math.random() < 0.2 && seekStep(x, y, i, 5, isBug, isEmpty)) return;
+  if (y + 1 < H && mat[i + W] === EMPTY) { swap(i, i + W); return; }
+  if (Math.random() < 0.2) {                   // hop
+    const d = Math.random() < 0.5 ? -1 : 1;
+    const nx = x + d, ny = y - 1;
+    if (inb(nx, ny) && mat[ny * W + nx] === EMPTY) swap(i, ny * W + nx);
+  }
+}
+
+/* Shark: eats fish, and cannot survive out of water at all. */
+function updShark(x, y, i, m) {
+  touch(i);
+  const got = creatureScan(x, y, i, false, t => t === FISH || t === FROG, 110, WATER);
+  if (got < 0) return;
+  let e = Math.min(250, life[i] + got);
+  let wet = 0;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny) && WET[mat[ny * W + nx]] === 1) wet++;
+  }
+  if (wet === 0) e = e > 8 ? e - 8 : 0;        // suffocates fast when beached
+  if (e <= 1) { mat[i] = EMPTY; life[i] = 0; return; }
+  if ((frame & 3) === 0) e--;
+  life[i] = e;
+  if (wet === 0) {
+    if (y + 1 < H && mat[i + W] === EMPTY) swap(i, i + W);
+    return;
+  }
+  if (Math.random() < 0.3 && seekStep(x, y, i, 6, t => t === FISH, isWater)) return;
+  const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+  if (!inb(nx, ny)) return;
+  const j = ny * W + nx;
+  if (WET[mat[j]] === 1) swap(i, j);
+}
+
+/* -------------------------------------------------------- electricity ---- */
+/* How many cells a charge can cross before it fades. This doubles as how long
+   a cell stays lit, so it is a trade: too low and you cannot wire anything up
+   across the map, too high and a cut wire glows for ages. 120 cells covers most
+   useful runs and drains in about four seconds at 30 FPS. */
+const CHARGE_MAX = 120;
+
+function updMetal(x, y, i, m) {
+  const l = life[i];
+  if (l === 0) return;                           // a dead wire costs nothing
+  touch(i);
+  if (SLOW[m] === 1 && (frame & 1) === 1) return;  // iron idles alternate steps
+  life[i] = l - 1;
+  const nl = l - 1;
+  const hops = HOPS[m];
+  for (let k = 0; k < 4; k++) {
+    // walk up to `hops` cells along this direction, but only through conductor
+    for (let h = 1; h <= hops; h++) {
+      const nx = x + DX4[k] * h, ny = y + DY4[k] * h;
+      if (!inb(nx, ny)) break;
+      const j = ny * W + nx, nm = mat[j];
+      if (nm === EMPTY) break;
+      if (PWR[nm] === 1) {                       // current walks the wire
+        const give = nl - (h - 1);               // one unit lost per cell crossed
+        if (give > 0 && life[j] < give) {
+          life[j] = give; touch(j);
+          // claim it for this step, or it would re-propagate the moment the
+          // scan reaches it and the charge would cross the whole wire at once
+          moved[j] = 1;
+        }
+        continue;
+      }
+      if (h === 1) {                             // only what it directly touches
+        if (WET[nm] === 1 || nm === ACID) {      // live wire in a puddle
+          mat[j] = SPARK; life[j] = 5; moved[j] = 1; touch(j);
+        } else {
+          const NM = MATS[nm];
+          if (EXPL[nm] === 1) { if (life[j] === 0) { life[j] = FUSE[nm] || (1 + rnd(4)); touch(j); } }
+          else if (FLAM[nm] === 1 && Math.random() < 0.12) ignite(j, nm);
+          else if (nm === ICE) { mat[j] = WATER; life[j] = 0; touch(j); }
+        }
+      }
+      break;                                     // a non-conductor stops the run
+    }
+  }
+}
+
+/* Fan: shoves loose matter away from itself. */
+function updFan(x, y, i, m) {
+  if (life[i] === 0) return;
+  touch(i);
+  life[i]--;
+  const R = 15, R2 = R * R;
+  for (let yy = y - R; yy <= y + R; yy++) {
+    if (yy < 0 || yy >= H) continue;
+    const dy = yy - y;
+    for (let xx = x - R; xx <= x + R; xx++) {
+      if (xx < 0 || xx >= W) continue;
+      const dx = xx - x, d2 = dx * dx + dy * dy;
+      if (d2 === 0 || d2 > R2) continue;
+      const j = yy * W + xx;
+      if (MOVE[mat[j]] === 0 || mat[j] === EMPTY || moved[j]) continue;
+      const push = 1 - Math.sqrt(d2) / R;
+      if (Math.random() > 0.10 + push * 0.65) continue;
+      const sx = dx > 0 ? 1 : dx < 0 ? -1 : 0;
+      const sy = dy > 0 ? 1 : dy < 0 ? -1 : 0;
+      let tx = xx, ty = yy;
+      if (Math.abs(dx) > Math.abs(dy)) { tx += sx; if (Math.random() < 0.35) ty += sy; }
+      else                             { ty += sy; if (Math.random() < 0.35) tx += sx; }
+      if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue;
+      const t = ty * W + tx, tm = mat[t];
+      if (tm === EMPTY || (MOVE[tm] === 1 && DENS[tm] < DENS[mat[j]])) swap(j, t);
+    }
+  }
+}
+
+/* Cooler: the opposite of the heater, over a much wider radius - freezes water
+   to ice, condenses steam, kills fire, and sets lava back to stone. */
+function updCooler(x, y, i, m) {
+  if (life[i] === 0) return;
+  touch(i);
+  life[i]--;
+  const R = 13, R2 = R * R;
+  for (let yy = y - R; yy <= y + R; yy++) {
+    if (yy < 0 || yy >= H) continue;
+    const dy = yy - y;
+    for (let xx = x - R; xx <= x + R; xx++) {
+      if (xx < 0 || xx >= W) continue;
+      const dx = xx - x, d2 = dx * dx + dy * dy;
+      if (d2 === 0 || d2 > R2) continue;
+      const j = yy * W + xx, nm = mat[j];
+      const chill = 1 - Math.sqrt(d2) / R;
+      if      (nm === FIRE)  { mat[j] = SMOKE; life[j] = 30 + rnd(30); touch(j); }
+      else if (nm === STEAM) { mat[j] = WATER; life[j] = 0; touch(j); }
+      else if (nm === LAVA  && Math.random() < 0.10 * chill) { mat[j] = STONE; life[j] = 0; touch(j); }
+      else if (nm === WATER && Math.random() < 0.14 * chill) { mat[j] = ICE;   life[j] = 0; touch(j); }
+    }
+  }
+}
+
+/* Shared by every source: shove full charge into any powered neighbour. */
+function energise(x, y) {
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx;
+    if (PWR[mat[j]] === 1 && life[j] < CHARGE_MAX) { life[j] = CHARGE_MAX; touch(j); }
+  }
+}
+
+function updBatt(x, y, i, m) {
+  touch(i);                                      // a battery never sleeps
+  energise(x, y);
+}
+
+/* Dynamo: ~16 frames on, ~16 off, so it drives blinkers and repeating circuits. */
+function updDynamo(x, y, i, m) {
+  touch(i);
+  if (((frame >> 4) & 1) === 0) return;
+  energise(x, y);
+}
+
+/* Sensor: turns heat back into current, which is what makes automatic circuits
+   possible - fire alarm wired to a charge, say. */
+function updSensor(x, y, i, m) {
+  touch(i);
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const nx = x + dx, ny = y + dy;
+      if (!inb(nx, ny)) continue;
+      const nm = mat[ny * W + nx];
+      if (nm === FIRE || nm === LAVA || nm === SPARK) { energise(x, y); return; }
+    }
+  }
+}
+
+/* Lamp: a terminal - it takes charge and shows it, but does not pass it on. */
+function updLamp(x, y, i, m) {
+  if (life[i] === 0) return;
+  touch(i);
+  life[i]--;
+}
+
+/* Heater: the other terminal - turns charge back into heat. */
+function updHeater(x, y, i, m) {
+  if (life[i] === 0) return;
+  touch(i);
+  life[i]--;
+  for (let k = 0; k < 4; k++) {
+    const nx = x + DX4[k], ny = y + DY4[k];
+    if (!inb(nx, ny)) continue;
+    const j = ny * W + nx, nm = mat[j];
+    if (nm === EMPTY) continue;
+    if      (nm === ICE)                          { mat[j] = WATER; life[j] = 0; touch(j); }
+    else if (nm === WATER && Math.random() < 0.2) { mat[j] = STEAM; life[j] = 90 + rnd(60); touch(j); }
+    else if (EXPL[nm] === 1) { if (life[j] === 0) { life[j] = FUSE[nm] || (1 + rnd(4)); touch(j); } }
+    else if (FLAM[nm] === 1 && Math.random() < 0.35) ignite(j, nm);
+    else if (nm === SAND  && Math.random() < 0.02) { mat[j] = GLASS; touch(j); }
+  }
+  // a hot enough coil sets the air alight on its own
+  if (life[i] > 20) {
+    const k = rnd(4), nx = x + DX4[k], ny = y + DY4[k];
+    if (inb(nx, ny)) {
+      const j = ny * W + nx;
+      if (mat[j] === EMPTY && Math.random() < 0.12) {
+        mat[j] = FIRE; life[j] = 20 + rnd(20); moved[j] = 1; touch(j);
+      }
+    }
+  }
+}
+
+/* -------------------------------------------------------------- step ----- */
+let frame = 0;
+
+function cell(x, y, i) {
+  const m = mat[i];
+  if (m === EMPTY || moved[i]) return;
+  const f = RULES[m];
+  if (f !== null) f(x, y, i, m);
+}
+
+/* Weather. 0 = clear, 1 = rain, 2 = snow. Cells are sprinkled along the top row
+   and then simply fall - there is no weather system, only more of the sand
+   already falling, which is why it costs nothing when it is off. */
+let weather = 0;
+
+function stepWeather() {
+  if (weather === 0) return;
+  const drops = weather === 1 ? 3 : 2;
+  for (let d = 0; d < drops; d++) {
+    const x = rnd(W);
+    if (mat[x] !== EMPTY) continue;            // do not stack up on the ceiling
+    mat[x] = weather === 1 ? WATER : SNOW;
+    life[x] = 0;
+    touch(x);
+  }
+}
+
+function step() {
+  moved.fill(0);
+  actNext.fill(0);
+  heartsPrev = heartsNow; heartsNow = 0;   // what last step actually found
+  if (heartsPrev === 0) heartAge = 0;      // nothing beating - the clock restarts
+  stepWeather();
+  stepWaves();
+  for (let y = H - 1; y >= 0; y--) {
+    // alternate scan direction so liquids do not all drift one way
+    const dir = ((frame + y) & 1) ? 1 : -1;
+    const row = y * W, cbase = ((y / CW) | 0) * CX;
+    if (dir === 1) {
+      for (let cx = 0; cx < CX; cx++) {
+        if (actNow[cbase + cx] === 0) continue;         // whole chunk asleep
+        const xs = cx * CW, xe = Math.min(W, xs + CW);
+        for (let x = xs; x < xe; x++) cell(x, y, row + x);
+      }
+    } else {
+      for (let cx = CX - 1; cx >= 0; cx--) {
+        if (actNow[cbase + cx] === 0) continue;
+        const xs = cx * CW, xe = Math.min(W, xs + CW);
+        for (let x = xe - 1; x >= xs; x--) cell(x, y, row + x);
+      }
+    }
+  }
+  actNow.set(actNext);
+  frame++;
+}
+
+/* ------------------------------------------------------------ render ----- */
+const cv  = document.getElementById("cv");
+const ctx = cv.getContext("2d", { alpha: false });
+const off = document.createElement("canvas");
+off.width = W; off.height = H;
+const octx = off.getContext("2d", { alpha: false });
+const img  = octx.createImageData(W, H);
+const buf  = new Uint32Array(img.data.buffer);
+
+/* ---------------------------------------------------------------- view --- */
+/* Powers of two only, so the source rectangle divides both 400 and 240 exactly
+   and every cell stays a crisp square block at any zoom. */
+const ZOOMS = [1, 2, 4, 8, 16];
+let zoomIx = 0, panX = 0, panY = 0;
+const viewW = () => W / ZOOMS[zoomIx];
+const viewH = () => H / ZOOMS[zoomIx];
+
+function clampPan() {
+  panX = Math.max(0, Math.min(W - viewW(), Math.round(panX)));
+  panY = Math.max(0, Math.min(H - viewH(), Math.round(panY)));
+}
+/* Zoom about a point, so whatever is under the cursor stays under it. */
+function zoomAt(fx, fy, dir) {
+  const nx = Math.max(0, Math.min(ZOOMS.length - 1, zoomIx + dir));
+  if (nx === zoomIx) return;
+  const wx = panX + fx * viewW(), wy = panY + fy * viewH();
+  zoomIx = nx;
+  panX = wx - fx * viewW();
+  panY = wy - fy * viewH();
+  clampPan();
+}
+function resetView() { zoomIx = 0; panX = 0; panY = 0; }
+
+function render() {
+  const flash = (frame >> 1) & 1;          // lit charges blink white
+  for (let i = 0; i < N; i++) {
+    const m = mat[i];
+    if (m === FIRE) buf[i] = fireColor(life[i]);
+    else if (GLOWS[m] === 1 && life[i] > 0) buf[i] = glowColor(m, life[i]);
+    else if (flash && EXPL[m] === 1 && life[i] > 0) buf[i] = 0xFFFFFFFF;
+    else buf[i] = PAL[m][noise[i] & 7];
+  }
+  octx.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, panX, panY, viewW(), viewH(), 0, 0, cv.width, cv.height);
+}
+
+function fit() {
+  const st = document.getElementById("stage");
+  const s = Math.max(1, Math.floor(Math.min(
+    (st.clientWidth  - 24) / W,
+    (st.clientHeight - 24) / H)));
+  cv.width  = W * s;
+  cv.height = H * s;
+}
+window.addEventListener("resize", fit);
+
+/* --------------------------------------------------------------- ui ------ */
+let sel = SAND, brush = 6, paused = false, lowPower = true, erasing = false;
+
+/* Grouped, because a flat list of 45 materials is unusable. Anything not named
+   here still shows up, under Other, so a new material is never invisible. */
+const GROUPS = [
+  ["Earth & liquid", [SAND, DIRT, STONE, GLASS, WALL, WATER, OIL, ACID, SNOW]],
+  ["Fire & heat",    [FIRE, LAVA, ICE, STEAM, SMOKE, WOOD, TORCH]],
+  ["Explosive",      [POWDR, BOMB, NUKE, MEGA, HOLE, FWORK, BALLOON]],
+  ["Plants",         [SEED, SAPLING, LEAF, PLANT, MOSS, MOLD, ALGAE, SHROOM]],
+  ["Animals",        [BUG, WORM, BEE, BEEHIVE, HONEY, BIRD, SPIDER, HIVE, WEB, FROG, FISH, SHARK, MOTH]],
+  ["Electric",       [SPARK, COPPER, METAL, IRON, RUBBER, SWITCH, BATT, DYNAMO,
+                      SENSOR, LAMP, LEDR, LEDG, LEDB, HEATER, COOLER, FAN]],
+  ["Unreal",         [HEART, BLOOM, HUSK, PFIRE, EGG, SPORE, TENDRIL, INFDIRT, INFSTONE, INFWATER, INFWOOD,
+                      INFMETAL, INFPLANT, INFLEAF, INFBUG, INFWORM, INFBEE,
+                      INFBIRD, INFSPIDER, INFFROG, INFFISH, INFSHARK,
+                      INFOIL, INFMOTH, INFWEB]],
+  ["Tools",          [EMPTY, CLONER, VOID, MAGNET, CURE]],
+];
+
+const palEl = document.getElementById("pal");
+function addSwatch(m) {
+  const b = document.createElement("button");
+  b.className = "mb" + (m.id === sel ? " on" : "");
+  b.dataset.id = m.id;
+  b.innerHTML = `<span class="sw" style="background:${m.col}"></span>` +
+                `<span>${m.name}</span><span class="k">${m.key || ""}</span>`;
+  b.onclick = () => setSel(m.id);
+  palEl.appendChild(b);
+}
+(function buildPalette() {
+  const placed = new Set();
+  for (const [title, ids] of GROUPS) {
+    const shown = ids.filter(id => !MATS[id].hidden);
+    if (!shown.length) continue;
+    const h = document.createElement("div");
+    h.className = "grp";
+    h.textContent = title;
+    palEl.appendChild(h);
+    for (const id of shown) { addSwatch(MATS[id]); placed.add(id); }
+  }
+  const rest = MATS.filter(m => !m.hidden && !placed.has(m.id));
+  if (rest.length) {
+    const h = document.createElement("div");
+    h.className = "grp";
+    h.textContent = "Other";
+    palEl.appendChild(h);
+    rest.forEach(addSwatch);
+  }
+})();
+function setSel(id) {
+  sel = id;
+  [...palEl.children].forEach(b => {
+    if (b.dataset.id !== undefined) b.classList.toggle("on", +b.dataset.id === id);
+  });
+}
+
+const brushEl = document.getElementById("brush"), bszEl = document.getElementById("bsz");
+brushEl.oninput = () => { brush = +brushEl.value; bszEl.textContent = brush; };
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("show"), 1400);
+}
+
+/* place one cell, giving timed materials their starting life */
+function place(i, m) {
+  mat[i] = m;
+  life[i] = m === FIRE  ? 40 + rnd(40)
+          : m === SMOKE ? 80 + rnd(70)
+          : m === STEAM ? 90 + rnd(70)
+          : (m === BUG || m === FISH || m === BIRD || m === BEE ||
+             m === WORM || m === SPIDER || m === FROG || m === SHARK ||
+             m === INFBUG || m === INFFISH || m === INFBIRD ||
+             m === INFBEE || m === INFSPIDER || m === INFWORM ||
+             m === INFFROG || m === INFSHARK)
+              ? 90 + rnd(60)                           // starting energy
+          : m === HEART ? 20
+          : m === SPORE ? 70 + rnd(70)
+          : m === TENDRIL ? 30                       // how far it can still grow
+          : m === EGG ? 120 + rnd(120)               // time to hatch
+          : m === SAPLING ? 1                          // height grown so far
+          : 0;
+  touch(i);
+  actNow[CHUNK[i]] = 1;      // painting must wake the chunk for THIS step too
+}
+
+function paint(cx, cy, m) {
+  // one per click regardless of brush - each of these is an area scan, and a
+  // brushful of them would crawl
+  if (m === HOLE || m === MAGNET) {
+    if (cx >= 0 && cx < W && cy >= 0 && cy < H) place(cy * W + cx, m);
+    return;
+  }
+  const r = brush, r2 = r * r;
+  // scattering powders/liquids as they are drawn stops solid rectangular blobs
+  const scatter = MATS[m].movable && m !== EMPTY ? 0.65 : 1;
+  for (let y = cy - r; y <= cy + r; y++) {
+    if (y < 0 || y >= H) continue;
+    for (let x = cx - r; x <= cx + r; x++) {
+      if (x < 0 || x >= W) continue;
+      const dx = x - cx, dy = y - cy;
+      if (dx * dx + dy * dy > r2) continue;
+      if (scatter < 1 && Math.random() > scatter) continue;
+      const i = y * W + x;
+      if (m !== EMPTY && mat[i] === WALL) continue;   // walls are protected
+      place(i, m);
+    }
+  }
+}
+
+let drawing = false, lastX = -1, lastY = -1;
+let panning = false, panFromX = 0, panFromY = 0, panOrigX = 0, panOrigY = 0;
+
+/* Fraction across the canvas, 0..1 - the basis for both picking and zooming. */
+function canvasFrac(ev) {
+  const r = cv.getBoundingClientRect();
+  return [(ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height];
+}
+function cellAt(ev) {
+  const [fx, fy] = canvasFrac(ev);
+  return [Math.floor(panX + fx * viewW()), Math.floor(panY + fy * viewH())];
+}
+function strokeTo(x, y, m) {
+  if (lastX < 0) { paint(x, y, m); }
+  else {                                            // interpolate fast drags
+    const dx = x - lastX, dy = y - lastY;
+    const n = Math.max(1, Math.max(Math.abs(dx), Math.abs(dy)));
+    for (let k = 0; k <= n; k++)
+      paint(Math.round(lastX + dx * k / n), Math.round(lastY + dy * k / n), m);
+  }
+  lastX = x; lastY = y;
+}
+
+cv.addEventListener("contextmenu", e => e.preventDefault());
+/* Clicking an existing switch flips the whole connected run of switch cells, so
+   a switch you drew with a fat brush behaves as one switch rather than hundreds. */
+function toggleSwitch(start) {
+  const want = mat[start] === SWITCH ? SWITCHON : SWITCH;
+  const stack = [start], seen = new Set([start]);
+  while (stack.length) {
+    const i = stack.pop();
+    mat[i] = want;
+    if (want === SWITCH) life[i] = 0;            // opening it kills the charge
+    touch(i); actNow[CHUNK[i]] = 1;
+    const x = i % W, y = (i / W) | 0;
+    for (let k = 0; k < 4; k++) {
+      const nx = x + DX4[k], ny = y + DY4[k];
+      if (!inb(nx, ny)) continue;
+      const j = ny * W + nx;
+      if (seen.has(j)) continue;
+      if (mat[j] === SWITCH || mat[j] === SWITCHON) { seen.add(j); stack.push(j); }
+    }
+  }
+  return seen.size;
+}
+
+cv.addEventListener("mousedown", e => {
+  if (e.button === 1) {                    // middle button drags the view
+    e.preventDefault();
+    panning = true;
+    panFromX = e.clientX; panFromY = e.clientY;
+    panOrigX = panX;      panOrigY = panY;
+    return;
+  }
+  erasing = e.button === 2;
+  const [x, y] = cellAt(e);
+  if (!erasing && sel === SPARK) {   // lightning is one bolt per click, not a brush
+    strike(x);
+    return;
+  }
+  if (!erasing && sel === SWITCH && x >= 0 && x < W && y >= 0 && y < H) {
+    const i = y * W + x;
+    if (mat[i] === SWITCH || mat[i] === SWITCHON) {
+      const n = toggleSwitch(i);
+      toast((mat[i] === SWITCHON ? "Switch closed" : "Switch open") + " (" + n + " cells)");
+      return;
+    }
+  }
+  drawing = true; lastX = lastY = -1;
+  strokeTo(x, y, erasing ? EMPTY : sel);
+});
+window.addEventListener("mousemove", e => {
+  if (panning) {
+    const r = cv.getBoundingClientRect();
+    panX = panOrigX - (e.clientX - panFromX) / r.width  * viewW();
+    panY = panOrigY - (e.clientY - panFromY) / r.height * viewH();
+    clampPan();
+    return;
+  }
+  if (!drawing) return;
+  const [x, y] = cellAt(e);
+  strokeTo(x, y, erasing ? EMPTY : sel);
+});
+window.addEventListener("mouseup", () => {
+  drawing = false; panning = false; lastX = lastY = -1;
+});
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  if (e.shiftKey) {                        // shift+wheel still sizes the brush
+    brush = Math.max(1, Math.min(40, brush + (e.deltaY < 0 ? 1 : -1)));
+    brushEl.value = brush; bszEl.textContent = brush;
+    return;
+  }
+  const [fx, fy] = canvasFrac(e);
+  zoomAt(fx, fy, e.deltaY < 0 ? 1 : -1);
+}, { passive: false });
+
+/* ------------------------------------------------------------ actions ---- */
+const bPause = document.getElementById("bPause"),
+      bLow   = document.getElementById("bLow"),
+      bWild  = document.getElementById("bWild"),
+      bWeather = document.getElementById("bWeather");
+
+function togglePause() {
+  paused = !paused;
+  bPause.textContent = paused ? "Resume" : "Pause";
+  bPause.classList.toggle("on", paused);
+}
+function clearWorld() {
+  mat.fill(EMPTY); life.fill(0); waves.length = 0;
+  heartsPrev = heartsNow = 0;
+  wakeAll();
+  toast("Cleared");
+}
+/* Wild hearts: let a heart grow by itself deep inside a big mold mass. Off by
+   default, because an uninvited heart wakes every scrap of mold in the world. */
+function toggleWild() {
+  wildHearts = !wildHearts;
+  bWild.classList.toggle("on", wildHearts);
+  toast(wildHearts ? "Wild hearts: mold can grow its own" : "Wild hearts off: place hearts yourself");
+}
+/* Weather cycles clear -> rain -> snow, because three states want one button
+   rather than two. */
+function cycleWeather() {
+  weather = (weather + 1) % 3;
+  const name = weather === 0 ? "off" : weather === 1 ? "rain" : "snow";
+  bWeather.textContent = "Weather: " + name;
+  bWeather.classList.toggle("on", weather !== 0);
+  toast(weather === 0 ? "Weather cleared" : weather === 1 ? "It is raining" : "It is snowing");
+}
+function toggleLow() {
+  lowPower = !lowPower;
+  bLow.classList.toggle("on", lowPower);
+  toast(lowPower ? "Low power: 30 FPS" : "Full speed: 60 FPS");
+}
+
+/* Save/load uses run-length encoding, which crushes a mostly-empty world down
+   to a few hundred bytes and fits comfortably in localStorage. */
+function saveWorld() {
+  const parts = [];
+  let cur = mat[0], run = 1;
+  for (let i = 1; i < N; i++) {
+    if (mat[i] === cur && run < 65000) { run++; }
+    else { parts.push(cur + ":" + run); cur = mat[i]; run = 1; }
+  }
+  parts.push(cur + ":" + run);
+  try {
+    localStorage.setItem("cinder.world", parts.join(","));
+    toast("Saved");
+  } catch (e) { toast("Save failed: " + e.message); }
+}
+function loadWorld() {
+  const s = localStorage.getItem("cinder.world");
+  if (!s) { toast("No save found"); return; }
+  let i = 0;
+  for (const p of s.split(",")) {
+    const c = p.indexOf(":");
+    const m = +p.slice(0, c), run = +p.slice(c + 1);
+    for (let k = 0; k < run && i < N; k++, i++) { mat[i] = m; life[i] = 0; }
+  }
+  while (i < N) { mat[i] = EMPTY; life[i++] = 0; }
+  waves.length = 0;
+  wakeAll();
+  toast("Loaded");
+}
+
+document.getElementById("bStep").onclick  = () => { if (paused) step(); };
+document.getElementById("bClear").onclick = clearWorld;
+document.getElementById("bSave").onclick  = saveWorld;
+document.getElementById("bLoad").onclick  = loadWorld;
+document.getElementById("bFit").onclick   = resetView;
+document.getElementById("bZoom").onclick  = () => zoomAt(0.5, 0.5, 1);
+bPause.onclick = togglePause;
+bLow.onclick   = toggleLow;
+bWild.onclick  = toggleWild;
+bWeather.onclick = cycleWeather;
+bLow.classList.add("on");
+
+const KEYMAP = {};
+MATS.forEach(m => { if (!m.hidden && m.key) KEYMAP[m.key.toLowerCase()] = m.id; });
+window.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === " ")      { e.preventDefault(); togglePause(); return; }
+  if (k === ".")      { if (paused) step(); return; }
+  if (k === "c")      { clearWorld(); return; }
+  if (k === "s")      { saveWorld(); return; }
+  if (k === "l")      { loadWorld(); return; }
+  if (k === "[")      { brush = Math.max(1, brush - 2);  brushEl.value = brush; bszEl.textContent = brush; return; }
+  if (k === "]")      { brush = Math.min(40, brush + 2); brushEl.value = brush; bszEl.textContent = brush; return; }
+  if (k === "home")   { resetView(); return; }
+  if (k === "+" || k === "=") { zoomAt(0.5, 0.5,  1); return; }
+  if (k === "-")              { zoomAt(0.5, 0.5, -1); return; }
+  if (k === "arrowleft")  { e.preventDefault(); panX -= viewW() * 0.15; clampPan(); return; }
+  if (k === "arrowright") { e.preventDefault(); panX += viewW() * 0.15; clampPan(); return; }
+  if (k === "arrowup")    { e.preventDefault(); panY -= viewH() * 0.15; clampPan(); return; }
+  if (k === "arrowdown")  { e.preventDefault(); panY += viewH() * 0.15; clampPan(); return; }
+  if (k in KEYMAP)    setSel(KEYMAP[k]);
+});
+
+/* -------------------------------------------------------------- start ---- */
+function seed() {
+  // a floor of stone, a basin of water, and something to set on fire
+  for (let x = 0; x < W; x++) {
+    for (let y = H - 8; y < H; y++) mat[y * W + x] = STONE;
+    mat[(H - 1) * W + x] = WALL;
+  }
+  for (let y = H - 40; y < H - 8; y++) {
+    mat[y * W + 0] = WALL; mat[y * W + W - 1] = WALL;
+  }
+  for (let y = H - 34; y < H - 8; y++)
+    for (let x = 40; x < 150; x++) mat[y * W + x] = WATER;
+  for (let y = H - 30; y < H - 8; y++)
+    for (let x = 250; x < 300; x++) if (Math.random() < 0.9) mat[y * W + x] = WOOD;
+  for (let y = H - 48; y < H - 34; y++)
+    for (let x = 320; x < 370; x++) if (Math.random() < 0.85) mat[y * W + x] = SAND;
+}
+
+const statEl = document.getElementById("stat");
+let acc = 0, lastT = performance.now(), fps = 0, fpsT = 0, fpsN = 0;
+
+function loop(t) {
+  requestAnimationFrame(loop);
+  const dt = t - lastT;
+  const target = lowPower ? 1000 / 30 : 1000 / 60;
+  acc += dt; lastT = t;
+  if (acc < target) return;
+  acc = Math.min(acc - target, target);   // never spiral on a slow frame
+
+  if (!paused) step();
+  render();
+
+  fpsN++; fpsT += dt;
+  if (fpsT >= 500) { fps = Math.round(fpsN * 1000 / fpsT); fpsN = 0; fpsT = 0; }
+
+  let filled = 0;
+  for (let i = 0; i < N; i += 7) if (mat[i] !== EMPTY) filled++;
+  statEl.innerHTML =
+    `grid   ${W} x ${H}<br>` +
+    `filled ${Math.round(filled / (N / 7) * 100)}%<br>` +
+    `zoom   ${ZOOMS[zoomIx]}x @ ${panX},${panY}<br>` +
+    `fps    ${fps}${paused ? " (paused)" : ""}` +
+    (heartsPrev > 0
+      ? `<br><span style="color:#f5e13a">UNREAL: ${heartsPrev} heart beating</span>`
+      : "");
+}
+
+fit();
+seed();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,1729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>LAND / FLY</title>
+<style>
+  :root{
+    --bg:#0c0a0e; --dark:#221d28; --body:#3a3242; --light:#60546c;
+    --wing:#4e545d; --hi:#8a9099; --red:#d8382c; --pale:#ffa88c;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:var(--bg);overflow:hidden}
+  body{
+    display:flex;align-items:center;justify-content:center;
+    font-family:ui-monospace,"Cascadia Mono","Consolas",monospace;
+    color:#8a9099; user-select:none; -webkit-user-select:none;
+    touch-action:none;
+  }
+  #wrap{position:relative;line-height:0}
+  canvas{
+    display:block;
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#0c0a0e;
+    box-shadow:0 0 0 1px #221d28, 0 20px 60px -10px #000;
+  }
+  #hint{
+    position:absolute;left:0;right:0;bottom:-26px;text-align:center;
+    font-size:11px;letter-spacing:.14em;color:#3a3242;line-height:1.4;
+    pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="hint">ARROWS / WASD &nbsp;MOVE &nbsp;&nbsp;·&nbsp;&nbsp; SPACE &nbsp;LAND &amp; TAKE OFF &nbsp;&nbsp;·&nbsp;&nbsp; M &nbsp;MUTE &nbsp;&nbsp;·&nbsp;&nbsp; R &nbsp;RETRY</div>
+</div>
+<script>
+"use strict";
+/* =========================================================================
+   LAND / FLY
+   Sprite: "Land - Fly (sprite).png" — 16x13, two frames, decoded pixel-exact.
+   ========================================================================= */
+
+const VW = 480, VH = 300;            // logical resolution
+const FLY_W = 16, FLY_H = 13;
+
+/* ---------- palette (taken straight from the sprite sheet) --------------- */
+const C = {
+  bg:   '#0c0a0e',
+  dark: '#221d28',
+  body: '#3a3242',
+  light:'#60546c',
+  wing: '#4e545d',
+  hi:   '#8a9099',
+  red:  '#d8382c',
+  pale: '#ffa88c',
+  // room accents, kept close to the sheet
+  honey:'#d9954a',
+  honeyD:'#8a5a26',
+  volt: '#9b7ee0',
+  voltD:'#4a3a72',
+  web:  '#6a6d78'
+};
+
+/* ---------- sprite data -------------------------------------------------- */
+const KEY = { B:C.body, W:C.wing, R:C.red, L:C.light, D:C.dark, H:C.hi, E:C.pale };
+
+const FRAME_UP = [
+  "........WW......",
+  ".....WWWWWWWW...",
+  "...HWWWWWWWWWWH.",
+  "..HWWWWWWWWWWWWH",
+  "...WWWWWWWWWWWW.",
+  ".RRRLLLBBBBBBB..",
+  "RERRRLLLBBBBBBBB",
+  "RRRRRLLBBBBBBBBB",
+  ".RRRBBBBBBBBBBB.",
+  "..BBBBBBBBBBBB..",
+  "...BBBBBBBBBB...",
+  "..D...D...D.....",
+  ".D....D....D...."
+];
+const FRAME_DOWN = [
+  "................",
+  "........WW......",
+  ".....WWWWWWWW...",
+  "...HWWWWWWWWWWH.",
+  "....WWWWWWWWWW..",
+  ".RRRLLLBBBBBBB..",
+  "RERRRLLLBBBBBBBB",
+  "RRRRRLLBBBBBBBBB",
+  ".RRRBBBBBBBBBBB.",
+  "..BBBBBBBBBBBB..",
+  "...BBBBBBBBBB...",
+  "...D..D..D......",
+  "..D...D...D....."
+];
+
+function bakeSprite(rows, flip){
+  const cv = document.createElement('canvas');
+  cv.width = FLY_W; cv.height = FLY_H;
+  const g = cv.getContext('2d');
+  for (let y = 0; y < rows.length; y++){
+    const row = rows[y];
+    for (let x = 0; x < row.length; x++){
+      const ch = row[x];
+      if (ch === '.') continue;
+      g.fillStyle = KEY[ch];
+      g.fillRect(flip ? (FLY_W - 1 - x) : x, y, 1, 1);
+    }
+  }
+  return cv;
+}
+// [flip][frame] — sprite art faces LEFT, so flip=1 is "facing right"
+const SPR = [
+  [bakeSprite(FRAME_UP,false), bakeSprite(FRAME_DOWN,false)],
+  [bakeSprite(FRAME_UP,true),  bakeSprite(FRAME_DOWN,true)]
+];
+
+/* ---------- canvas ------------------------------------------------------- */
+const cv  = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let scale = 2;
+function resize(){
+  const s = Math.max(1, Math.min(
+    Math.floor(window.innerWidth  / VW),
+    Math.floor((window.innerHeight - 60) / VH)
+  ));
+  scale = s;
+  cv.width  = VW * s;
+  cv.height = VH * s;
+  ctx.imageSmoothingEnabled = false;
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ---------- input -------------------------------------------------------- */
+const keys = Object.create(null);
+const pressed = Object.create(null);
+function norm(e){
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  return k;
+}
+window.addEventListener('keydown', e => {
+  const k = norm(e);
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if (!keys[k]) pressed[k] = true;
+  keys[k] = true;
+  audio.unlock();
+}, {passive:false});
+window.addEventListener('keyup', e => { keys[norm(e)] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+function held(...ks){ return ks.some(k => keys[k]); }
+function tapped(...ks){ return ks.some(k => pressed[k]); }
+function clearPressed(){ for (const k in pressed) delete pressed[k]; }
+
+/* ---------- audio: a synthesised fly ------------------------------------- */
+const audio = {
+  ac:null, muted:false, buzzGain:null, ok:false,
+  unlock(){
+    if (this.ac) { if (this.ac.state === 'suspended') this.ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try { this.ac = new AC(); } catch(e){ return; }
+    const ac = this.ac;
+    const master = ac.createGain();
+    master.gain.value = 0.5;
+    master.connect(ac.destination);
+    this.master = master;
+
+    // wing buzz: two detuned saws through a lowpass, tremolo on the gain
+    const g = ac.createGain(); g.gain.value = 0;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+    const o1 = ac.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 172;
+    const o2 = ac.createOscillator(); o2.type = 'sawtooth'; o2.frequency.value = 179;
+    const trem = ac.createOscillator(); trem.type = 'sine'; trem.frequency.value = 27;
+    const tremG = ac.createGain(); tremG.gain.value = 0.45;
+    trem.connect(tremG); tremG.connect(g.gain);
+    o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(master);
+    o1.start(); o2.start(); trem.start();
+    this.buzzGain = g; this.o1 = o1; this.o2 = o2; this.lp = lp;
+    this.ok = true;
+  },
+  buzz(amount, speed){
+    if (!this.ok || this.muted) { if (this.buzzGain) this.buzzGain.gain.value = 0; return; }
+    const t = this.ac.currentTime;
+    this.buzzGain.gain.setTargetAtTime(0.055 * amount, t, 0.05);
+    const f = 150 + speed * 34;
+    this.o1.frequency.setTargetAtTime(f,        t, 0.06);
+    this.o2.frequency.setTargetAtTime(f * 1.04, t, 0.06);
+  },
+  blip(freq, dur, type, vol, slideTo){
+    if (!this.ok || this.muted) return;
+    const ac = this.ac, t = ac.currentTime;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t + dur);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol == null ? 0.12 : vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  noise(dur, vol, freq){
+    if (!this.ok || this.muted) return;
+    const ac = this.ac, t = ac.currentTime;
+    const n = Math.floor(ac.sampleRate * dur);
+    const buf = ac.createBuffer(1, n, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random()*2-1) * (1 - i/n);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const bp = ac.createBiquadFilter(); bp.type='lowpass'; bp.frequency.value = freq || 900;
+    const g = ac.createGain(); g.gain.value = vol == null ? 0.3 : vol;
+    src.connect(bp); bp.connect(g); g.connect(this.master);
+    src.start();
+  },
+  toggle(){
+    this.muted = !this.muted;
+    if (this.muted && this.buzzGain) this.buzzGain.gain.value = 0;
+  }
+};
+
+/* ---------- geometry helpers -------------------------------------------- */
+function R(x,y,w,h,kind){ return {x,y,w,h,kind:kind||'solid'}; }
+function inRect(px,py,r){ return px >= r.x && px <= r.x+r.w && py >= r.y && py <= r.y+r.h; }
+function boxHit(ax,ay,aw,ah,b){
+  return ax < b.x+b.w && ax+aw > b.x && ay < b.y+b.h && ay+ah > b.y;
+}
+function clamp(v,a,b){ return v < a ? a : v > b ? b : v; }
+function lerp(a,b,t){ return a + (b-a)*t; }
+
+const FACES = ['top','bottom','left','right'];
+function face(r, dir){
+  switch(dir){
+    case 'top':    return {x0:r.x,     y0:r.y,     x1:r.x+r.w, y1:r.y,     nx:0,  ny:-1, len:r.w};
+    case 'bottom': return {x0:r.x,     y0:r.y+r.h, x1:r.x+r.w, y1:r.y+r.h, nx:0,  ny:1,  len:r.w};
+    case 'left':   return {x0:r.x,     y0:r.y,     x1:r.x,     y1:r.y+r.h, nx:-1, ny:0,  len:r.h};
+    case 'right':  return {x0:r.x+r.w, y0:r.y,     x1:r.x+r.w, y1:r.y+r.h, nx:1,  ny:0,  len:r.h};
+  }
+}
+// point at distance t along a face, then pushed out along the normal by `off`
+function facePoint(f, t, off){
+  const dx = f.x1 - f.x0, dy = f.y1 - f.y0;
+  const u = f.len === 0 ? 0 : t / f.len;
+  return { x: f.x0 + dx*u + f.nx*off, y: f.y0 + dy*u + f.ny*off };
+}
+
+/* =========================================================================
+   LEVELS
+   ========================================================================= */
+const T = 10; // wall thickness
+
+// Build the four room walls, leaving a gap where the exit sits.
+function walls(exit){
+  const out = [];
+  const side = exit ? exit.side : null;
+  const at = exit ? exit.at : 0, len = exit ? exit.len : 0;
+
+  if (side === 'top'){
+    out.push(R(0,0,at,T,'wall'), R(at+len,0,VW-at-len,T,'wall'));
+  } else out.push(R(0,0,VW,T,'wall'));
+
+  if (side === 'bottom'){
+    out.push(R(0,VH-T,at,T,'wall'), R(at+len,VH-T,VW-at-len,T,'wall'));
+  } else out.push(R(0,VH-T,VW,T,'wall'));
+
+  if (side === 'left'){
+    out.push(R(0,T,T,at-T,'wall'), R(0,at+len,T,VH-T-at-len,'wall'));
+  } else out.push(R(0,T,T,VH-2*T,'wall'));
+
+  if (side === 'right'){
+    out.push(R(VW-T,T,T,at-T,'wall'), R(VW-T,at+len,T,VH-T-at-len,'wall'));
+  } else out.push(R(VW-T,T,T,VH-2*T,'wall'));
+
+  return out.filter(r => r.w > 0 && r.h > 0);
+}
+function exitRect(exit){
+  if (exit.side === 'right')  return R(VW-T, exit.at, T, exit.len, 'exit');
+  if (exit.side === 'left')   return R(0,    exit.at, T, exit.len, 'exit');
+  if (exit.side === 'top')    return R(exit.at, 0,    exit.len, T, 'exit');
+  return R(exit.at, VH-T, exit.len, T, 'exit');
+}
+
+// food patch: sits on top of a surface
+function F(x,y,w,amt,kind){ return {x, y:y-4, w, h:4, amt, max:amt, kind:kind||'sugar'}; }
+
+/* Level list. Each level:
+   name, act, exit, solids[], food[], swat{}, paper[], zaps[], spiders[], sprays[], fans[]
+   spawn: [x,y]
+*/
+const LEVELS = [
+
+/* ---- ACT I — THE COUNTER --------------------------------------------- */
+{ name:'FIRST LIGHT', act:1, spawn:[80,60],
+  exit:{side:'right', at:40, len:36},
+  solids:[ R(0,250,VW,10,'counter'), R(150,190,60,60,'box'), R(330,215,44,35,'box') ],
+  food:[ F(60,250,50,60,'sugar'), F(240,250,50,60,'sugar') ],
+  swat:{n:1, interval:3.6, telegraph:1.15, size:34, lead:0.0}
+},
+{ name:'CRUMBS', act:1, spawn:[70,50],
+  exit:{side:'top', at:210, len:40},
+  solids:[ R(0,250,VW,10,'counter'), R(60,170,70,14,'shelf'), R(250,130,90,14,'shelf'),
+           R(380,190,50,60,'box') ],
+  food:[ F(150,250,44,45,'sugar'), F(262,130,60,45,'crumb'), F(70,170,50,40,'crumb') ],
+  swat:{n:1, interval:3.2, telegraph:1.0, size:34, lead:0.0}
+},
+{ name:'THE JAM JAR', act:1, spawn:[60,60],
+  exit:{side:'right', at:190, len:36},
+  solids:[ R(0,250,VW,10,'counter'), R(120,196,40,54,'jar'), R(200,210,34,40,'box'),
+           R(300,150,16,100,'bottle'), R(60,120,80,12,'shelf') ],
+  food:[ F(120,196,40,55,'jam'), F(340,250,60,45,'sugar'), F(66,120,66,40,'crumb') ],
+  swat:{n:1, interval:2.9, telegraph:0.95, size:36, lead:0.15}
+},
+{ name:'HIGH SHELF', act:1, spawn:[60,240],
+  exit:{side:'top', at:40, len:40},
+  solids:[ R(0,250,VW,10,'counter'), R(150,80,120,12,'shelf'), R(40,150,90,12,'shelf'),
+           R(330,120,110,12,'shelf'), R(230,200,60,50,'box') ],
+  food:[ F(170,80,80,50,'crumb'), F(345,120,80,50,'jam'), F(50,150,60,40,'sugar') ],
+  swat:{n:1, interval:2.7, telegraph:0.9, size:36, lead:0.2}
+},
+{ name:'TWO HANDS', act:1, spawn:[240,150],
+  exit:{side:'bottom', at:220, len:40},
+  solids:[ R(0,250,220,10,'counter'), R(260,250,220,10,'counter'),
+           R(100,150,60,100,'box'), R(320,150,60,100,'box'),
+           R(180,60,120,12,'shelf') ],
+  food:[ F(196,60,90,55,'crumb'), F(30,250,55,50,'sugar'), F(400,250,55,50,'sugar') ],
+  swat:{n:2, interval:4.2, telegraph:1.0, size:34, lead:0.2}
+},
+
+/* ---- ACT II — THE PANTRY --------------------------------------------- */
+{ name:'STICKY', act:2, spawn:[60,60],
+  exit:{side:'right', at:210, len:36},
+  solids:[ R(0,250,VW,10,'counter'), R(140,180,50,70,'box'), R(280,150,60,100,'box') ],
+  paper:[ R(215,10,14,110,'flypaper'), R(90,10,14,90,'flypaper') ],
+  food:[ F(30,250,60,50,'sugar'), F(140,180,50,50,'jam'), F(285,150,50,45,'crumb') ],
+  swat:{n:1, interval:2.8, telegraph:0.9, size:36, lead:0.2}
+},
+{ name:'THE AEROSOL', act:2, spawn:[70,230],
+  exit:{side:'top', at:200, len:40},
+  solids:[ R(0,250,VW,10,'counter'), R(60,160,80,14,'shelf'), R(250,190,70,60,'box'),
+           R(370,110,60,14,'shelf') ],
+  food:[ F(70,160,60,50,'crumb'), F(255,190,60,50,'jam'), F(380,110,44,45,'sugar') ],
+  sprays:[ {x:466, y:170, dx:-1, dy:0, interval:3.4, t:1.5} ],
+  swat:{n:1, interval:3.4, telegraph:0.95, size:34, lead:0.2}
+},
+{ name:'HANGING TRAPS', act:2, spawn:[240,240],
+  exit:{side:'left', at:40, len:36},
+  solids:[ R(0,250,VW,10,'counter'), R(180,190,120,14,'shelf'), R(40,120,60,14,'shelf'),
+           R(390,150,50,100,'box') ],
+  paper:[ R(140,10,14,120,'flypaper'), R(230,10,14,150,'flypaper'), R(320,10,14,120,'flypaper') ],
+  food:[ F(196,190,90,55,'crumb'), F(48,120,44,45,'sugar'), F(392,150,46,45,'jam') ],
+  swat:{n:1, interval:2.6, telegraph:0.85, size:36, lead:0.25}
+},
+{ name:'CLOSE QUARTERS', act:2, spawn:[40,40],
+  exit:{side:'bottom', at:40, len:36},
+  solids:[ R(0,250,40,10,'counter'), R(76,250,404,10,'counter'),
+           R(120,60,30,150,'pillar'), R(220,90,30,160,'pillar'),
+           R(320,40,30,150,'pillar') ],
+  food:[ F(120,60,30,45,'jam'), F(220,90,30,45,'crumb'), F(320,40,30,45,'sugar'),
+         F(380,250,60,40,'sugar') ],
+  sprays:[ {x:466, y:120, dx:-1, dy:0, interval:3.0, t:1.0} ],
+  swat:{n:2, interval:3.8, telegraph:0.85, size:34, lead:0.25}
+},
+{ name:'THE PANTRY DOOR', act:2, spawn:[240,60],
+  exit:{side:'right', at:120, len:36},
+  solids:[ R(0,250,VW,10,'counter'), R(90,170,70,80,'box'), R(200,120,80,14,'shelf'),
+           R(340,190,70,60,'box'), R(60,60,90,14,'shelf') ],
+  paper:[ R(180,10,14,90,'flypaper'), R(300,10,14,110,'flypaper') ],
+  food:[ F(96,170,58,50,'jam'), F(212,120,58,50,'crumb'), F(346,190,58,50,'sugar') ],
+  sprays:[ {x:14, y:210, dx:1, dy:0, interval:3.6, t:2.0} ],
+  swat:{n:2, interval:3.6, telegraph:0.8, size:36, lead:0.3}
+},
+
+/* ---- ACT III — THE CELLAR -------------------------------------------- */
+{ name:'DOWN THE STAIRS', act:3, spawn:[50,50],
+  exit:{side:'right', at:220, len:36},
+  solids:[ R(0,250,VW,10,'floor'), R(60,90,70,12,'step'), R(150,130,70,12,'step'),
+           R(240,170,70,12,'step'), R(330,210,70,12,'step') ],
+  zaps:[ {x:240, y:50, r:11} ],
+  food:[ F(70,90,50,45,'crumb'), F(160,130,50,45,'jam'), F(250,170,50,45,'sugar'),
+         F(340,210,50,40,'crumb') ],
+  swat:{n:1, interval:3.2, telegraph:0.85, size:36, lead:0.25}
+},
+{ name:'THE LAMP', act:3, spawn:[60,240],
+  exit:{side:'top', at:390, len:40},
+  solids:[ R(0,250,VW,10,'floor'), R(100,160,70,90,'crate'), R(280,140,80,110,'crate'),
+           R(180,60,110,12,'beam') ],
+  zaps:[ {x:225, y:170, r:12}, {x:400, y:80, r:10} ],
+  food:[ F(106,160,58,55,'jam'), F(286,140,68,55,'crumb'), F(196,60,80,45,'sugar') ],
+  swat:{n:1, interval:3.4, telegraph:0.85, size:36, lead:0.25}
+},
+{ name:'COBWEB', act:3, spawn:[60,60],
+  exit:{side:'right', at:60, len:36},
+  solids:[ R(0,250,VW,10,'floor'), R(120,180,60,70,'crate'), R(260,200,70,50,'crate'),
+           R(60,120,80,12,'beam'), R(300,90,110,12,'beam') ],
+  spiders:[ {x:365, y:110, range:78}, {x:152, y:158, range:70} ],
+  food:[ F(66,120,66,50,'crumb'), F(316,90,80,55,'jam'), F(266,200,58,50,'sugar') ],
+  swat:{n:1, interval:3.6, telegraph:0.85, size:36, lead:0.25}
+},
+{ name:'DAMP', act:3, spawn:[240,240],
+  exit:{side:'left', at:180, len:36},
+  solids:[ R(0,250,VW,10,'floor'), R(70,90,60,12,'beam'), R(200,140,90,12,'beam'),
+           R(350,80,70,12,'beam'), R(150,210,60,40,'crate') ],
+  spiders:[ {x:240, y:160, range:74} ],
+  zaps:[ {x:400, y:190, r:11} ],
+  paper:[ R(120,10,14,70,'flypaper') ],
+  food:[ F(76,90,48,50,'crumb'), F(212,140,66,50,'jam'), F(358,80,54,50,'sugar') ],
+  swat:{n:1, interval:3.0, telegraph:0.8, size:36, lead:0.3}
+},
+{ name:'THE DRAIN', act:3, spawn:[60,50],
+  exit:{side:'bottom', at:220, len:40},
+  solids:[ R(0,250,220,10,'floor'), R(260,250,220,10,'floor'),
+           R(90,150,50,100,'crate'), R(290,150,50,100,'crate'),
+           R(160,80,110,12,'beam'), R(380,190,60,60,'crate') ],
+  spiders:[ {x:214, y:100, range:70} ],
+  zaps:[ {x:60, y:200, r:11} ],
+  sprays:[ {x:466, y:60, dx:-1, dy:0, interval:3.2, t:1.5} ],
+  food:[ F(96,150,44,50,'jam'), F(296,150,44,50,'crumb'), F(176,80,80,50,'sugar') ],
+  swat:{n:2, interval:3.6, telegraph:0.8, size:36, lead:0.3}
+},
+
+/* ---- ACT IV — THE KITCHEN AT NIGHT ----------------------------------- */
+{ name:'THE FAN', act:4, spawn:[50,240],
+  exit:{side:'right', at:40, len:36},
+  solids:[ R(0,250,VW,10,'counter'), R(120,170,70,80,'box'), R(280,190,80,60,'box'),
+           R(60,80,90,12,'shelf') ],
+  fans:[ {x:200,y:10,w:120,h:150, fx:0, fy:112} ],
+  food:[ F(126,170,58,50,'jam'), F(286,190,68,55,'crumb'), F(70,80,70,45,'sugar') ],
+  swat:{n:1, interval:3.0, telegraph:0.78, size:36, lead:0.3}
+},
+{ name:'CROSSWIND', act:4, spawn:[240,60],
+  exit:{side:'bottom', at:40, len:36},
+  solids:[ R(0,250,40,10,'counter'), R(76,250,404,10,'counter'),
+           R(90,120,60,12,'shelf'), R(330,120,60,12,'shelf'),
+           R(200,190,80,60,'box') ],
+  fans:[ {x:10,y:150,w:130,h:80, fx:120, fy:0}, {x:340,y:40,w:130,h:80, fx:-120, fy:0} ],
+  zaps:[ {x:240, y:120, r:12} ],
+  food:[ F(96,120,48,50,'crumb'), F(336,120,48,50,'jam'), F(206,190,68,55,'sugar') ],
+  swat:{n:1, interval:2.8, telegraph:0.75, size:36, lead:0.3}
+},
+{ name:'NO SAFE SURFACE', act:4, spawn:[240,150],
+  exit:{side:'top', at:220, len:40},
+  solids:[ R(0,250,VW,10,'counter'), R(60,180,60,70,'box'), R(200,180,60,70,'box'),
+           R(340,180,60,70,'box'), R(130,90,60,12,'shelf'), R(280,90,60,12,'shelf') ],
+  paper:[ R(60,10,14,70,'flypaper'), R(400,10,14,70,'flypaper') ],
+  spiders:[ {x:160, y:120, range:64} ],
+  food:[ F(66,180,48,45,'sugar'), F(206,180,48,45,'jam'), F(346,180,48,45,'crumb'),
+         F(286,90,48,40,'sugar') ],
+  swat:{n:2, interval:3.0, telegraph:0.72, size:36, lead:0.35}
+},
+{ name:'THE LONG NIGHT', act:4, spawn:[50,50],
+  exit:{side:'right', at:200, len:36},
+  solids:[ R(0,250,VW,10,'counter'), R(100,200,50,50,'box'), R(190,150,50,100,'box'),
+           R(280,200,50,50,'box'), R(60,110,70,12,'shelf'), R(330,100,90,12,'shelf') ],
+  zaps:[ {x:250, y:60, r:12} ],
+  sprays:[ {x:14, y:180, dx:1, dy:0, interval:2.8, t:1.0} ],
+  spiders:[ {x:375, y:130, range:70} ],
+  food:[ F(66,110,58,45,'crumb'), F(196,150,48,50,'jam'), F(340,100,70,50,'sugar'),
+         F(286,200,48,40,'crumb') ],
+  swat:{n:2, interval:2.9, telegraph:0.72, size:38, lead:0.35}
+},
+{ name:'SWATTED', act:4, spawn:[176,232],
+  exit:{side:'top', at:220, len:40},
+  solids:[ R(0,250,VW,10,'counter'), R(70,160,60,90,'box'), R(200,120,80,14,'shelf'),
+           R(350,160,60,90,'box'), R(150,60,60,12,'shelf'), R(290,60,60,12,'shelf') ],
+  paper:[ R(240,150,14,100,'flypaper') ],
+  zaps:[ {x:60, y:70, r:11}, {x:420, y:70, r:11} ],
+  spiders:[ {x:240, y:100, range:72} ],
+  fans:[ {x:10,y:190,w:60,h:60, fx:0, fy:-110} ],
+  food:[ F(76,160,48,45,'jam'), F(212,120,58,45,'crumb'), F(356,160,48,45,'sugar'),
+         F(156,60,48,40,'crumb') ],
+  swat:{n:3, interval:3.2, telegraph:0.68, size:38, lead:0.4}
+}
+];
+
+/* =========================================================================
+   GAME STATE
+   ========================================================================= */
+const ST = { TITLE:0, PLAY:1, DEAD:2, WON:3, DONE:4 };
+
+const G = {
+  mode: ST.TITLE,
+  levelIdx: 0,
+  unlocked: 1,
+  selCursor: 0,
+  time: 0,
+  shake: 0,
+  flash: 0,
+  flashColor: '#d8382c',
+  msg: '', msgT: 0,
+  deaths: 0,
+  fly: null,
+  L: null,          // live level instance
+  parts: [],
+  motes: [],
+  fade: 1,
+  bestTime: null,
+  runTime: 0
+};
+
+try {
+  const s = localStorage.getItem('landfly.progress');
+  if (s) G.unlocked = clamp(parseInt(s,10) || 1, 1, LEVELS.length);
+} catch(e){}
+function saveProgress(){
+  try { localStorage.setItem('landfly.progress', String(G.unlocked)); } catch(e){}
+}
+
+/* ---------- level instancing -------------------------------------------- */
+function buildLevel(i){
+  const d = LEVELS[i];
+  const ex = exitRect(d.exit);
+  const solids = walls(d.exit).concat(d.solids || []);
+  const paper  = (d.paper || []).map(p => Object.assign({}, p, {kind:'flypaper'}));
+
+  const L = {
+    def: d,
+    name: d.name,
+    act: d.act,
+    exit: ex,
+    exitDef: d.exit,
+    solids: solids.concat(paper),   // flypaper is landable too
+    paper: paper,
+    food: (d.food || []).map(f => Object.assign({}, f, {amt:f.max})),
+    zaps: (d.zaps || []).map(z => Object.assign({phase:Math.random()*6.28}, z)),
+    spiders: (d.spiders || []).map(s => Object.assign({
+      state:'idle', t:0, cx:s.x, cy:s.y, tx:s.x, ty:s.y, cool:1.2
+    }, s)),
+    sprays: (d.sprays || []).map(s => Object.assign({}, s)),
+    fans: (d.fans || []).map(f => Object.assign({}, f)),
+    puffs: [],
+    swats: [],
+    totalFood: (d.food || []).reduce((a,f) => a + f.max, 0)
+  };
+
+  const sw = d.swat || {n:1, interval:3.5, telegraph:1.0, size:34, lead:0};
+  for (let k = 0; k < sw.n; k++){
+    L.swats.push({
+      state:'idle',
+      t: 1.2 + k * (sw.interval / sw.n),
+      interval: sw.interval,
+      telegraph: sw.telegraph,
+      size: sw.size,
+      lead: sw.lead,
+      tx: VW/2, ty: VH/2,
+      hy: -60,          // hand height for the descent animation
+      hitDone: false
+    });
+  }
+  return L;
+}
+
+function newFly(x,y){
+  return {
+    x, y, vx:0, vy:0,
+    landed:false, face:null, faceRef:null, t:0, rot:0, flip:0,
+    energy:100, belly:0,
+    wing:0, wingT:0,
+    stuck:false, struggle:0,
+    feeding:false, feedPulse:0,
+    exhausted:0,
+    invuln:0,
+    dead:false
+  };
+}
+
+function startLevel(i){
+  G.levelIdx = i;
+  G.L = buildLevel(i);
+  const sp = LEVELS[i].spawn;
+  G.fly = newFly(sp[0], sp[1]);
+  G.mode = ST.PLAY;
+  G.parts.length = 0;
+  G.shake = 0; G.flash = 0;
+  G.fade = 1;
+  G.msg = LEVELS[i].name; G.msgT = 2.4;
+  G.runTime = 0;
+  seedMotes();
+}
+
+function seedMotes(){
+  G.motes.length = 0;
+  for (let i = 0; i < 40; i++){
+    G.motes.push({
+      x: Math.random()*VW, y: Math.random()*VH,
+      vx: (Math.random()-0.5)*4, vy: -2 - Math.random()*6,
+      s: Math.random() < 0.7 ? 1 : 2,
+      a: 0.06 + Math.random()*0.12
+    });
+  }
+}
+seedMotes();
+
+/* ---------- particles ---------------------------------------------------- */
+function spark(x, y, n, color, spd, life){
+  for (let i = 0; i < n; i++){
+    const a = Math.random() * Math.PI * 2;
+    const s = (0.3 + Math.random()) * (spd || 60);
+    G.parts.push({
+      x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+      life: (life || 0.5) * (0.5 + Math.random()),
+      max: (life || 0.5),
+      color: color || C.hi,
+      g: 90, sz: Math.random() < 0.6 ? 1 : 2
+    });
+  }
+}
+
+/* =========================================================================
+   PHYSICS / LANDING
+   ========================================================================= */
+const LAND_DIST   = 11;
+const FLY_ACC     = 780;
+const FLY_DRAG    = 6.2;
+const FLY_MAX     = 132;
+const CRAWL_SPD   = 34;
+const E_FLY       = 7.4;    // energy per second while airborne
+const E_REST      = 2.6;    // regen per second while landed
+const E_FEED      = 19.0;   // regen per second while feeding
+const B_FEED      = 15.5;   // belly per second while feeding
+const HB_W = 10, HB_H = 8;  // hitbox
+
+function solidAt(x, y, skip){
+  const S = G.L.solids;
+  for (let i = 0; i < S.length; i++){
+    const r = S[i];
+    if (r === skip) continue;
+    if (inRect(x, y, r)) return r;
+  }
+  return null;
+}
+
+// Would the fly's body fit if it perched at `t` along this face?
+// Checks the whole hitbox, not just a point — otherwise you can perch in a
+// corner with half the body buried in the perpendicular wall.
+function spotClear(r, f, t){
+  const p = facePoint(f, t, FLY_H/2 - 1);
+  const S = G.L.solids;
+  for (let i = 0; i < S.length; i++){
+    if (S[i] === r) continue;
+    if (boxHit(p.x - HB_W/2, p.y - HB_H/2, HB_W, HB_H, S[i])) return null;
+  }
+  return p;
+}
+
+// Find the best landable face near the fly. Returns {r, dir, f, t, d} or null.
+function findLanding(fx, fy, maxD){
+  const S = G.L.solids;
+  let best = null;
+  for (let i = 0; i < S.length; i++){
+    const r = S[i];
+    for (let k = 0; k < 4; k++){
+      const dir = FACES[k];
+      const f = face(r, dir);
+      if (f.len < 2) continue;
+      // closest point on the face segment, kept clear of the face ends
+      let t = (f.nx === 0) ? (fx - f.x0) : (fy - f.y0);
+      t = clamp(t, Math.min(4, f.len/2), Math.max(f.len - 4, f.len/2));
+      const p = facePoint(f, t, 0);
+      // must be on the outward side of the face
+      const side = (fx - p.x) * f.nx + (fy - p.y) * f.ny;
+      if (side < -1) continue;
+      const d = Math.hypot(fx - p.x, fy - p.y);
+      if (d > maxD) continue;
+      if (!spotClear(r, f, t)) continue;
+      if (!best || d < best.d) best = {r, dir, f, t, d};
+    }
+  }
+  return best;
+}
+
+function doLand(fly, L){
+  fly.landed = true;
+  fly.faceRef = L.r;
+  fly.face = L.dir;
+  fly.t = L.t;
+  fly.vx = 0; fly.vy = 0;
+  const f = face(L.r, L.dir);
+  const p = facePoint(f, L.t, FLY_H/2 - 1);
+  fly.x = p.x; fly.y = p.y;
+  fly.rot = rotFor(L.dir);
+  if (L.r.kind === 'flypaper'){
+    fly.stuck = true; fly.struggle = 0;
+    G.msg = 'STUCK — MASH SPACE'; G.msgT = 1.6;
+    audio.blip(160, 0.18, 'sawtooth', 0.09, 90);
+  }
+  audio.blip(320, 0.05, 'square', 0.045, 220);
+}
+function rotFor(dir){
+  switch(dir){
+    case 'top':    return 0;
+    case 'bottom': return Math.PI;
+    case 'left':   return Math.PI/2;
+    case 'right':  return -Math.PI/2;
+  }
+  return 0;
+}
+function doTakeoff(fly){
+  const f = face(fly.faceRef, fly.face);
+  fly.landed = false;
+  fly.faceRef = null;
+  fly.stuck = false;
+  fly.x += f.nx * 3;
+  fly.y += f.ny * 3;
+  fly.vx = f.nx * 46;
+  fly.vy = f.ny * 46;
+  fly.rot = 0;
+  audio.blip(420, 0.07, 'square', 0.05, 620);
+}
+
+/* =========================================================================
+   UPDATE
+   ========================================================================= */
+function update(dt){
+  G.time += dt;
+  if (G.fade > 0) G.fade = Math.max(0, G.fade - dt * 2.2);
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 3.4);
+  if (G.flash > 0) G.flash = Math.max(0, G.flash - dt * 3.6);
+  if (G.msgT > 0) G.msgT -= dt;
+
+  // dust motes drift everywhere, always
+  for (const m of G.motes){
+    m.x += m.vx * dt; m.y += m.vy * dt;
+    if (m.y < -4){ m.y = VH + 4; m.x = Math.random()*VW; }
+    if (m.x < -4) m.x = VW + 4; else if (m.x > VW + 4) m.x = -4;
+  }
+  // particles
+  for (let i = G.parts.length - 1; i >= 0; i--){
+    const p = G.parts[i];
+    p.life -= dt;
+    if (p.life <= 0){ G.parts.splice(i,1); continue; }
+    p.vy += p.g * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+  }
+
+  if (G.mode === ST.TITLE){ updateTitle(dt); return; }
+  if (G.mode === ST.PLAY){ updatePlay(dt); return; }
+  if (G.mode === ST.DEAD || G.mode === ST.WON || G.mode === ST.DONE){
+    audio.buzz(0, 0);
+    updateEnd(dt);
+  }
+}
+
+function updateTitle(dt){
+  audio.buzz(0.35, 3);
+  const cols = 5;
+  if (tapped('ArrowRight','d')) G.selCursor = Math.min(G.unlocked - 1, G.selCursor + 1);
+  if (tapped('ArrowLeft','a'))  G.selCursor = Math.max(0, G.selCursor - 1);
+  if (tapped('ArrowDown','s'))  G.selCursor = Math.min(G.unlocked - 1, G.selCursor + cols);
+  if (tapped('ArrowUp','w'))    G.selCursor = Math.max(0, G.selCursor - cols);
+  if (tapped(' ','Enter')){
+    G.deaths = 0;
+    startLevel(clamp(G.selCursor, 0, G.unlocked - 1));
+  }
+}
+
+function updateEnd(dt){
+  if (G.mode === ST.WON){
+    if (tapped(' ','Enter')){
+      if (G.levelIdx + 1 >= LEVELS.length){ G.mode = ST.DONE; }
+      else startLevel(G.levelIdx + 1);
+    }
+  } else if (G.mode === ST.DEAD){
+    if (tapped(' ','Enter','r')) startLevel(G.levelIdx);
+  } else if (G.mode === ST.DONE){
+    if (tapped(' ','Enter')){ G.mode = ST.TITLE; G.selCursor = 0; }
+  }
+  if (tapped('Escape')){ G.mode = ST.TITLE; G.selCursor = clamp(G.levelIdx,0,G.unlocked-1); }
+}
+
+function kill(reason){
+  const fly = G.fly;
+  if (fly.dead) return;
+  fly.dead = true;
+  G.mode = ST.DEAD;
+  G.deaths++;
+  G.shake = 1;
+  G.flash = 1; G.flashColor = C.red;
+  spark(fly.x, fly.y, 26, C.red, 130, 0.7);
+  spark(fly.x, fly.y, 14, C.body, 90, 0.6);
+  audio.noise(0.3, 0.4, 500);
+  audio.blip(180, 0.4, 'sawtooth', 0.14, 40);
+  G.deathReason = reason;
+}
+
+function updatePlay(dt){
+  const fly = G.fly, L = G.L;
+  G.runTime += dt;
+
+  if (tapped('Escape')){ G.mode = ST.TITLE; G.selCursor = clamp(G.levelIdx,0,G.unlocked-1); return; }
+  if (tapped('r')){ startLevel(G.levelIdx); return; }
+
+  const ix = (held('ArrowRight','d') ? 1 : 0) - (held('ArrowLeft','a') ? 1 : 0);
+  const iy = (held('ArrowDown','s')  ? 1 : 0) - (held('ArrowUp','w')   ? 1 : 0);
+  const wantToggle = tapped(' ');
+
+  /* ---- landed --------------------------------------------------------- */
+  if (fly.landed){
+    const f = face(fly.faceRef, fly.face);
+
+    if (fly.stuck){
+      if (wantToggle){
+        fly.struggle += 1;
+        fly.energy = Math.max(0, fly.energy - 2.2);
+        spark(fly.x, fly.y, 3, C.honey, 40, 0.3);
+        audio.blip(200 + fly.struggle*22, 0.05, 'square', 0.05);
+        if (fly.struggle >= 5){
+          fly.stuck = false;
+          G.msg = 'FREE'; G.msgT = 0.8;
+          doTakeoff(fly);
+        }
+      }
+    } else {
+      // crawl along the surface
+      const along = (f.nx === 0) ? ix : iy;
+      if (along !== 0){
+        const lo = Math.min(4, f.len/2), hi = Math.max(f.len-4, f.len/2);
+        const nt = clamp(fly.t + along * CRAWL_SPD * dt, lo, hi);
+        // don't crawl into a stretch of surface where the body wouldn't fit
+        if (spotClear(fly.faceRef, f, nt)) fly.t = nt;
+        if (f.nx === 0) fly.flip = along > 0 ? 1 : 0;
+        else            fly.flip = (f.nx > 0) ? (along > 0 ? 1 : 0) : (along > 0 ? 0 : 1);
+      }
+      const p = facePoint(f, fly.t, FLY_H/2 - 1);
+      fly.x = p.x; fly.y = p.y;
+
+      if (wantToggle && fly.energy > 4) doTakeoff(fly);
+    }
+
+    // feeding
+    fly.feeding = false;
+    if (!fly.stuck){
+      for (const fd of L.food){
+        if (fd.amt <= 0) continue;
+        if (boxHit(fly.x - HB_W/2, fly.y - HB_H/2, HB_W, HB_H, fd)){
+          const take = Math.min(fd.amt, B_FEED * dt);
+          fd.amt -= take;
+          fly.belly = Math.min(100, fly.belly + take);
+          fly.energy = Math.min(100, fly.energy + E_FEED * dt);
+          fly.feeding = true;
+          fly.feedPulse += dt;
+          if (fly.feedPulse > 0.16){
+            fly.feedPulse = 0;
+            spark(fly.x, fly.y + 2, 1, C.honey, 26, 0.4);
+            audio.blip(520 + Math.random()*120, 0.035, 'sine', 0.028);
+          }
+          break;
+        }
+      }
+    }
+    if (!fly.feeding) fly.energy = Math.min(100, fly.energy + E_REST * dt);
+    audio.buzz(0.1, 0);
+
+  /* ---- airborne -------------------------------------------------------- */
+  } else {
+    const exhausted = fly.energy <= 0;
+    fly.exhausted = exhausted ? fly.exhausted + dt : 0;
+
+    if (!exhausted){
+      fly.vx += ix * FLY_ACC * dt;
+      fly.vy += iy * FLY_ACC * dt;
+      // a fly never holds a straight line
+      fly.vx += Math.sin(G.time * 21.3 + fly.y * 0.11) * 26 * dt;
+      fly.vy += Math.cos(G.time * 18.7 + fly.x * 0.13) * 26 * dt;
+      fly.energy = Math.max(0, fly.energy - E_FLY * dt);
+    } else {
+      fly.vy += 300 * dt;                     // out of fuel: you drop
+      fly.vx *= (1 - 2.0 * dt);
+    }
+
+    // zapper attraction
+    for (const z of L.zaps){
+      const dx = z.x - fly.x, dy = z.y - fly.y;
+      const d = Math.hypot(dx, dy);
+      const reach = z.r * 8;
+      if (d < reach && d > 0.001){
+        const pull = (1 - d / reach);
+        fly.vx += (dx/d) * pull * pull * 250 * dt;
+        fly.vy += (dy/d) * pull * pull * 250 * dt;
+      }
+    }
+    // fans
+    for (const fn of L.fans){
+      if (inRect(fly.x, fly.y, fn)){
+        fly.vx += fn.fx * dt;
+        fly.vy += fn.fy * dt;
+      }
+    }
+
+    const drag = Math.exp(-FLY_DRAG * dt);
+    fly.vx *= drag; fly.vy *= drag;
+    const sp = Math.hypot(fly.vx, fly.vy);
+    if (sp > FLY_MAX){ fly.vx = fly.vx/sp*FLY_MAX; fly.vy = fly.vy/sp*FLY_MAX; }
+
+    fly.x += fly.vx * dt;
+    fly.y += fly.vy * dt;
+
+    if (Math.abs(fly.vx) > 6) fly.flip = fly.vx > 0 ? 1 : 0;
+
+    // clamp to the canvas BEFORE resolving, or the clamp shoves the fly
+    // back into the wall the resolver just pushed it out of
+    fly.x = clamp(fly.x, 4, VW - 4);
+    fly.y = clamp(fly.y, 4, VH - 4);
+    resolveCollisions(fly);
+
+    // landing
+    if (wantToggle){
+      const spot = findLanding(fly.x, fly.y, LAND_DIST);
+      if (spot) doLand(fly, spot);
+    }
+    // out of energy and touching something → forced landing
+    if (exhausted){
+      const spot = findLanding(fly.x, fly.y, 8);
+      if (spot){ doLand(fly, spot); G.msg = 'EXHAUSTED'; G.msgT = 1.2; }
+    }
+
+    audio.buzz(exhausted ? 0.12 : 0.55, clamp(sp/22, 0, 7));
+  }
+
+  // wing animation
+  fly.wingT += dt;
+  const wingRate = fly.landed ? 0.42 : 0.045;
+  if (fly.wingT > wingRate){ fly.wingT = 0; fly.wing ^= 1; }
+  if (fly.landed && !fly.feeding && Math.random() < 0.02) fly.wing = 0;
+
+  /* ---- hazards --------------------------------------------------------- */
+  updateSwats(dt);
+  updateSprays(dt);
+  updateSpiders(dt);
+
+  for (const z of L.zaps){
+    z.phase += dt * 3;
+    if (!fly.landed){
+      const d = Math.hypot(z.x - fly.x, z.y - fly.y);
+      if (d < z.r + 4){
+        G.flashColor = C.volt;
+        kill('THE LAMP TOOK YOU');
+        audio.blip(1400, 0.25, 'square', 0.16, 120);
+        return;
+      }
+    }
+  }
+
+  /* ---- exit ------------------------------------------------------------ */
+  if (fly.belly >= 100 && !fly.landed){
+    if (boxHit(fly.x - HB_W/2, fly.y - HB_H/2, HB_W, HB_H, L.exit)){
+      G.mode = ST.WON;
+      G.flash = 0.7; G.flashColor = C.pale;
+      spark(fly.x, fly.y, 24, C.pale, 90, 0.9);
+      audio.blip(440, 0.12, 'square', 0.1, 660);
+      setTimeout(() => audio.blip(660, 0.22, 'square', 0.1, 880), 110);
+      if (G.levelIdx + 1 > G.unlocked - 1){
+        G.unlocked = Math.min(LEVELS.length, G.levelIdx + 2);
+        saveProgress();
+      }
+    }
+  }
+}
+
+function resolveCollisions(fly){
+  const S = G.L.solids;
+  const hw = HB_W/2, hh = HB_H/2;
+  for (let pass = 0; pass < 5; pass++){
+    let hit = false;
+    for (const r of S){
+      if (!boxHit(fly.x-hw, fly.y-hh, HB_W, HB_H, r)) continue;
+      hit = true;
+      // push out on the axis of least penetration
+      const pl = (fly.x + hw) - r.x;
+      const pr = (r.x + r.w) - (fly.x - hw);
+      const pt = (fly.y + hh) - r.y;
+      const pb = (r.y + r.h) - (fly.y - hh);
+      const m = Math.min(pl, pr, pt, pb);
+      if (m === pl){ fly.x = r.x - hw;        if (fly.vx > 0) fly.vx *= -0.25; }
+      else if (m === pr){ fly.x = r.x+r.w+hw; if (fly.vx < 0) fly.vx *= -0.25; }
+      else if (m === pt){ fly.y = r.y - hh;   if (fly.vy > 0) fly.vy *= -0.25; }
+      else { fly.y = r.y+r.h+hh;              if (fly.vy < 0) fly.vy *= -0.25; }
+    }
+    if (!hit) break;
+  }
+}
+
+/* ---------- the hand ----------------------------------------------------- */
+function updateSwats(dt){
+  const fly = G.fly, L = G.L;
+  for (const s of L.swats){
+    s.t -= dt;
+    if (s.state === 'idle'){
+      s.hy = lerp(s.hy, -60, 1 - Math.exp(-5*dt));
+      if (s.t <= 0){
+        s.state = 'aim';
+        s.t = s.telegraph;
+        s.hitDone = false;
+        s.tx = clamp(fly.x + fly.vx * s.lead, 22, VW - 22);
+        s.ty = clamp(fly.y + fly.vy * s.lead, 22, VH - 22);
+        audio.blip(90, 0.12, 'sine', 0.05, 70);
+      }
+    } else if (s.state === 'aim'){
+      // late in the wind-up the hand keeps a little tracking, then commits
+      if (s.t > s.telegraph * 0.45){
+        s.tx = lerp(s.tx, clamp(fly.x + fly.vx*s.lead, 22, VW-22), 1 - Math.exp(-3.2*dt));
+        s.ty = lerp(s.ty, clamp(fly.y + fly.vy*s.lead, 22, VH-22), 1 - Math.exp(-3.2*dt));
+      }
+      const k = 1 - (s.t / s.telegraph);
+      s.hy = lerp(-60, -18, k*k);
+      if (s.t <= 0){ s.state = 'strike'; s.t = 0.12; }
+    } else if (s.state === 'strike'){
+      s.hy = lerp(s.hy, 0, 1 - Math.exp(-40*dt));
+      if (!s.hitDone){
+        s.hitDone = true;
+        G.shake = Math.max(G.shake, 0.75);
+        audio.noise(0.16, 0.42, 420);
+        audio.blip(70, 0.16, 'sine', 0.12, 40);
+        spark(s.tx, s.ty, 12, C.dark, 110, 0.45);
+        const h = s.size/2;
+        if (boxHit(fly.x-HB_W/2, fly.y-HB_H/2, HB_W, HB_H,
+                   {x:s.tx-h, y:s.ty-h, w:s.size, h:s.size})){
+          kill('SWATTED');
+          return;
+        }
+        // shockwave shoves an airborne fly
+        if (!fly.landed){
+          const dx = fly.x - s.tx, dy = fly.y - s.ty;
+          const d = Math.max(6, Math.hypot(dx,dy));
+          if (d < s.size * 2.4){
+            const p = (1 - d/(s.size*2.4)) * 190;
+            fly.vx += dx/d * p; fly.vy += dy/d * p;
+          }
+        }
+      }
+      if (s.t <= 0){ s.state = 'recover'; s.t = 0.42; }
+    } else if (s.state === 'recover'){
+      s.hy = lerp(s.hy, -60, 1 - Math.exp(-6*dt));
+      if (s.t <= 0){
+        s.state = 'idle';
+        s.t = s.interval * (0.78 + Math.random()*0.44);
+      }
+    }
+  }
+}
+
+/* ---------- aerosol ------------------------------------------------------ */
+function updateSprays(dt){
+  const L = G.L, fly = G.fly;
+  for (const sp of L.sprays){
+    sp.t -= dt;
+    if (sp.t <= 0){
+      sp.t = sp.interval;
+      audio.noise(0.5, 0.16, 2600);
+      for (let i = 0; i < 5; i++){
+        L.puffs.push({
+          x: sp.x + sp.dx*6, y: sp.y + sp.dy*6 + (Math.random()-0.5)*10,
+          vx: sp.dx * (56 + Math.random()*34), vy: sp.dy * (56 + Math.random()*34) + (Math.random()-0.5)*14,
+          r: 5 + Math.random()*4, life: 3.4, max: 3.4
+        });
+      }
+    }
+  }
+  for (let i = L.puffs.length - 1; i >= 0; i--){
+    const p = L.puffs[i];
+    p.life -= dt;
+    if (p.life <= 0){ L.puffs.splice(i,1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= (1 - 0.9*dt); p.vy *= (1 - 0.9*dt);
+    p.r += 11 * dt;
+    if (Math.hypot(p.x - fly.x, p.y - fly.y) < p.r){
+      fly.energy = Math.max(0, fly.energy - 21 * dt);
+      if (!fly.landed){ fly.vx *= (1 - 1.1*dt); fly.vy *= (1 - 1.1*dt); }
+    }
+  }
+}
+
+/* ---------- spiders ------------------------------------------------------ */
+function updateSpiders(dt){
+  const L = G.L, fly = G.fly;
+  for (const s of L.spiders){
+    s.t -= dt;
+    if (s.state === 'idle'){
+      s.cx = lerp(s.cx, s.x, 1 - Math.exp(-6*dt));
+      s.cy = lerp(s.cy, s.y, 1 - Math.exp(-6*dt));
+      if (s.t <= 0 && fly.landed && Math.hypot(fly.x - s.x, fly.y - s.y) < s.range){
+        s.state = 'wind'; s.t = 0.75;
+        s.tx = fly.x; s.ty = fly.y;
+        audio.blip(240, 0.1, 'triangle', 0.05, 170);
+      }
+    } else if (s.state === 'wind'){
+      s.tx = lerp(s.tx, fly.x, 1 - Math.exp(-2.4*dt));
+      s.ty = lerp(s.ty, fly.y, 1 - Math.exp(-2.4*dt));
+      s.cx = lerp(s.cx, s.x - (s.tx - s.x)*0.12, 1 - Math.exp(-8*dt));
+      s.cy = lerp(s.cy, s.y - (s.ty - s.y)*0.12, 1 - Math.exp(-8*dt));
+      if (s.t <= 0){ s.state = 'lunge'; s.t = 0.3; }
+    } else if (s.state === 'lunge'){
+      s.cx = lerp(s.cx, s.tx, 1 - Math.exp(-16*dt));
+      s.cy = lerp(s.cy, s.ty, 1 - Math.exp(-16*dt));
+      if (Math.hypot(s.cx - fly.x, s.cy - fly.y) < 9){
+        kill('THE SPIDER GOT YOU');
+        return;
+      }
+      if (s.t <= 0){ s.state = 'back'; s.t = 0.55; }
+    } else if (s.state === 'back'){
+      s.cx = lerp(s.cx, s.x, 1 - Math.exp(-5*dt));
+      s.cy = lerp(s.cy, s.y, 1 - Math.exp(-5*dt));
+      if (s.t <= 0){ s.state = 'idle'; s.t = 1.4; }
+    }
+  }
+}
+
+/* =========================================================================
+   RENDER
+   ========================================================================= */
+function px(x,y,w,h,color){
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x)*scale, Math.round(y)*scale, Math.round(w)*scale, Math.round(h)*scale);
+}
+
+// 3x5 pixel font
+const FONT5 = {
+  A:['.#.','#.#','###','#.#','#.#'], B:['##.','#.#','##.','#.#','##.'],
+  C:['.##','#..','#..','#..','.##'], D:['##.','#.#','#.#','#.#','##.'],
+  E:['###','#..','##.','#..','###'], F:['###','#..','##.','#..','#..'],
+  G:['.##','#..','#.#','#.#','.##'], H:['#.#','#.#','###','#.#','#.#'],
+  I:['###','.#.','.#.','.#.','###'], J:['..#','..#','..#','#.#','.#.'],
+  K:['#.#','#.#','##.','#.#','#.#'], L:['#..','#..','#..','#..','###'],
+  M:['#.#','###','###','#.#','#.#'], N:['#.#','###','###','###','#.#'],
+  O:['.#.','#.#','#.#','#.#','.#.'], P:['##.','#.#','##.','#..','#..'],
+  Q:['.#.','#.#','#.#','##.','.##'], R:['##.','#.#','##.','#.#','#.#'],
+  S:['.##','#..','.#.','..#','##.'], T:['###','.#.','.#.','.#.','.#.'],
+  U:['#.#','#.#','#.#','#.#','.#.'], V:['#.#','#.#','#.#','#.#','.#.'],
+  W:['#.#','#.#','###','###','#.#'], X:['#.#','#.#','.#.','#.#','#.#'],
+  Y:['#.#','#.#','.#.','.#.','.#.'], Z:['###','..#','.#.','#..','###'],
+  '0':['.#.','#.#','#.#','#.#','.#.'], '1':['.#.','##.','.#.','.#.','###'],
+  '2':['##.','..#','.#.','#..','###'], '3':['##.','..#','.#.','..#','##.'],
+  '4':['#.#','#.#','###','..#','..#'], '5':['###','#..','##.','..#','##.'],
+  '6':['.##','#..','##.','#.#','.#.'], '7':['###','..#','.#.','.#.','.#.'],
+  '8':['.#.','#.#','.#.','#.#','.#.'], '9':['.#.','#.#','.##','..#','##.'],
+  ' ':['...','...','...','...','...'], '.':['...','...','...','...','.#.'],
+  '-':['...','...','###','...','...'], '/':['..#','..#','.#.','#..','#..'],
+  ':':['...','.#.','...','.#.','...'], '!':['.#.','.#.','.#.','...','.#.'],
+  '?':['##.','..#','.#.','...','.#.'], "'":['.#.','.#.','...','...','...'],
+  '·':['...','...','.#.','...','...'], '%':['#.#','..#','.#.','#..','#.#'],
+  '(':['..#','.#.','.#.','.#.','..#'], ')':['#..','.#.','.#.','.#.','#..'],
+  ',':['...','...','...','.#.','#..'], '×':['...','#.#','.#.','#.#','...'],
+  '+':['...','.#.','###','.#.','...'], '=':['...','###','...','###','...']
+};
+
+function text(str, x, y, color, sz, spacing){
+  sz = sz || 1; spacing = spacing == null ? 1 : spacing;
+  ctx.fillStyle = color;
+  let cx = x;
+  for (const chRaw of String(str)){
+    const ch = chRaw.toUpperCase();
+    const g = FONT5[ch] || FONT5['?'];
+    for (let r = 0; r < 5; r++){
+      for (let c = 0; c < 3; c++){
+        if (g[r][c] === '#'){
+          ctx.fillRect(Math.round(cx + c*sz)*scale, Math.round(y + r*sz)*scale, sz*scale, sz*scale);
+        }
+      }
+    }
+    cx += (3 + spacing) * sz;
+  }
+  return cx - x;
+}
+function textW(str, sz, spacing){
+  sz = sz || 1; spacing = spacing == null ? 1 : spacing;
+  return String(str).length * (3 + spacing) * sz - spacing*sz;
+}
+function textC(str, cx, y, color, sz, spacing){
+  text(str, cx - textW(str,sz,spacing)/2, y, color, sz, spacing);
+}
+
+/* ---------- fly ---------------------------------------------------------- */
+function drawFly(fly){
+  const img = SPR[fly.flip][fly.wing];
+  ctx.save();
+  ctx.translate(Math.round(fly.x)*scale, Math.round(fly.y)*scale);
+  if (fly.rot) ctx.rotate(fly.rot);
+  ctx.drawImage(img, Math.round(-FLY_W/2)*scale, Math.round(-FLY_H/2)*scale, FLY_W*scale, FLY_H*scale);
+  ctx.restore();
+}
+
+/* ---------- room --------------------------------------------------------- */
+const SURF = {
+  wall:     [C.dark,   '#2b2532'],
+  counter:  ['#2e2836','#3d3547'],
+  floor:    ['#241f2b','#332c3c'],
+  box:      ['#332c3c','#443b50'],
+  crate:    ['#2f2836','#40374b'],
+  shelf:    ['#3a3242','#4b4157'],
+  beam:     ['#2b2533','#3a3244'],
+  step:     ['#2e2836','#3d3547'],
+  pillar:   ['#332c3c','#443b50'],
+  jar:      ['#3a3242','#544a63'],
+  bottle:   ['#2d2735','#443b50'],
+  solid:    ['#332c3c','#443b50']
+};
+function drawSolid(r){
+  if (r.kind === 'flypaper'){ drawFlypaper(r); return; }
+  const s = SURF[r.kind] || SURF.solid;
+  px(r.x, r.y, r.w, r.h, s[0]);
+  px(r.x, r.y, r.w, 1, s[1]);                 // lit top edge
+  px(r.x, r.y+r.h-1, r.w, 1, '#1a161f');      // shadowed underside
+  if (r.w > 6 && r.h > 6){
+    px(r.x, r.y, 1, r.h, '#3d3547');
+    px(r.x+r.w-1, r.y, 1, r.h, '#1a161f');
+  }
+}
+function drawFlypaper(r){
+  px(r.x, r.y, r.w, r.h, C.honeyD);
+  px(r.x, r.y, 1, r.h, '#b07a36');
+  for (let y = r.y + 3; y < r.y + r.h - 2; y += 7){
+    px(r.x+1, y, r.w-2, 1, '#b07a36');
+  }
+  // drip at the bottom
+  const d = 2 + Math.sin(G.time*1.3 + r.x)*1.4;
+  px(r.x + r.w/2 - 1, r.y + r.h, 2, d, C.honeyD);
+}
+
+function drawFood(f){
+  if (f.amt <= 0) return;
+  const frac = f.amt / f.max;
+  const w = Math.max(3, f.w * frac);
+  const cx = f.x + f.w/2;
+  const col = f.kind === 'jam' ? C.red : f.kind === 'crumb' ? '#8a7256' : C.honey;
+  const dk  = f.kind === 'jam' ? '#8a231b' : f.kind === 'crumb' ? '#5a4a38' : C.honeyD;
+  if (f.kind === 'crumb'){
+    // scattered crumbs
+    let seed = Math.floor(f.x*13 + f.y*7);
+    for (let i = 0; i < 9; i++){
+      seed = (seed*1103515245 + 12345) & 0x7fffffff;
+      const t = (seed % 1000)/1000;
+      if (t > frac) continue;
+      const ox = (seed >> 7) % Math.max(1,Math.floor(f.w));
+      const oy = (seed >> 15) % 4;
+      px(f.x + ox, f.y + oy, 2, 2, i%3 ? col : dk);
+    }
+  } else {
+    px(cx - w/2, f.y + 1, w, 3, dk);
+    px(cx - w/2 + 1, f.y, w - 2, 2, col);
+    const gl = 0.5 + 0.5*Math.sin(G.time*2 + f.x*0.1);
+    px(cx - w/4, f.y, 2, 1, gl > 0.6 ? C.pale : col);
+  }
+}
+
+function drawZap(z){
+  const fl = 0.72 + 0.28*Math.sin(z.phase*3.1) * (Math.random()<0.06?0.2:1);
+  const reach = z.r*8;
+  const g = ctx.createRadialGradient(z.x*scale, z.y*scale, 0, z.x*scale, z.y*scale, reach*scale);
+  g.addColorStop(0,   'rgba(155,126,224,' + (0.30*fl).toFixed(3) + ')');
+  g.addColorStop(0.35,'rgba(120,96,190,'  + (0.10*fl).toFixed(3) + ')');
+  g.addColorStop(1,   'rgba(74,58,114,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect((z.x-reach)*scale, (z.y-reach)*scale, reach*2*scale, reach*2*scale);
+  // housing
+  px(z.x-2, z.y-z.r-9, 4, 7, C.dark);
+  px(z.x-z.r-2, z.y-z.r-2, (z.r+2)*2, z.r+2, '#1d1926');
+  // the tube
+  for (let i = -1; i <= 1; i++){
+    px(z.x - z.r + 2, z.y + i*3 - 1, (z.r-2)*2, 2, i===0 ? '#cbb6ff' : C.volt);
+  }
+  px(z.x - z.r, z.y - z.r/2, 2, z.r, C.voltD);
+  px(z.x + z.r - 2, z.y - z.r/2, 2, z.r, C.voltD);
+}
+
+function drawSpider(s){
+  const L = G.L;
+  // thread back to the anchor
+  ctx.strokeStyle = 'rgba(106,109,120,0.5)';
+  ctx.lineWidth = Math.max(1, scale*0.5);
+  ctx.beginPath();
+  ctx.moveTo(s.x*scale, (s.y - 40)*scale);
+  ctx.lineTo(s.cx*scale, s.cy*scale);
+  ctx.stroke();
+  // web at the anchor
+  ctx.strokeStyle = 'rgba(106,109,120,0.22)';
+  for (let i = 0; i < 5; i++){
+    const a = (i/5)*Math.PI*2 + 0.3;
+    ctx.beginPath();
+    ctx.moveTo(s.x*scale, s.y*scale);
+    ctx.lineTo((s.x + Math.cos(a)*s.range*0.55)*scale, (s.y + Math.sin(a)*s.range*0.55)*scale);
+    ctx.stroke();
+  }
+  const wind = s.state === 'wind';
+  const body = wind && Math.floor(G.time*14)%2 ? C.red : '#1c1822';
+  px(s.cx-4, s.cy-3, 8, 6, body);
+  px(s.cx-2, s.cy-5, 4, 3, '#141119');
+  px(s.cx-2, s.cy-4, 1, 1, C.red);
+  px(s.cx+1, s.cy-4, 1, 1, C.red);
+  for (let i = 0; i < 4; i++){
+    const yy = s.cy - 2 + i*2;
+    px(s.cx-9, yy, 5, 1, '#171420');
+    px(s.cx+4, yy, 5, 1, '#171420');
+  }
+  if (s.state === 'idle' && G.fly && !G.fly.dead){
+    // territory ring, faint
+    ctx.strokeStyle = 'rgba(216,56,44,0.10)';
+    ctx.beginPath();
+    ctx.arc(s.x*scale, s.y*scale, s.range*scale, 0, Math.PI*2);
+    ctx.stroke();
+  }
+}
+
+function drawFan(f){
+  px(f.x, f.y, f.w, f.h, 'rgba(0,0,0,0)');
+  ctx.fillStyle = 'rgba(138,144,153,0.05)';
+  ctx.fillRect(f.x*scale, f.y*scale, f.w*scale, f.h*scale);
+  const dirx = Math.sign(f.fx), diry = Math.sign(f.fy);
+  const period = 34;
+  const off = (G.time * 60) % period;
+  ctx.fillStyle = 'rgba(138,144,153,0.16)';
+  if (dirx !== 0){
+    for (let i = 0; i < 5; i++){
+      const yy = f.y + (i+0.5)*(f.h/5);
+      let xx = dirx > 0 ? f.x + off : f.x + f.w - off;
+      for (let k = -1; k < Math.ceil(f.w/period)+1; k++){
+        const sx = xx + k*period*dirx;
+        if (sx > f.x && sx < f.x+f.w-7)
+          ctx.fillRect(Math.round(sx)*scale, Math.round(yy)*scale, 7*scale, 1*scale);
+      }
+    }
+  } else {
+    for (let i = 0; i < 5; i++){
+      const xx = f.x + (i+0.5)*(f.w/5);
+      let yy = diry > 0 ? f.y + off : f.y + f.h - off;
+      for (let k = -1; k < Math.ceil(f.h/period)+1; k++){
+        const sy = yy + k*period*diry;
+        if (sy > f.y && sy < f.y+f.h-7)
+          ctx.fillRect(Math.round(xx)*scale, Math.round(sy)*scale, 1*scale, 7*scale);
+      }
+    }
+  }
+}
+
+function drawPuffs(){
+  for (const p of G.L.puffs){
+    const a = clamp(p.life / p.max, 0, 1) * 0.30;
+    ctx.fillStyle = 'rgba(160,170,180,' + a.toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.arc(p.x*scale, p.y*scale, p.r*scale, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+function drawNozzle(sp){
+  px(sp.x-5, sp.y-7, 10, 15, '#2a2432');
+  px(sp.x-5, sp.y-7, 10, 2, '#453c52');
+  px(sp.x-2, sp.y-11, 4, 4, '#1d1926');
+  const rdy = sp.t < 0.5;
+  px(sp.x + (sp.dx>0?5:-7), sp.y-1, 2, 2, rdy ? C.red : C.dark);
+}
+
+function drawSwat(s){
+  const sz = s.size, h = sz/2;
+  if (s.state === 'aim'){
+    const k = 1 - (s.t / s.telegraph);
+    // strike zone outline, tightening
+    const pad = (1-k) * 7;
+    const a = 0.30 + 0.55*k;
+    ctx.strokeStyle = 'rgba(216,56,44,' + a.toFixed(3) + ')';
+    ctx.lineWidth = Math.max(1, Math.round(scale*(k>0.75?1.2:0.8)));
+    ctx.strokeRect((s.tx-h-pad)*scale, (s.ty-h-pad)*scale, (sz+pad*2)*scale, (sz+pad*2)*scale);
+    // corner ticks
+    ctx.fillStyle = 'rgba(216,56,44,' + (a*0.9).toFixed(3) + ')';
+    const cs = 4;
+    for (const [ox,oy] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+      const bx = s.tx + ox*(h+pad), by = s.ty + oy*(h+pad);
+      ctx.fillRect((bx - (ox>0?cs:0))*scale, (by - (oy>0?1:0))*scale, cs*scale, 1*scale);
+      ctx.fillRect((bx - (ox>0?1:0))*scale, (by - (oy>0?cs:0))*scale, 1*scale, cs*scale);
+    }
+    if (k > 0.82 && Math.floor(G.time*22)%2){
+      ctx.fillStyle = 'rgba(216,56,44,0.10)';
+      ctx.fillRect((s.tx-h)*scale, (s.ty-h)*scale, sz*scale, sz*scale);
+    }
+  }
+  if (s.state === 'strike'){
+    ctx.fillStyle = 'rgba(216,56,44,0.22)';
+    ctx.fillRect((s.tx-h)*scale, (s.ty-h)*scale, sz*scale, sz*scale);
+  }
+  // the swatter itself, descending from above the target
+  const y = s.ty + s.hy;
+  const pad2 = 3;
+  // shadow on the surface
+  const sh = clamp(1 + s.hy/60, 0, 1);
+  ctx.fillStyle = 'rgba(0,0,0,' + (0.34*sh).toFixed(3) + ')';
+  const shw = sz * (1.4 - 0.4*sh);
+  ctx.fillRect((s.tx-shw/2)*scale, (s.ty-shw/2*0.5)*scale, shw*scale, shw*0.5*scale);
+  if (s.hy < -58) return;
+  // handle
+  px(s.tx-2, y - 70, 4, 62, '#1a161f');
+  px(s.tx-2, y - 70, 1, 62, '#2e2836');
+  // head
+  px(s.tx-sz/2-pad2, y-sz/2-pad2, sz+pad2*2, sz+pad2*2, '#16131b');
+  px(s.tx-sz/2-pad2, y-sz/2-pad2, sz+pad2*2, 1, '#3a3242');
+  ctx.fillStyle = 'rgba(58,50,66,0.85)';
+  for (let gx = 3; gx < sz+pad2*2; gx += 4)
+    ctx.fillRect((s.tx-sz/2-pad2+gx)*scale, (y-sz/2-pad2+1)*scale, 1*scale, (sz+pad2*2-2)*scale);
+  for (let gy = 3; gy < sz+pad2*2; gy += 4)
+    ctx.fillRect((s.tx-sz/2-pad2+1)*scale, (y-sz/2-pad2+gy)*scale, (sz+pad2*2-2)*scale, 1*scale);
+}
+
+/* ---------- exit --------------------------------------------------------- */
+function drawExit(){
+  const L = G.L, e = L.exit;
+  const open = G.fly.belly >= 100;
+  const pulse = 0.5 + 0.5*Math.sin(G.time*3);
+  if (open){
+    const g = ctx.createRadialGradient(
+      (e.x+e.w/2)*scale, (e.y+e.h/2)*scale, 0,
+      (e.x+e.w/2)*scale, (e.y+e.h/2)*scale, 60*scale);
+    g.addColorStop(0, 'rgba(255,168,140,' + (0.30 + 0.14*pulse).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(255,168,140,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect((e.x-60)*scale, (e.y-60)*scale, (e.w+120)*scale, (e.h+120)*scale);
+    px(e.x, e.y, e.w, e.h, '#6b5348');
+    px(e.x, e.y, e.w, e.h, 'rgba(255,168,140,0.45)');
+  } else {
+    px(e.x, e.y, e.w, e.h, '#181420');
+    // barred / dark
+    if (e.w > e.h){
+      for (let x = e.x+2; x < e.x+e.w-1; x += 5) px(x, e.y, 1, e.h, C.dark);
+    } else {
+      for (let y = e.y+2; y < e.y+e.h-1; y += 5) px(e.x, y, e.w, 1, C.dark);
+    }
+  }
+}
+
+/* ---------- landing hint ------------------------------------------------- */
+function drawLandHint(){
+  const fly = G.fly;
+  if (fly.landed || fly.dead) return;
+  const spot = findLanding(fly.x, fly.y, LAND_DIST);
+  if (!spot) return;
+  const f = face(spot.r, spot.dir);
+  const p = facePoint(f, spot.t, 1);
+  const a = 0.35 + 0.25*Math.sin(G.time*7);
+  ctx.fillStyle = 'rgba(255,168,140,' + a.toFixed(3) + ')';
+  const along = 7;
+  if (f.nx === 0){
+    ctx.fillRect((p.x-along)*scale, Math.round(p.y - (f.ny<0?1:0))*scale, along*2*scale, 1*scale);
+  } else {
+    ctx.fillRect(Math.round(p.x - (f.nx<0?1:0))*scale, (p.y-along)*scale, 1*scale, along*2*scale);
+  }
+}
+
+/* ---------- HUD ---------------------------------------------------------- */
+function bar(x, y, w, h, frac, fg, bgc, label){
+  px(x-1, y-1, w+2, h+2, '#15121a');
+  px(x, y, w, h, bgc);
+  const fw = Math.max(0, Math.round(w * clamp(frac,0,1)));
+  if (fw > 0) px(x, y, fw, h, fg);
+  if (label) text(label, x, y - 7, '#4a4256', 1, 1);
+}
+
+function drawHUD(){
+  const fly = G.fly, L = G.L;
+  // top strip
+  ctx.fillStyle = 'rgba(12,10,14,0.72)';
+  ctx.fillRect(0, 0, VW*scale, 22*scale);
+
+  const low = fly.energy < 25;
+  const eCol = fly.energy <= 0 ? C.red : low ? (Math.floor(G.time*8)%2 ? C.red : C.honey) : C.hi;
+  bar(10, 12, 78, 5, fly.energy/100, eCol, '#221d28', 'WING');
+  bar(102, 12, 78, 5, fly.belly/100, fly.belly>=100 ? C.pale : C.honey, '#221d28', 'BELLY');
+
+  // state pill
+  const st = fly.stuck ? 'STUCK' : fly.landed ? 'LANDED' : 'FLYING';
+  const stc = fly.stuck ? C.red : fly.landed ? C.pale : C.hi;
+  const w = textW(st,1,1);
+  px(VW/2 - w/2 - 4, 9, w + 8, 11, '#15121a');
+  textC(st, VW/2, 12, stc, 1, 1);
+
+  // level id
+  const idTxt = (G.levelIdx+1) + '/' + LEVELS.length;
+  text(idTxt, VW - 10 - textW(idTxt,1,1), 12, '#4a4256', 1, 1);
+  const nm = L.name;
+  text(nm, VW - 10 - textW(nm,1,1), 4, '#332c3c', 1, 1);
+
+  if (fly.belly >= 100){
+    const a = 0.5 + 0.5*Math.sin(G.time*4);
+    textC('THE WAY OUT IS OPEN', VW/2, VH - 16, 'rgba(255,168,140,' + a.toFixed(2) + ')', 1, 1);
+  }
+  if (G.msgT > 0){
+    const a = clamp(G.msgT, 0, 1);
+    textC(G.msg, VW/2, 34, 'rgba(138,144,153,' + a.toFixed(2) + ')', 2, 1);
+  }
+}
+
+/* ---------- scenes ------------------------------------------------------- */
+let titleFly = {x:240, y:150, wing:0, wingT:0, t:0};
+
+function renderTitle(){
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0,0,cv.width,cv.height);
+  drawMotes();
+
+  const t = G.time;
+  titleFly.t += 1/60;
+  titleFly.wingT += 1/60;
+  if (titleFly.wingT > 0.045){ titleFly.wingT = 0; titleFly.wing ^= 1; }
+  const fx = 240 + Math.sin(t*0.9)*70 + Math.sin(t*2.7)*9;
+  const fy = 96 + Math.cos(t*1.3)*22 + Math.cos(t*3.4)*5;
+  const flip = Math.cos(t*0.9) > 0 ? 1 : 0;
+
+  // big title
+  textC('LAND', VW/2 - 46, 40, C.hi, 4, 1);
+  textC('/',    VW/2,      40, C.red, 4, 1);
+  textC('FLY',  VW/2 + 44, 40, C.hi, 4, 1);
+  textC('LAND TO EAT · FLY TO LIVE', VW/2, 66, '#4a4256', 1, 1);
+
+  // the sprite, big, doing its thing
+  const img = SPR[flip][titleFly.wing];
+  ctx.save();
+  ctx.translate(Math.round(fx)*scale, Math.round(fy)*scale);
+  ctx.drawImage(img, -FLY_W*scale, -FLY_H*scale, FLY_W*2*scale, FLY_H*2*scale);
+  ctx.restore();
+
+  // level grid
+  const cols = 5, cw = 62, chh = 26;
+  const gx = VW/2 - (cols*cw)/2, gy = 140;
+  for (let i = 0; i < LEVELS.length; i++){
+    const r = Math.floor(i/cols), c = i%cols;
+    const x = gx + c*cw, y = gy + r*chh;
+    const locked = i >= G.unlocked;
+    const sel = i === G.selCursor;
+    px(x+2, y, cw-6, chh-6, locked ? '#151219' : (sel ? '#2f2838' : '#1c1824'));
+    if (sel && !locked){
+      ctx.strokeStyle = C.red;
+      ctx.lineWidth = Math.max(1, scale);
+      ctx.strokeRect((x+2)*scale, y*scale, (cw-6)*scale, (chh-6)*scale);
+    }
+    const num = String(i+1).padStart(2,'0');
+    text(num, x+7, y+5, locked ? '#2b2532' : (sel ? C.pale : C.hi), 1, 1);
+    // act pips
+    for (let k = 0; k < LEVELS[i].act; k++){
+      px(x + 7 + k*3, y + 13, 2, 2, locked ? '#241f2b' : (sel ? C.red : '#4a4256'));
+    }
+    if (locked) text('-', x+cw-16, y+5, '#2b2532', 1, 1);
+  }
+
+  const acts = ['THE COUNTER','THE PANTRY','THE CELLAR','THE KITCHEN AT NIGHT'];
+  const a = LEVELS[clamp(G.selCursor,0,LEVELS.length-1)];
+  textC(a.name + '  ·  ' + acts[a.act-1], VW/2, 258, '#60546c', 1, 1);
+  const a2 = 0.55 + 0.45*Math.sin(t*3);
+  textC('SPACE TO BEGIN', VW/2, 274, 'rgba(216,56,44,' + a2.toFixed(2) + ')', 1, 1);
+  text('ARROWS SELECT', 10, 274, '#2b2532', 1, 1);
+  const cred = 'SPRITE: LAND - FLY';
+  text(cred, VW - 10 - textW(cred,1,1), 274, '#2b2532', 1, 1);
+
+  vignette();
+}
+
+function drawMotes(){
+  for (const m of G.motes){
+    ctx.fillStyle = 'rgba(138,144,153,' + m.a.toFixed(3) + ')';
+    ctx.fillRect(Math.round(m.x)*scale, Math.round(m.y)*scale, m.s*scale, m.s*scale);
+  }
+}
+function drawParts(){
+  for (const p of G.parts){
+    const a = clamp(p.life / p.max, 0, 1);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(Math.round(p.x)*scale, Math.round(p.y)*scale, p.sz*scale, p.sz*scale);
+  }
+  ctx.globalAlpha = 1;
+}
+function vignette(){
+  const g = ctx.createRadialGradient(
+    cv.width/2, cv.height/2, cv.height*0.28,
+    cv.width/2, cv.height/2, cv.height*0.82);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,cv.width,cv.height);
+}
+
+function renderPlay(){
+  const L = G.L, fly = G.fly;
+
+  ctx.save();
+  if (G.shake > 0){
+    const s = G.shake * G.shake * 5;
+    ctx.translate((Math.random()-0.5)*s*scale, (Math.random()-0.5)*s*scale);
+  }
+
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(-20*scale, -20*scale, cv.width+40*scale, cv.height+40*scale);
+
+  // faint back-wall texture
+  ctx.fillStyle = '#100d14';
+  for (let y = 0; y < VH; y += 8) ctx.fillRect(0, y*scale, cv.width, 1*scale);
+
+  drawMotes();
+  for (const f of L.fans) drawFan(f);
+  for (const z of L.zaps) drawZap(z);
+  drawExit();
+  for (const r of L.solids) if (r.kind !== 'flypaper') drawSolid(r);
+  for (const r of L.paper) drawFlypaper(r);
+  for (const f of L.food) drawFood(f);
+  for (const sp of L.sprays) drawNozzle(sp);
+  for (const s of L.spiders) drawSpider(s);
+
+  drawLandHint();
+  drawPuffs();
+
+  if (!fly.dead) drawFly(fly);
+  drawParts();
+
+  for (const s of L.swats) drawSwat(s);
+
+  ctx.restore();
+
+  vignette();
+  drawHUD();
+
+  if (G.flash > 0){
+    ctx.globalAlpha = G.flash * 0.55;
+    ctx.fillStyle = G.flashColor;
+    ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.globalAlpha = 1;
+  }
+  if (G.fade > 0){
+    ctx.globalAlpha = G.fade;
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function panel(y, h){
+  ctx.fillStyle = 'rgba(12,10,14,0.86)';
+  ctx.fillRect(0, y*scale, cv.width, h*scale);
+  ctx.fillStyle = C.dark;
+  ctx.fillRect(0, y*scale, cv.width, 1*scale);
+  ctx.fillRect(0, (y+h-1)*scale, cv.width, 1*scale);
+}
+
+function renderDead(){
+  renderPlay();
+  panel(106, 74);
+  textC('SWATTED', VW/2, 118, C.red, 3, 1);
+  textC(G.deathReason || 'SWATTED', VW/2, 142, '#4a4256', 1, 1);
+  textC('BELLY ' + Math.floor(G.fly.belly) + '%   ·   ATTEMPTS ' + G.deaths, VW/2, 154, '#60546c', 1, 1);
+  const a = 0.5 + 0.5*Math.sin(G.time*4);
+  textC('SPACE TO TRY AGAIN   ·   ESC FOR LEVELS', VW/2, 168, 'rgba(138,144,153,' + a.toFixed(2) + ')', 1, 1);
+}
+
+function renderWon(){
+  renderPlay();
+  panel(106, 74);
+  textC('OUT', VW/2, 118, C.pale, 3, 1);
+  const nm = LEVELS[G.levelIdx].name;
+  textC(nm + ' CLEARED', VW/2, 142, '#60546c', 1, 1);
+  textC(Math.floor(G.runTime) + 'S   ·   ATTEMPTS ' + (G.deaths+1), VW/2, 154, '#4a4256', 1, 1);
+  const a = 0.5 + 0.5*Math.sin(G.time*4);
+  const nxt = G.levelIdx+1 >= LEVELS.length ? 'SPACE TO FINISH' : 'SPACE FOR NEXT ROOM';
+  textC(nxt + '   ·   ESC FOR LEVELS', VW/2, 168, 'rgba(255,168,140,' + a.toFixed(2) + ')', 1, 1);
+}
+
+function renderDone(){
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0,0,cv.width,cv.height);
+  drawMotes();
+  drawParts();
+  const t = G.time;
+  for (let i = 0; i < 7; i++){
+    const fx = (VW/2) + Math.sin(t*0.7 + i*1.4)*(60 + i*22);
+    const fy = 150 + Math.cos(t*1.1 + i*2.1)*(30 + i*9);
+    const flip = Math.cos(t*0.7 + i*1.4) > 0 ? 1 : 0;
+    const wing = Math.floor(t*22 + i)%2;
+    ctx.drawImage(SPR[flip][wing],
+      Math.round(fx-FLY_W/2)*scale, Math.round(fy-FLY_H/2)*scale, FLY_W*scale, FLY_H*scale);
+  }
+  textC('OUT OF THE HOUSE', VW/2, 62, C.pale, 3, 1);
+  textC('ALL ' + LEVELS.length + ' ROOMS CLEARED', VW/2, 92, '#60546c', 1, 1);
+  const a = 0.5 + 0.5*Math.sin(t*4);
+  textC('SPACE', VW/2, 250, 'rgba(216,56,44,' + a.toFixed(2) + ')', 2, 1);
+  vignette();
+}
+
+function render(){
+  if (G.mode === ST.TITLE) renderTitle();
+  else if (G.mode === ST.PLAY) renderPlay();
+  else if (G.mode === ST.DEAD) renderDead();
+  else if (G.mode === ST.WON) renderWon();
+  else if (G.mode === ST.DONE) renderDone();
+}
+
+/* =========================================================================
+   MAIN LOOP
+   ========================================================================= */
+let last = 0, acc = 0;
+const STEP = 1/120;
+
+function frame(now){
+  requestAnimationFrame(frame);
+  if (!last) last = now;
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.25) dt = 0.25;
+
+  if (tapped('m')){ audio.toggle(); G.msg = audio.muted ? 'MUTED' : 'SOUND ON'; G.msgT = 1.0; }
+
+  acc += dt;
+  let guard = 0;
+  while (acc >= STEP && guard++ < 8){
+    update(STEP);
+    acc -= STEP;
+  }
+  clearPressed();
+  render();
+}
+requestAnimationFrame(frame);
+
+/* ---------- headless test hook ------------------------------------------ */
+if (typeof globalThis !== 'undefined'){
+  globalThis.__LANDFLY = {
+    G, LEVELS, ST, startLevel, update, render, buildLevel, findLanding,
+    face, facePoint, walls, exitRect, newFly, keys, pressed, FACES,
+    inRect, boxHit, solidAt, VW, VH, FLY_W, FLY_H, LAND_DIST
+  };
+}
+</script>
+</body>
+</html>

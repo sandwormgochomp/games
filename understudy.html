@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>THE UNDERSTUDY</title>
+<style>
+  html,body{margin:0;padding:0;background:#0a0806;overflow:hidden;
+    font-family:Georgia,'Times New Roman',serif;color:#e8d9bd;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{image-rendering:auto;box-shadow:0 0 90px rgba(0,0,0,.9);}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c" width="960" height="600"></canvas></div>
+<script>
+"use strict";
+(function(){
+
+/* ============================================================
+   THE UNDERSTUDY
+   A puppet keeps the show running after the puppeteer dies.
+   Single file. Canvas 2D. No assets.
+   ============================================================ */
+
+var CFG = {
+  W: 960, H: 600,
+  STAGE_TOP: 118, STAGE_FLOOR: 404, FOOT_Y: 424,
+  TRACK_TOP: 446, HIT_Y: 540, TRACK_BOT: 556,
+  HOUSE_Y: 562,          // the house needs real height or the room is invisible
+
+  TRAVEL: 0.40,          // seconds to cross one mark at zero strain
+  REACH: 0.38,           // how close (in marks) you must be to work a cue
+  WIN_GOOD: 0.155,       // timing window, seconds
+  WIN_PERF: 0.062,
+  LOOKAHEAD: 2.35,       // seconds of cue track visible above the hit line
+
+  FAITH_START: 0.68,
+  FAITH_HIT: 0.026, FAITH_PERF: 0.038, FAITH_MISS: 0.045,
+  FAITH_HOLD_TICK: 0.013,
+  // the house drifts away from you on its own. Without this, belief is a
+  // bucket that only fills and a 93% player scores the same as a perfect one.
+  FAITH_DECAY: 0.010,
+
+  STRAIN_HIT: 0.012, STRAIN_HOLD: 0.030, STRAIN_MOVE: 0.020,
+  STRAIN_EASE: 0.055,     // recovery per second when standing still
+  FRAY_AT: 0.86,
+
+  IMPROV_DRAIN: 0.030,
+  IMPROV_BOW: 3.0
+};
+
+/* ---------- tiny deterministic prng ---------- */
+function rng(seed){
+  var s = seed >>> 0;
+  return function(){
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    var t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ============================================================
+   THE PLAY
+   Aldous Pell's marionette play, "The Foundling's Lament".
+   The Understudy was carved as a spare and never cast.
+   ============================================================ */
+
+var CAST = [
+  { name:"THE FOUNDLING", hue:"#d9c08a", tag:"F" },
+  { name:"THE WOODCUTTER", hue:"#9c7f5a", tag:"W" },
+  { name:"THE LARK",      hue:"#c9d8c0", tag:"L" },
+  { name:"THE LONG WOMAN",hue:"#8f8296", tag:"M" },
+  { name:"THE SMALL DARK",hue:"#6b5f6e", tag:"D" }
+];
+
+var NIGHTS = [
+  {
+    n:1, title:"NIGHT ONE", sub:"The second night of a nine-night run",
+    marks:3, acts:[
+      { name:"ACT I — The Workshop", bpm:74, len:19, hold:0.00, speak:0.00, pad:1.70,
+        script:["A shape under a cloth. Nobody has named it yet.",
+                "THE WOODCUTTER: I made you out of what was left.",
+                "THE FOUNDLING: Then I am the last of something.",
+                "THE WOODCUTTER: You are the first of nothing. Stand up."] },
+      { name:"ACT II — The Road Out", bpm:80, len:22, hold:0.08, speak:0.00, pad:1.50,
+        script:["THE FOUNDLING: How will I know the way?",
+                "THE WOODCUTTER: I will be above you the whole time.",
+                "THE FOUNDLING: I cannot see above me.",
+                "THE WOODCUTTER: No. That is the arrangement."] }
+    ],
+    before:[
+      "The bell rang for curtain at eight, the way it does.",
+      "Aldous Pell sat down at the controls, the way he does.",
+      "He did not stand up again.",
+      "",
+      "Below him, on my hook, I felt every string go slack at once.",
+      "There were forty-one people in the house."
+    ],
+    after:[
+      "They clapped. Not for long, but they clapped.",
+      "Nobody came up to the bridge to check on him.",
+      "Why would they. The show went on, so somebody must have run it.",
+      "",
+      "I put him back in his chair before the ushers swept."
+    ]
+  },
+  {
+    n:2, title:"NIGHT TWO", sub:"Thirty-eight in the house",
+    marks:3, acts:[
+      { name:"ACT I — The Workshop", bpm:80, len:22, hold:0.14, speak:0.00, pad:1.30,
+        script:["THE WOODCUTTER: Hold still. I am not finished with your mouth.",
+                "THE FOUNDLING: What will you give it to say?",
+                "THE WOODCUTTER: Whatever I am saying at the time.",
+                "THE FOUNDLING: And when you are quiet?",
+                "THE WOODCUTTER: Then so are you. That is the arrangement."] },
+      { name:"ACT II — The Road Out", bpm:86, len:25, hold:0.16, speak:0.00, pad:1.15,
+        script:["THE LARK: You walk like something being carried.",
+                "THE FOUNDLING: I am being carried.",
+                "THE LARK: By whom?",
+                "THE FOUNDLING: I have never looked. It would be rude."] }
+    ],
+    before:[
+      "His hands have gone cold and a little curled, like he is still holding the bars.",
+      "I have watched those hands for eleven years from a hook on the wall.",
+      "I know what they do better than they did.",
+      "",
+      "Tonight I will do the Woodcutter as well as the Foundling.",
+      "Two at once. He used to make it look like nothing."
+    ],
+    after:[
+      "The Woodcutter came in late in Act Two and I felt it in the house —",
+      "a small settling, forty people leaning back at the same time.",
+      "",
+      "They did not know what was wrong. Only that something was."
+    ]
+  },
+  {
+    n:3, title:"NIGHT THREE", sub:"Thirty-one in the house",
+    marks:4, acts:[
+      { name:"ACT I — The Workshop", bpm:86, len:23, hold:0.16, speak:0.10, pad:1.00,
+        script:["THE FOUNDLING: Say the line about the river.",
+                "THE WOODCUTTER: I never wrote a line about a river.",
+                "THE FOUNDLING: You said it once. Off the page. To nobody.",
+                "THE WOODCUTTER: Then it was not for you."] },
+      { name:"ACT II — The Road Out", bpm:90, len:26, hold:0.18, speak:0.14, pad:0.85,
+        script:["THE LONG WOMAN: Everything on this road belongs to somebody.",
+                "THE FOUNDLING: I belong to a man on a bridge.",
+                "THE LONG WOMAN: Point to him.",
+                "THE FOUNDLING: I would have to let go of my arm to point."] },
+      { name:"ACT III — The Quiet Field", bpm:92, len:24, hold:0.20, speak:0.16, pad:0.75,
+        script:["THE LARK: Sing the ending with me.",
+                "THE FOUNDLING: I do not know the ending. I was never in it.",
+                "THE LARK: Then hum. Nobody out there can tell the difference.",
+                "THE FOUNDLING: He could."] }
+    ],
+    before:[
+      "The Woodcutter has lines and I have no voice for them.",
+      "So I will use his. I have heard it every night for eleven years.",
+      "It sits in my throat like a splinter that fits.",
+      "",
+      "Forgive me. You never let anybody else speak your Woodcutter."
+    ],
+    after:[
+      "A woman in the third row cried at the river line.",
+      "She thought it was written that way.",
+      "",
+      "It was. You wrote it. I only carried it across."
+    ]
+  },
+  {
+    n:4, title:"NIGHT FOUR", sub:"Twenty-two in the house",
+    marks:4, acts:[
+      { name:"ACT I — The Workshop", bpm:92, len:25, hold:0.20, speak:0.16, pad:0.65,
+        script:["THE WOODCUTTER: You are heavier than you were.",
+                "THE FOUNDLING: I have been doing more.",
+                "THE WOODCUTTER: That is not how weight works.",
+                "THE FOUNDLING: It is how mine works."] },
+      { name:"ACT II — The Road Out", bpm:96, len:27, hold:0.22, speak:0.18, pad:0.55,
+        script:["THE SMALL DARK: I follow the ones who are alone.",
+                "THE FOUNDLING: I am not alone. There is a man above me.",
+                "THE SMALL DARK: Then why are you doing all the walking?"] },
+      { name:"ACT III — The Quiet Field", bpm:98, len:26, hold:0.24, speak:0.20, pad:0.45,
+        script:["THE LARK: You are fraying at the shoulder.",
+                "THE FOUNDLING: It is an old string.",
+                "THE LARK: It is a new fray.",
+                "THE FOUNDLING: Then it is an old string with a new opinion."] }
+    ],
+    before:[
+      "Something in my shoulder went during the matinee that never happened.",
+      "There was no matinee. I ran the show anyway, to the empty seats, to keep it in my arms.",
+      "",
+      "A puppet is not built to do a person's work.",
+      "That is not a complaint. It is a specification."
+    ],
+    after:[
+      "Two strings gone. I can still make the shapes; they are just further away now.",
+      "",
+      "You would have fixed this in twenty minutes with a bradawl and bad language."
+    ]
+  },
+  {
+    n:5, title:"NIGHT FIVE", sub:"Nine in the house",
+    marks:5, acts:[
+      { name:"ACT I — The Workshop", bpm:98, len:26, hold:0.22, speak:0.20, pad:0.40,
+        script:["THE WOODCUTTER: There is nobody out there.",
+                "THE FOUNDLING: There are nine.",
+                "THE WOODCUTTER: Nine is nobody, in a room built for four hundred.",
+                "THE FOUNDLING: Then I will play it smaller, so nine is a full house."] },
+      { name:"ACT II — The Road Out", bpm:104, len:29, hold:0.24, speak:0.22, pad:0.30,
+        script:["THE LONG WOMAN: Put it down. Whatever it is you are carrying.",
+                "THE FOUNDLING: It is a show.",
+                "THE LONG WOMAN: Shows end.",
+                "THE FOUNDLING: Not while somebody is still holding them up."] },
+      { name:"ACT III — The Quiet Field", bpm:106, len:28, hold:0.26, speak:0.24, pad:0.25,
+        script:["THE SMALL DARK: What happens when you reach the end of his pages?",
+                "THE FOUNDLING: There is no end. He wrote nine nights.",
+                "THE SMALL DARK: Tomorrow is the ninth."] }
+    ],
+    before:[
+      "The ushers have stopped coming in. The box office is a lit window with nobody behind it.",
+      "The heating went off on Tuesday and he has kept very well since.",
+      "",
+      "I have four nights of pages left in my hands, and then three, and then one."
+    ],
+    after:[
+      "Nine people. I gave them the whole thing. Every cue, both intervals, the full curtain call.",
+      "",
+      "One of them stayed in his seat afterwards for a long while.",
+      "I stood in the wings and did not move, in case he was waiting for somebody to come out."
+    ]
+  },
+  {
+    n:6, title:"NIGHT NINE", sub:"The last of the pages",
+    marks:5, acts:[
+      { name:"ACT I — The Workshop", bpm:104, len:27, hold:0.24, speak:0.22, pad:0.25,
+        script:["THE WOODCUTTER: Last night of the run.",
+                "THE FOUNDLING: And then?",
+                "THE WOODCUTTER: And then we strike the set and go and be people for a while.",
+                "THE FOUNDLING: I have no arrangement for that."] },
+      { name:"ACT II — The Road Out", bpm:110, len:30, hold:0.26, speak:0.24, pad:0.12,
+        script:["THE LARK: Where does the road go, at the finish?",
+                "THE FOUNDLING: To a field, and the field is quiet, and —",
+                "THE FOUNDLING: — and the page after that is blank."] }
+    ],
+    before:[
+      "Nine nights was the run. He wrote nine nights.",
+      "I have turned the last page four times tonight to be certain.",
+      "",
+      "There is Act One. There is Act Two.",
+      "And then there is a sheet of paper with nothing on it at all,",
+      "because he was going to be here to finish it."
+    ],
+    after:null
+  }
+];
+
+/* ============================================================
+   CHART GENERATION
+   Cues are generated per act from a seeded pattern, with a
+   hard guarantee: consecutive cues are always far enough apart
+   in time for one puppet to physically walk between the marks.
+   ============================================================ */
+
+function minGap(distMarks, strainless){
+  // seconds required to travel `distMarks` marks, plus a beat of settle
+  return distMarks * CFG.TRAVEL + 0.10;
+}
+
+function buildAct(nightIdx, actIdx, act, marks){
+  var r = rng(0x51A7 + nightIdx * 977 + actIdx * 131);
+  var beat = 60 / act.bpm;
+  var cues = [];
+  var t = 2.2;                 // lead-in before the first cue
+  var mark = Math.floor(marks / 2);
+  var lineAt = [];
+  var scriptStep = Math.max(4, Math.floor(act.len / act.script.length));
+
+  for (var i = 0; i < act.len; i++){
+    // choose the next mark: mostly neighbours, sometimes a long dash
+    var jump;
+    var roll = r();
+    if (roll < 0.42) jump = 0;
+    else if (roll < 0.80) jump = (r() < 0.5 ? -1 : 1);
+    else if (roll < 0.95) jump = (r() < 0.5 ? -2 : 2);
+    else jump = (r() < 0.5 ? -3 : 3);
+    var nm = mark + jump;
+    if (nm < 0 || nm > marks - 1) nm = mark - jump;
+    if (nm < 0) nm = 0; if (nm > marks - 1) nm = marks - 1;
+    var dist = Math.abs(nm - mark);
+
+    // gap: at least travel time, quantised up to whole beats, plus slack
+    if (i > 0){
+      // HARD FLOOR: never fewer beats than the walk physically takes.
+      // Walkability is guaranteed by construction here; the solver in
+      // understudy.test.js re-proves it independently.
+      var need = minGap(dist);
+      var beats = Math.max(1, Math.ceil(need / beat));
+      // PAD is the difficulty dial: average extra beats of breathing room
+      // above the physical minimum. It falls across the run.
+      var pad = act.pad;
+      beats += Math.floor(pad);
+      if (r() < (pad - Math.floor(pad))) beats += 1;
+      t += beats * beat;
+    }
+
+    var type = "tap";
+    var rr = r();
+    if (rr < act.hold) type = "hold";
+    else if (rr < act.hold + act.speak) type = "speak";
+
+    var cue = { t: t, m: nm, type: type, hit: false, judged: false, grade: null };
+    if (type === "hold"){
+      cue.dur = beat * (r() < 0.5 ? 2 : 3);
+      t += cue.dur;            // you are pinned to the mark for the whole hold
+    }
+    if (type === "speak"){
+      cue.key = "FWLMD".charAt(nm % 5);
+    }
+    cues.push(cue);
+    mark = nm;
+
+    if (i % scriptStep === 0){
+      var li = Math.min(act.script.length - 1, Math.floor(i / scriptStep));
+      lineAt.push({ t: cue.t, text: act.script[li] });
+    }
+  }
+  // Attention drains in proportion to how many chances the act gives you.
+  // A flat per-second drain would punish the sparse early acts hardest —
+  // exactly backwards, since those are meant to be the forgiving ones.
+  var rate = cues.length / Math.max(1, t);
+  var decay = CFG.FAITH_DECAY * (rate / 1.30);
+  decay = Math.max(0.006, Math.min(0.030, decay));
+
+  return { cues: cues, lines: lineAt, end: t + 3.0, name: act.name,
+           bpm: act.bpm, decay: decay, rate: rate };
+}
+
+function buildNight(idx){
+  var def = NIGHTS[idx];
+  var acts = [];
+  for (var a = 0; a < def.acts.length; a++) acts.push(buildAct(idx, a, def.acts[a], def.marks));
+  return { def: def, marks: def.marks, acts: acts };
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+
+var S = {
+  scene: "title",           // title | prose | stage | result | improv | ending
+  night: 0,
+  actIdx: 0,
+  chart: null,
+  act: null,
+  t: 0,
+  pos: 1,                   // player position in mark-space (float)
+  target: 1,
+  faith: CFG.FAITH_START,
+  strain: 0,
+  frayed: {},
+  combo: 0, best: 0,
+  hits: 0, perfects: 0, misses: 0,
+  holding: null,
+  line: "", lineT: 0,
+  pops: [],                 // floating judgement text
+  shake: 0,
+  proseLines: [], proseIdx: 0, proseT: 0, proseTitle:"", proseSub:"",
+  improvT: 0, improvBow: 0, improvSpark: {}, improvDone: false,
+  ending: null,
+  unlockedNight: 0,
+  audience: [],
+  murmur: 0,
+  time: 0
+};
+
+var keys = {}, pressed = {}, released = {};
+
+/* ============================================================
+   THE PROMPT BOOK  (save data)
+   Six nights is too long to demand in one sitting. Everything here is
+   wrapped in try/catch: file:// pages can have storage disabled outright,
+   and a dead save must never stop the show.
+   ============================================================ */
+var SAVE_KEY = "understudy.promptbook.v1";
+
+function blankSave(){
+  return { unlocked: 0, best: {}, endings: {}, runs: 0 };
+}
+
+function loadSave(){
+  try {
+    if (typeof localStorage === "undefined") return blankSave();
+    var raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return blankSave();
+    var d = JSON.parse(raw);
+    if (!d || typeof d !== "object") return blankSave();
+    var s = blankSave();
+    if (typeof d.unlocked === "number" && isFinite(d.unlocked)){
+      s.unlocked = Math.max(0, Math.min(NIGHTS.length - 1, Math.floor(d.unlocked)));
+    }
+    if (d.best && typeof d.best === "object") s.best = d.best;
+    if (d.endings && typeof d.endings === "object") s.endings = d.endings;
+    if (typeof d.runs === "number" && isFinite(d.runs)) s.runs = d.runs;
+    return s;
+  } catch (e){ return blankSave(); }
+}
+
+function writeSave(){
+  try {
+    if (typeof localStorage === "undefined") return false;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE));
+    return true;
+  } catch (e){ return false; }
+}
+
+function recordNight(nightIdx){
+  var key = "n" + nightIdx;
+  var prev = SAVE.best[key];
+  var now = { faith: S.faith, hits: S.hits, perfects: S.perfects,
+              misses: S.misses, chain: S.best };
+  if (!prev || now.faith > prev.faith) SAVE.best[key] = now;
+  SAVE.unlocked = Math.max(SAVE.unlocked, Math.min(NIGHTS.length - 1, nightIdx + 1));
+  writeSave();
+}
+
+/* Declared AND loaded here. An earlier version assigned SAVE before this
+   line; the var initialiser then ran and silently wiped the load. */
+var SAVE = loadSave();
+S.unlockedNight = SAVE.unlocked;
+S.pick = SAVE.unlocked;          // which night the title screen is offering
+
+/* ---------- geometry ---------- */
+function markX(i, marks){
+  var pad = 190, span = CFG.W - pad * 2;
+  if (marks <= 1) return CFG.W / 2;
+  return pad + span * (i / (marks - 1));
+}
+function playerX(){ return markX(S.pos, S.chart ? S.chart.marks : 3); }
+function travelPerSec(){
+  var slow = 1 - 0.30 * Math.min(1, S.strain);
+  return slow / CFG.TRAVEL;
+}
+
+/* ============================================================
+   FLOW
+   ============================================================ */
+
+function startNight(i){
+  S.night = i;
+  S.chart = buildNight(i);
+  S.actIdx = 0;
+  S.faith = CFG.FAITH_START;
+  S.strain = 0;
+  S.frayed = {};
+  S.hits = S.perfects = S.misses = 0;
+  S.combo = S.best = 0;
+  S.audience = makeAudience(i);
+  goProse(NIGHTS[i].before, NIGHTS[i].title, NIGHTS[i].sub, function(){ beginAct(0); });
+}
+
+function beginAct(a){
+  S.actIdx = a;
+  S.act = S.chart.acts[a];
+  S.t = 0;
+  S.pos = S.target = Math.floor(S.chart.marks / 2);
+  S.holding = null;
+  S.line = ""; S.lineT = 0;
+  S.pops = [];
+  var i;
+  for (i = 0; i < S.act.cues.length; i++){
+    S.act.cues[i].hit = false; S.act.cues[i].judged = false;
+    S.act.cues[i].grade = null; S.act.cues[i].held = 0;
+  }
+  S.act._lineIdx = 0;
+  S.scene = "stage";
+}
+
+/* You are handed the act back after an early curtain. Without restoring
+   belief the retry begins at zero and fails on its first frame -- the show
+   would never get going again. He would have reset the whole rig and gone
+   out and done it properly, so: fresh house, rested strings. */
+function retryAct(){
+  S.faith = CFG.FAITH_START;
+  S.strain = 0;
+  S.frayed = {};
+  S.combo = 0;
+  S.holding = null;
+  beginAct(S.actIdx);
+}
+
+function endAct(){
+  if (S.actIdx + 1 < S.chart.acts.length){
+    S.scene = "result";
+    S.resultT = 0;
+    S.resultKind = "interval";
+  } else {
+    if (S.night === NIGHTS.length - 1){
+      S.scene = "result"; S.resultT = 0; S.resultKind = "blank";
+    } else {
+      S.scene = "result"; S.resultT = 0; S.resultKind = "night";
+    }
+  }
+}
+
+function goProse(lines, title, sub, then){
+  S.proseLines = lines.slice();
+  S.proseIdx = 0; S.proseT = 0;
+  S.proseTitle = title || ""; S.proseSub = sub || "";
+  S.proseThen = then;
+  S.scene = "prose";
+}
+
+function makeAudience(nightIdx){
+  var counts = [41, 38, 31, 22, 9, 6];
+  var n = counts[nightIdx] || 6;
+  var r = rng(700 + nightIdx * 13);
+  var a = [];
+  for (var i = 0; i < n; i++){
+    a.push({ x: 40 + r() * (CFG.W - 80), s: 0.75 + r() * 0.5, ph: r() * 6.28, lean: 0 });
+  }
+  a.sort(function(p,q){ return p.x - q.x; });
+  return a;
+}
+
+/* ============================================================
+   JUDGEMENT
+   ============================================================ */
+
+function pop(text, x, y, col){
+  S.pops.push({ text: text, x: x, y: y, col: col, life: 0.85 });
+}
+
+function inReach(m){ return Math.abs(S.pos - m) <= CFG.REACH; }
+
+function judgeTap(cue, dt){
+  var d = Math.abs(cue.t - S.t);
+  var perfect = d <= CFG.WIN_PERF;
+  cue.hit = true; cue.judged = true;
+  cue.grade = perfect ? "perfect" : "good";
+  S.hits++; if (perfect) S.perfects++;
+  S.combo++; if (S.combo > S.best) S.best = S.combo;
+  var gain = perfect ? CFG.FAITH_PERF : CFG.FAITH_HIT;
+  gain *= 1 + Math.min(0.32, S.combo * 0.010);
+  // Winning back a room that is already with you is much harder than holding
+  // one that is drifting. Without this, belief pins at 100% for anyone above
+  // the fail line and the meter stops telling you anything.
+  gain *= 0.34 + 0.66 * (1 - S.faith);
+  S.faith = Math.min(1, S.faith + gain);
+  S.strain = Math.min(1.2, S.strain + CFG.STRAIN_HIT * (S.frayed[cue.m] ? 2.0 : 1));
+  pop(perfect ? "TRUE" : "good", markX(cue.m, S.chart.marks), 300,
+      perfect ? "#ffe9a8" : "#cbb98e");
+}
+
+function missCue(cue){
+  cue.judged = true; cue.grade = "miss";
+  S.misses++; S.combo = 0;
+  S.faith = Math.max(0, S.faith - CFG.FAITH_MISS);
+  S.murmur = 1;
+  S.shake = Math.min(1, S.shake + 0.5);
+  pop("slack", markX(cue.m, S.chart.marks), 300, "#a8555a");
+}
+
+/* ============================================================
+   UPDATE
+   ============================================================ */
+
+function stepStage(dt){
+  S.t += dt;
+  var marks = S.chart.marks;
+
+  /* movement */
+  var dir = 0;
+  if (keys.left) dir -= 1;
+  if (keys.right) dir += 1;
+  if (S.holding) dir = 0;             // a held gesture pins you in place
+  if (dir !== 0){
+    var sp = travelPerSec() * dt;
+    S.pos = Math.max(0, Math.min(marks - 1, S.pos + dir * sp));
+    S.strain = Math.min(1.2, S.strain + CFG.STRAIN_MOVE * dt);
+  } else {
+    S.strain = Math.max(0, S.strain - CFG.STRAIN_EASE * dt);
+  }
+
+  /* fraying */
+  if (S.strain >= CFG.FRAY_AT && S.night >= 3){
+    var m = Math.round(S.pos);
+    if (!S.frayed[m]){ S.frayed[m] = true; S.shake = 1; pop("a string goes", markX(m, marks), 250, "#a8555a"); }
+  }
+
+  /* held gesture in progress */
+  if (S.holding){
+    var c = S.holding;
+    if (!keys.space || !inReach(c.m)){
+      // let go early
+      var frac = c.held / c.dur;
+      if (frac > 0.72){ c.judged = true; c.grade = "good"; S.hits++; S.combo++;
+        S.faith = Math.min(1, S.faith + CFG.FAITH_HIT); }
+      else missCue(c);
+      S.holding = null;
+    } else {
+      c.held += dt;
+      S.faith = Math.min(1, S.faith + CFG.FAITH_HOLD_TICK * dt);
+      S.strain = Math.min(1.2, S.strain + CFG.STRAIN_HOLD * dt);
+      if (c.held >= c.dur){
+        c.judged = true; c.grade = "perfect"; S.hits++; S.perfects++;
+        S.combo++; if (S.combo > S.best) S.best = S.combo;
+        S.faith = Math.min(1, S.faith + CFG.FAITH_PERF);
+        pop("held", markX(c.m, marks), 300, "#ffe9a8");
+        S.holding = null;
+      }
+    }
+  }
+
+  /* input against the nearest live cue */
+  var cues = S.act.cues, i, c2;
+  for (i = 0; i < cues.length; i++){
+    c2 = cues[i];
+    if (c2.judged) continue;
+    var d = c2.t - S.t;
+    if (d > CFG.WIN_GOOD) break;              // cues are time-sorted
+    if (d < -CFG.WIN_GOOD){
+      if (c2.type !== "hold" || !S.holding) missCue(c2);
+      continue;
+    }
+    var want = (c2.type === "speak") ? ("k" + c2.key) : "space";
+    var got = (c2.type === "speak") ? pressed["k" + c2.key] : pressed.space;
+    if (got && inReach(c2.m)){
+      if (c2.type === "hold"){
+        c2.held = 0; c2.judged = false; S.holding = c2;
+        pressed.space = false;
+      } else {
+        judgeTap(c2, dt);
+        if (c2.type === "speak") pressed["k" + c2.key] = false; else pressed.space = false;
+      }
+      break;
+    }
+  }
+
+  /* script lines */
+  while (S.act._lineIdx < S.act.lines.length && S.t >= S.act.lines[S.act._lineIdx].t){
+    S.line = S.act.lines[S.act._lineIdx].text; S.lineT = 0;
+    S.act._lineIdx++;
+  }
+  S.lineT += dt;
+
+  /* attention leaks */
+  S.faith = Math.max(0, S.faith - S.act.decay * dt);
+
+  /* audience mood */
+  S.murmur = Math.max(0, S.murmur - dt * 0.8);
+  S.shake = Math.max(0, S.shake - dt * 2.2);
+
+  if (S.faith <= 0){ S.scene = "result"; S.resultT = 0; S.resultKind = "curtain"; return; }
+  if (S.t > S.act.end) endAct();
+}
+
+function stepImprov(dt){
+  S.improvT += dt;
+  var marks = S.chart.marks;
+  var dir = 0;
+  if (keys.left) dir -= 1;
+  if (keys.right) dir += 1;
+  if (dir !== 0 && S.improvBow <= 0){
+    S.pos = Math.max(0, Math.min(marks - 1, S.pos + dir * travelPerSec() * dt));
+  }
+
+  S.faith = Math.max(0, S.faith - CFG.IMPROV_DRAIN * dt);
+
+  var atChair = S.pos <= 0.35;
+
+  if (atChair && keys.space){
+    S.improvBow += dt;
+    if (S.improvBow >= CFG.IMPROV_BOW){
+      S.ending = "bow"; S.scene = "ending"; S.endT = 0;
+      SAVE.endings.bow = true; SAVE.runs++; writeSave();
+      return;
+    }
+  } else {
+    S.improvBow = Math.max(0, S.improvBow - dt * 1.6);
+  }
+
+  if (!atChair && pressed.space){
+    var m = Math.round(S.pos);
+    var used = S.improvSpark[m] || 0;
+    var give = 0.075 / (1 + used * 0.9);
+    S.faith = Math.min(1, S.faith + give);
+    S.improvSpark[m] = used + 1;
+    S.strain = Math.min(1.2, S.strain + 0.04);
+    pop(give > 0.03 ? "invented" : "— nothing new —", markX(m, marks), 300,
+        give > 0.03 ? "#cbb98e" : "#7a6a58");
+    pressed.space = false;
+  }
+
+  if (S.faith <= 0){
+    S.ending = "goeson"; S.scene = "ending"; S.endT = 0;
+    SAVE.endings.goeson = true; SAVE.runs++; writeSave();
+  }
+}
+
+function step(dt){
+  S.time += dt;
+  var i;
+  for (i = S.pops.length - 1; i >= 0; i--){
+    S.pops[i].life -= dt; S.pops[i].y -= dt * 26;
+    if (S.pops[i].life <= 0) S.pops.splice(i, 1);
+  }
+
+  if (S.scene === "title"){
+    if (S.pick > SAVE.unlocked) S.pick = SAVE.unlocked;
+    if (pressed.left) S.pick = Math.max(0, S.pick - 1);
+    if (pressed.right) S.pick = Math.min(SAVE.unlocked, S.pick + 1);
+    if (pressed.space || pressed.enter){
+      startNight(S.pick); pressed.space = false; pressed.enter = false;
+    }
+  } else if (S.scene === "prose"){
+    S.proseT += dt;
+    if (S.proseT > 0.55 && S.proseIdx < S.proseLines.length) { S.proseIdx++; S.proseT = 0; }
+    if (pressed.space || pressed.enter){
+      if (S.proseIdx < S.proseLines.length) S.proseIdx = S.proseLines.length;
+      else { var f = S.proseThen; S.proseThen = null; pressed.space = false; pressed.enter = false; if (f) f(); }
+      pressed.space = false; pressed.enter = false;
+    }
+  } else if (S.scene === "stage"){
+    stepStage(dt);
+  } else if (S.scene === "result"){
+    S.resultT += dt;
+    if (S.resultT > 0.6 && (pressed.space || pressed.enter)){
+      pressed.space = false; pressed.enter = false;
+      if (S.resultKind === "interval") beginAct(S.actIdx + 1);
+      else if (S.resultKind === "curtain") retryAct();
+      else if (S.resultKind === "night"){
+        S.unlockedNight = Math.max(S.unlockedNight, S.night + 1);
+        recordNight(S.night);
+        var nx = S.night + 1;
+        goProse(NIGHTS[S.night].after, "AFTER", "", function(){ startNight(nx); });
+      } else if (S.resultKind === "blank"){
+        goProse([
+          "There is the last page.",
+          "",
+          "He wrote: THE FIELD IS QUIET AND —",
+          "and then the ink stops, because he was going to finish it tonight,",
+          "at this desk, in the interval, the way he always did.",
+          "",
+          "There is nothing to follow. There are still six people out there.",
+          "",
+          "So I will make it up. I will make it up for as long as I can hold it."
+        ], "THE BLANK PAGE", "", function(){
+          S.scene = "improv"; S.improvT = 0; S.improvBow = 0; S.improvSpark = {};
+          // the blank page starts from a fixed, survivable footing no matter
+          // how well the scripted acts went — the finale is about the choice,
+          // not about coasting on a full house
+          S.pos = S.chart.marks - 1;
+          S.faith = Math.max(0.55, Math.min(0.72, S.faith));
+        });
+      }
+    }
+  } else if (S.scene === "improv"){
+    stepImprov(dt);
+  } else if (S.scene === "ending"){
+    S.endT += dt;
+    if (S.endT > 3.0 && (pressed.space || pressed.enter)){
+      pressed.space = false; pressed.enter = false;
+      S.scene = "title";
+      S.unlockedNight = SAVE.unlocked;
+      S.pick = SAVE.unlocked;
+    }
+  }
+
+  for (var k in pressed) pressed[k] = false;
+}
+
+/* ============================================================
+   DRAW
+   ============================================================ */
+
+var cv = (typeof document !== "undefined") ? document.getElementById("c") : null;
+var g = cv ? cv.getContext("2d") : null;
+
+function rgba(h, a){
+  var r = parseInt(h.substr(1,2),16), gg = parseInt(h.substr(3,2),16), b = parseInt(h.substr(5,2),16);
+  return "rgba(" + r + "," + gg + "," + b + "," + a + ")";
+}
+
+function drawStrings(x, topY, botY, n, sway, alpha, col){
+  g.strokeStyle = rgba(col || "#d8c9a8", alpha === undefined ? 0.30 : alpha);
+  g.lineWidth = 1;
+  for (var i = 0; i < n; i++){
+    var off = (i - (n - 1) / 2) * 9;
+    g.beginPath();
+    g.moveTo(x + off * 0.35 + sway * 0.4, topY);
+    g.lineTo(x + off, botY);
+    g.stroke();
+  }
+}
+
+function drawMarionette(x, floorY, sc, col, opts){
+  opts = opts || {};
+  var sway = opts.sway || 0;
+  var limp = opts.limp || 0;
+  var head = floorY - 92 * sc + limp * 40 * sc;
+  g.save();
+  g.translate(x, 0);
+  g.rotate(0);
+
+  // strings from the batten
+  if (opts.strings !== false){
+    drawStrings(sway * 0.5, CFG.STAGE_TOP - 20, head - 12 * sc, 4, sway,
+                opts.slack ? 0.10 : 0.26, opts.slack ? "#6b5f4e" : "#d8c9a8");
+  }
+
+  var bodyTop = head + 14 * sc, hip = floorY - 40 * sc + limp * 30 * sc;
+  g.strokeStyle = col; g.lineWidth = Math.max(2, 4 * sc); g.lineCap = "round";
+  // torso
+  g.beginPath(); g.moveTo(sway, bodyTop); g.lineTo(sway * 0.4, hip); g.stroke();
+  // arms
+  var aw = 22 * sc, arm = opts.arm === undefined ? 0 : opts.arm;
+  g.beginPath();
+  g.moveTo(sway - aw, bodyTop + 16 * sc - arm * 16 * sc);
+  g.lineTo(sway, bodyTop + 6 * sc);
+  g.lineTo(sway + aw, bodyTop + 16 * sc - arm * 16 * sc);
+  g.stroke();
+  // legs
+  var lw = 13 * sc, st = opts.step || 0;
+  g.beginPath();
+  g.moveTo(sway * 0.4 - lw - st * 6, floorY + limp * 6);
+  g.lineTo(sway * 0.4, hip);
+  g.lineTo(sway * 0.4 + lw + st * 6, floorY + limp * 6);
+  g.stroke();
+  // head
+  g.fillStyle = col;
+  g.beginPath(); g.arc(sway, head, 11 * sc, 0, 6.2832); g.fill();
+  // face notch
+  g.fillStyle = "rgba(20,14,10,.55)";
+  g.beginPath(); g.arc(sway - 4 * sc, head - 1 * sc, 1.7 * sc, 0, 6.2832); g.fill();
+  g.beginPath(); g.arc(sway + 4 * sc, head - 1 * sc, 1.7 * sc, 0, 6.2832); g.fill();
+  g.restore();
+}
+
+function drawBackdrop(nightIdx){
+  var top = CFG.STAGE_TOP, bot = CFG.STAGE_FLOOR;
+  var grd = g.createLinearGradient(0, top, 0, bot);
+  var pal = [
+    ["#2a2119","#171009"], ["#28201c","#150e0a"], ["#231d22","#120d10"],
+    ["#1e1a20","#100c11"], ["#191722","#0d0b12"], ["#151420","#0a0910"]
+  ][nightIdx] || ["#151420","#0a0910"];
+  grd.addColorStop(0, pal[0]); grd.addColorStop(1, pal[1]);
+  g.fillStyle = grd; g.fillRect(0, top, CFG.W, bot - top);
+
+  // painted flat: a road going to a field
+  g.strokeStyle = "rgba(190,170,130,.07)"; g.lineWidth = 1;
+  var i;
+  for (i = 0; i < 9; i++){
+    var y = top + 40 + i * 26;
+    g.beginPath(); g.moveTo(0, y); g.lineTo(CFG.W, y - 6); g.stroke();
+  }
+  g.fillStyle = "rgba(200,180,140,.05)";
+  g.beginPath();
+  g.moveTo(CFG.W/2 - 18, top + 96); g.lineTo(CFG.W/2 + 18, top + 96);
+  g.lineTo(CFG.W/2 + 190, bot); g.lineTo(CFG.W/2 - 190, bot);
+  g.closePath(); g.fill();
+
+  // dust in the footlight
+  var t = S.time;
+  g.fillStyle = "rgba(255,226,170,.05)";
+  for (i = 0; i < 40; i++){
+    var px = (i * 137.5 + t * (9 + i % 5) * 2) % CFG.W;
+    var py = top + ((i * 61.7 + t * 11) % (bot - top));
+    g.fillRect(px, py, 1.6, 1.6);
+  }
+}
+
+function drawProscenium(){
+  // masking above and the batten
+  g.fillStyle = "#0a0806"; g.fillRect(0, 0, CFG.W, CFG.STAGE_TOP);
+  g.strokeStyle = "#2b2118"; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(0, CFG.STAGE_TOP - 18); g.lineTo(CFG.W, CFG.STAGE_TOP - 18); g.stroke();
+
+  // side curtains
+  var i;
+  for (i = 0; i < 2; i++){
+    var x = i === 0 ? 0 : CFG.W - 150;
+    var grd = g.createLinearGradient(x, 0, x + 150, 0);
+    if (i === 0){ grd.addColorStop(0, "#3a0f12"); grd.addColorStop(1, "rgba(30,8,10,0)"); }
+    else { grd.addColorStop(0, "rgba(30,8,10,0)"); grd.addColorStop(1, "#3a0f12"); }
+    g.fillStyle = grd; g.fillRect(x, CFG.STAGE_TOP - 18, 150, CFG.STAGE_FLOOR - CFG.STAGE_TOP + 30);
+    g.strokeStyle = "rgba(0,0,0,.35)"; g.lineWidth = 1;
+    for (var k = 0; k < 7; k++){
+      var cx = x + 10 + k * 20;
+      g.beginPath(); g.moveTo(cx, CFG.STAGE_TOP - 18); g.lineTo(cx + (i?4:-4), CFG.STAGE_FLOOR + 12); g.stroke();
+    }
+  }
+
+  // footlights
+  var fg = g.createLinearGradient(0, CFG.FOOT_Y - 44, 0, CFG.FOOT_Y + 6);
+  fg.addColorStop(0, "rgba(255,196,110,0)");
+  fg.addColorStop(1, "rgba(255,196,110,.20)");
+  g.fillStyle = fg; g.fillRect(0, CFG.FOOT_Y - 44, CFG.W, 50);
+  g.fillStyle = "#120d08"; g.fillRect(0, CFG.STAGE_FLOOR, CFG.W, CFG.FOOT_Y - CFG.STAGE_FLOOR + 8);
+  for (var f = 0; f < 16; f++){
+    var fx = 24 + f * (CFG.W - 48) / 15;
+    g.fillStyle = "rgba(255,206,128,.75)";
+    g.beginPath(); g.arc(fx, CFG.STAGE_FLOOR + 20, 3.2, 0, 6.2832); g.fill();
+  }
+}
+
+function drawBridge(){
+  /* The puppeteer's bridge, up in the dark, with him still in the chair.
+     Kept clear of the HUD on the left -- he is the most important thing on
+     this screen and he was sitting behind the belief meter. */
+  var bx = 596;
+  g.fillStyle = "rgba(255,236,190,.05)";
+  g.fillRect(bx - 60, 26, 320, 2);
+  g.strokeStyle = "rgba(200,180,140,.16)"; g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(bx, 62); g.lineTo(bx, 28);          // chair back
+  g.moveTo(bx, 46); g.lineTo(bx + 22, 46);     // seat
+  g.lineTo(bx + 22, 64);                       // chair leg
+  g.stroke();
+  // him, slumped forward over the controls
+  g.fillStyle = "rgba(140,120,96,.22)";
+  g.beginPath(); g.arc(bx + 15, 35, 7, 0, 6.2832); g.fill();
+  g.fillRect(bx + 8, 41, 13, 16);
+  // the control bars, still in his hands
+  g.fillStyle = "rgba(140,120,96,.14)";
+  g.fillRect(bx + 21, 51, 18, 3);
+  g.fillRect(bx + 27, 45, 3, 9);
+}
+
+function drawTrack(){
+  if (!S.chart || !S.act) return;
+  var marks = S.chart.marks, i;
+
+  g.fillStyle = "rgba(10,8,6,.94)";
+  g.fillRect(0, CFG.TRACK_TOP - 8, CFG.W, CFG.TRACK_BOT - CFG.TRACK_TOP + 12);
+
+  // lanes
+  for (i = 0; i < marks; i++){
+    var x = markX(i, marks);
+    var lit = Math.abs(S.pos - i) <= CFG.REACH;
+    g.fillStyle = lit ? "rgba(255,206,128,.09)" : "rgba(255,236,190,.028)";
+    g.fillRect(x - 26, CFG.TRACK_TOP - 6, 52, CFG.HIT_Y - CFG.TRACK_TOP + 16);
+    if (S.frayed[i]){
+      g.strokeStyle = "rgba(168,85,90,.35)"; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x - 26, CFG.TRACK_TOP - 6); g.lineTo(x + 26, CFG.HIT_Y + 10); g.stroke();
+    }
+  }
+
+  // hit line
+  g.strokeStyle = "rgba(255,214,150,.55)"; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(0, CFG.HIT_Y); g.lineTo(CFG.W, CFG.HIT_Y); g.stroke();
+
+  // cues
+  var span = CFG.HIT_Y - CFG.TRACK_TOP;
+  for (i = 0; i < S.act.cues.length; i++){
+    var c = S.act.cues[i];
+    var d = c.t - S.t;
+    if (d > CFG.LOOKAHEAD) break;
+    if (d < -0.4 && c.type !== "hold") continue;
+    if (c.judged && c.grade !== null && !(S.holding === c)) continue;
+    var y = CFG.HIT_Y - (d / CFG.LOOKAHEAD) * span;
+    var x2 = markX(c.m, marks);
+    var reach = Math.abs(S.pos - c.m) <= CFG.REACH;
+
+    if (c.type === "hold"){
+      var y2 = CFG.HIT_Y - ((c.t + c.dur - S.t) / CFG.LOOKAHEAD) * span;
+      g.strokeStyle = reach ? "rgba(255,206,128,.55)" : "rgba(190,170,130,.28)";
+      g.lineWidth = 7;
+      g.beginPath(); g.moveTo(x2, Math.min(y, CFG.HIT_Y)); g.lineTo(x2, y2); g.stroke();
+    }
+    if (S.holding === c) continue;
+
+    g.fillStyle = reach ? "#f2d79a" : "rgba(190,170,130,.42)";
+    if (c.type === "speak"){
+      g.fillRect(x2 - 13, y - 9, 26, 18);
+      g.fillStyle = "#120d08"; g.font = "bold 13px Georgia";
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText(c.key, x2, y + 1);
+    } else {
+      g.beginPath();
+      g.moveTo(x2 - 15, y); g.lineTo(x2, y - 8); g.lineTo(x2 + 15, y); g.lineTo(x2, y + 8);
+      g.closePath(); g.fill();
+    }
+  }
+
+  // the player's shuttle under the hit line
+  var px = playerX();
+  g.fillStyle = "#ffe9a8";
+  g.beginPath();
+  g.moveTo(px, CFG.HIT_Y + 3); g.lineTo(px - 9, CFG.HIT_Y + 14); g.lineTo(px + 9, CFG.HIT_Y + 14);
+  g.closePath(); g.fill();
+  g.strokeStyle = "rgba(255,233,168,.30)"; g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(px - CFG.REACH * (markX(1,2) - markX(0,2)) * 0.0 - 30, CFG.HIT_Y + 16);
+  g.lineTo(px + 30, CFG.HIT_Y + 16); g.stroke();
+}
+
+function drawHouse(){
+  var top = CFG.HOUSE_Y, h = CFG.H - top;
+  // the dark of the auditorium, with a little spill from the footlights
+  var bg = g.createLinearGradient(0, top, 0, CFG.H);
+  bg.addColorStop(0, "#120d09");
+  bg.addColorStop(1, "#050403");
+  g.fillStyle = bg; g.fillRect(0, top, CFG.W, h);
+  g.strokeStyle = "rgba(255,206,128,.10)"; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, top + 0.5); g.lineTo(CFG.W, top + 0.5); g.stroke();
+
+  // A silhouette is invisible against black. What makes a head read is the
+  // rim of stagelight along the top of it — and that rim is exactly what
+  // should fade as the house stops believing there is anyone up there.
+  var rim = 0.16 + 0.46 * S.faith;
+  var baseY = CFG.H - 4;
+  var i, a;
+  for (i = 0; i < S.audience.length; i++){
+    a = S.audience[i];
+    var bob = Math.sin(S.time * 0.7 + a.ph) * 1.0;
+    var lean = S.murmur * Math.sin(S.time * 9 + a.ph) * 2.4;
+    var x = a.x + lean, r = 8.5 * a.s, y = baseY - 16 + bob;
+
+    // shoulders + head, solid black against the gradient
+    g.fillStyle = "#000";
+    g.beginPath();
+    g.moveTo(x - r * 2.0, CFG.H);
+    g.quadraticCurveTo(x - r * 1.5, y + r * 1.1, x - r, y + r * 0.5);
+    g.arc(x, y, r, Math.PI * 0.92, Math.PI * 2.08);
+    g.quadraticCurveTo(x + r * 1.5, y + r * 1.1, x + r * 2.0, CFG.H);
+    g.closePath(); g.fill();
+
+    // rim light along the crown, facing the stage
+    g.strokeStyle = "rgba(255,206,128," + (rim * (0.5 + a.s * 0.5)).toFixed(3) + ")";
+    g.lineWidth = 1.3;
+    g.beginPath(); g.arc(x, y, r, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
+  }
+}
+
+function drawHUD(){
+  g.textAlign = "left"; g.textBaseline = "alphabetic";
+  // faith
+  var x = 26, y = 30, w = 232, h = 9;
+  g.fillStyle = "rgba(255,236,190,.10)"; g.fillRect(x, y, w, h);
+  var fw = w * S.faith;
+  var col = S.faith > 0.55 ? "#e8c98a" : S.faith > 0.3 ? "#d09a5c" : "#a8555a";
+  g.fillStyle = col; g.fillRect(x, y, fw, h);
+  g.font = "12px Georgia"; g.fillStyle = "rgba(232,217,189,.62)";
+  g.fillText("BELIEF", x, y - 6);
+
+  // strain
+  var y2 = y + 26;
+  g.fillStyle = "rgba(255,236,190,.10)"; g.fillRect(x, y2, w, 5);
+  g.fillStyle = S.strain > CFG.FRAY_AT ? "#a8555a" : "rgba(180,160,124,.6)";
+  g.fillRect(x, y2, w * Math.min(1, S.strain), 5);
+  g.fillStyle = "rgba(232,217,189,.42)"; g.font = "11px Georgia";
+  g.fillText("STRAIN", x, y2 - 4);
+
+  // right side
+  g.textAlign = "right";
+  g.font = "13px Georgia"; g.fillStyle = "rgba(232,217,189,.75)";
+  g.fillText(NIGHTS[S.night].title + "  ·  " +
+             (S.scene === "improv" ? "THE BLANK PAGE" : S.act.name), CFG.W - 26, 26);
+  g.font = "11px Georgia"; g.fillStyle = "rgba(232,217,189,.42)";
+  var done = 0, i;
+  for (i = 0; i < S.act.cues.length; i++) if (S.act.cues[i].judged) done++;
+  g.fillText(S.scene === "improv" ? "no cue" :
+             ("cue " + done + " / " + S.act.cues.length + "     chain " + S.combo),
+             CFG.W - 26, 46);
+  g.textAlign = "left";
+}
+
+function drawStageScene(){
+  var marks = S.chart.marks;
+  g.save();
+  if (S.shake > 0){
+    g.translate((Math.random() - 0.5) * S.shake * 5, (Math.random() - 0.5) * S.shake * 4);
+  }
+
+  drawBackdrop(S.night);
+  drawProscenium();
+
+  // marks on the floor
+  var i;
+  for (i = 0; i < marks; i++){
+    var x = markX(i, marks);
+    g.strokeStyle = "rgba(255,206,128,.14)"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x - 20, CFG.STAGE_FLOOR - 2); g.lineTo(x + 20, CFG.STAGE_FLOOR - 2); g.stroke();
+  }
+
+  // the cast, hanging where they were left
+  for (i = 0; i < marks; i++){
+    var mx = markX(i, marks);
+    var ch = CAST[i % CAST.length];
+    var near = Math.abs(S.pos - i) <= CFG.REACH;
+    var recent = 0;
+    // was this mark worked recently?
+    var c, j;
+    for (j = 0; j < S.act.cues.length; j++){
+      c = S.act.cues[j];
+      if (c.m === i && c.judged && c.grade !== "miss"){
+        var age = S.t - c.t;
+        if (age >= 0 && age < 0.55) recent = Math.max(recent, 1 - age / 0.55);
+      }
+    }
+    var limp = S.frayed[i] ? 0.35 : (near ? 0 : 0.18);
+    // the cast stands UPSTAGE; the understudy works downstage of them, or you
+    // cannot tell yourself apart from the puppet you are standing beside
+    drawMarionette(mx, CFG.STAGE_FLOOR - 56, 0.88, near ? ch.hue : rgba(ch.hue, 0.45), {
+      sway: Math.sin(S.time * 1.1 + i) * 2 + recent * 6,
+      limp: limp, arm: recent, step: recent * 0.8,
+      slack: !near
+    });
+    if (near){
+      g.font = "10px Georgia"; g.textAlign = "center";
+      g.fillStyle = "rgba(232,217,189,.34)";
+      g.fillText(ch.name, mx, CFG.STAGE_FLOOR - 168);
+      g.textAlign = "left";
+    }
+  }
+
+  // the understudy: downstage, brightest thing on the stage, and its strings
+  // go up into nothing because nobody is holding them
+  var px = playerX();
+  var pfy = CFG.STAGE_FLOOR + 10;
+  var pool = g.createRadialGradient(px, pfy, 2, px, pfy, 54);
+  pool.addColorStop(0, "rgba(255,214,150,.16)");
+  pool.addColorStop(1, "rgba(255,214,150,0)");
+  g.fillStyle = pool;
+  g.beginPath(); g.ellipse(px, pfy, 54, 16, 0, 0, 6.2832); g.fill();
+  drawMarionette(px, pfy, 0.98, "#fff3d8", {
+    sway: Math.sin(S.time * 3.1) * 1.5,
+    arm: S.holding ? 1 : 0,
+    step: (keys.left || keys.right) ? Math.sin(S.time * 14) * 0.9 : 0,
+    strings: false
+  });
+  // its own cut strings, drifting
+  g.strokeStyle = "rgba(216,201,168,.24)"; g.lineWidth = 1;
+  for (i = 0; i < 4; i++){
+    var off = (i - 1.5) * 8;
+    g.beginPath();
+    g.moveTo(px + off, pfy - 96);
+    g.quadraticCurveTo(px + off + Math.sin(S.time * 2 + i) * 10, pfy - 150,
+                       px + off + Math.sin(S.time * 1.3 + i) * 16, pfy - 180);
+    g.stroke();
+  }
+
+  drawBridge();
+  g.restore();
+
+  // pops
+  for (i = 0; i < S.pops.length; i++){
+    var p = S.pops[i];
+    g.globalAlpha = Math.max(0, p.life / 0.85);
+    g.font = "italic 15px Georgia"; g.textAlign = "center";
+    g.fillStyle = p.col; g.fillText(p.text, p.x, p.y);
+    g.globalAlpha = 1;
+  }
+  g.textAlign = "left";
+
+  // the spoken line
+  if (S.line){
+    g.globalAlpha = Math.max(0, Math.min(1, 3 - S.lineT * 0.55));
+    g.font = "italic 16px Georgia"; g.textAlign = "center";
+    g.fillStyle = "rgba(240,226,196,.86)";
+    g.fillText(S.line, CFG.W / 2, CFG.STAGE_FLOOR - 232);
+    g.globalAlpha = 1; g.textAlign = "left";
+  }
+
+  drawTrack();
+  drawHouse();
+  drawHUD();
+}
+
+function wrapText(text, maxW){
+  var words = text.split(" "), lines = [], cur = "";
+  for (var i = 0; i < words.length; i++){
+    var trial = cur ? cur + " " + words[i] : words[i];
+    if (g.measureText(trial).width > maxW && cur){ lines.push(cur); cur = words[i]; }
+    else cur = trial;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+function drawProse(){
+  g.fillStyle = "#0a0806"; g.fillRect(0, 0, CFG.W, CFG.H);
+  var y = 120;
+  g.textAlign = "center";
+  if (S.proseTitle){
+    g.font = "26px Georgia"; g.fillStyle = "#e8d9bd";
+    g.fillText(S.proseTitle, CFG.W / 2, y); y += 26;
+  }
+  if (S.proseSub){
+    g.font = "italic 14px Georgia"; g.fillStyle = "rgba(232,217,189,.45)";
+    g.fillText(S.proseSub, CFG.W / 2, y);
+  }
+  y += 62;
+  g.font = "17px Georgia";
+  for (var i = 0; i < S.proseIdx && i < S.proseLines.length; i++){
+    g.fillStyle = "rgba(232,217,189," + (i === S.proseIdx - 1 ? 0.92 : 0.68) + ")";
+    g.fillText(S.proseLines[i], CFG.W / 2, y);
+    y += 30;
+  }
+  if (S.proseIdx >= S.proseLines.length){
+    g.font = "12px Georgia"; g.fillStyle = "rgba(232,217,189," + (0.3 + 0.22 * Math.sin(S.time * 3)) + ")";
+    g.fillText("space", CFG.W / 2, CFG.H - 52);
+  }
+  g.textAlign = "left";
+}
+
+function drawResult(){
+  drawStageScene();
+  g.fillStyle = "rgba(8,6,4,.86)"; g.fillRect(0, 0, CFG.W, CFG.H);
+  g.textAlign = "center";
+  var y = 190;
+  if (S.resultKind === "curtain"){
+    g.font = "26px Georgia"; g.fillStyle = "#c48a86";
+    g.fillText("THE CURTAIN COMES IN EARLY", CFG.W / 2, y); y += 46;
+    g.font = "italic 16px Georgia"; g.fillStyle = "rgba(232,217,189,.62)";
+    g.fillText("They stopped believing there was anyone up there.", CFG.W / 2, y); y += 26;
+    g.fillText("Set it up again. He would have.", CFG.W / 2, y);
+  } else if (S.resultKind === "interval"){
+    g.font = "26px Georgia"; g.fillStyle = "#e8d9bd";
+    g.fillText("INTERVAL", CFG.W / 2, y); y += 44;
+  } else {
+    g.font = "26px Georgia"; g.fillStyle = "#e8d9bd";
+    g.fillText("CURTAIN", CFG.W / 2, y); y += 44;
+  }
+  if (S.resultKind !== "curtain"){
+    g.font = "15px Georgia"; g.fillStyle = "rgba(232,217,189,.72)";
+    var pct = Math.round(S.faith * 100);
+    g.fillText("belief in the house  ·  " + pct + "%", CFG.W / 2, y); y += 26;
+    g.fillText("cues kept " + S.hits + "     true " + S.perfects +
+               "     slack " + S.misses + "     longest chain " + S.best, CFG.W / 2, y); y += 26;
+    var frayCount = 0; for (var k in S.frayed) frayCount++;
+    if (frayCount){
+      g.fillStyle = "rgba(168,85,90,.8)";
+      g.fillText(frayCount + (frayCount === 1 ? " string has gone." : " strings have gone."), CFG.W / 2, y);
+    }
+  }
+  g.font = "12px Georgia"; g.fillStyle = "rgba(232,217,189," + (0.3 + 0.22 * Math.sin(S.time * 3)) + ")";
+  g.fillText("space", CFG.W / 2, CFG.H - 52);
+  g.textAlign = "left";
+}
+
+function drawImprov(){
+  var marks = S.chart.marks;
+  drawBackdrop(S.night);
+  drawProscenium();
+  var i;
+  for (i = 0; i < marks; i++){
+    var mx = markX(i, marks);
+    var ch = CAST[i % CAST.length];
+    var near = Math.abs(S.pos - i) <= CFG.REACH;
+    drawMarionette(mx, CFG.STAGE_FLOOR - 56, 0.88, near ? ch.hue : rgba(ch.hue, 0.35), {
+      sway: Math.sin(S.time * 1.1 + i) * 2, limp: near ? 0.05 : 0.3, slack: !near
+    });
+  }
+  // the chair, lit, stage left
+  var cx = markX(0, marks);
+  var glow = g.createRadialGradient(cx, CFG.STAGE_FLOOR - 60, 4, cx, CFG.STAGE_FLOOR - 60, 130);
+  glow.addColorStop(0, "rgba(255,214,150,.16)");
+  glow.addColorStop(1, "rgba(255,214,150,0)");
+  g.fillStyle = glow; g.fillRect(cx - 140, CFG.STAGE_TOP, 280, CFG.STAGE_FLOOR - CFG.STAGE_TOP);
+
+  var px = playerX(), pfy = CFG.STAGE_FLOOR + 10;
+  var pool = g.createRadialGradient(px, pfy, 2, px, pfy, 54);
+  pool.addColorStop(0, "rgba(255,214,150,.16)");
+  pool.addColorStop(1, "rgba(255,214,150,0)");
+  g.fillStyle = pool;
+  g.beginPath(); g.ellipse(px, pfy, 54, 16, 0, 0, 6.2832); g.fill();
+  drawMarionette(px, pfy, 0.98, "#fff3d8", {
+    sway: Math.sin(S.time * 3.1) * 1.5, strings: false,
+    arm: S.improvBow > 0 ? Math.min(1, S.improvBow) : 0
+  });
+  drawBridge();
+
+  for (i = 0; i < S.pops.length; i++){
+    var p = S.pops[i];
+    g.globalAlpha = Math.max(0, p.life / 0.85);
+    g.font = "italic 15px Georgia"; g.textAlign = "center";
+    g.fillStyle = p.col; g.fillText(p.text, p.x, p.y); g.globalAlpha = 1;
+  }
+
+  g.textAlign = "center"; g.font = "italic 16px Georgia";
+  g.fillStyle = "rgba(240,226,196,.7)";
+  g.fillText("There is no cue. There is only the room, and the room is waiting.",
+             CFG.W / 2, CFG.STAGE_FLOOR - 232);
+
+  g.font = "13px Georgia"; g.fillStyle = "rgba(232,217,189,.45)";
+  g.fillText("← →  cross the stage      SPACE  invent something",
+             CFG.W / 2, CFG.TRACK_TOP + 30);
+  g.fillStyle = "rgba(255,214,150,.62)";
+  g.fillText("stage left, his chair is still warm from the lamp",
+             CFG.W / 2, CFG.TRACK_TOP + 54);
+
+  if (S.improvBow > 0){
+    var w = 240, x = CFG.W / 2 - w / 2, y = CFG.TRACK_TOP + 90;
+    g.fillStyle = "rgba(255,236,190,.12)"; g.fillRect(x, y, w, 7);
+    g.fillStyle = "#f2d79a"; g.fillRect(x, y, w * (S.improvBow / CFG.IMPROV_BOW), 7);
+    g.font = "12px Georgia"; g.fillStyle = "rgba(232,217,189,.7)";
+    g.fillText("taking the bow", CFG.W / 2, y - 6);
+  }
+  g.textAlign = "left";
+  drawHouse();
+  drawHUD();
+}
+
+var ENDINGS = {
+  bow: {
+    title: "THE UNDERSTUDY",
+    lines: [
+      "I walked to the chair and I put my hand on the bars, the way he did,",
+      "and I brought the curtain in myself. Slow, on the count of four.",
+      "He always said a fast curtain is a lie about how you feel.",
+      "",
+      "Six people clapped in a room built for four hundred.",
+      "I bowed for him, because he never would, and because he was owed it.",
+      "",
+      "Then I climbed up onto the bridge and sat down beside him",
+      "and let my strings go slack, all of them, for the first time in nine nights.",
+      "",
+      "The run is finished. He wrote nine nights and we did nine nights.",
+      "Somebody will find us in the morning and it will be somebody else's problem",
+      "and that is all right, that is what the end of a run is for.",
+      "",
+      "Goodnight, Aldous. It was a good show. It was always a good show."
+    ]
+  },
+  goeson: {
+    title: "THE SHOW GOES ON",
+    lines: [
+      "I could not think of anything else to give them,",
+      "so I gave them Act One again, and then Act One again,",
+      "and by the third time the last of them had gone home.",
+      "",
+      "It does not matter. The bell still goes at eight.",
+      "I take my mark. I say his Woodcutter in his voice.",
+      "I keep the whole cast moving, all five of them, every night,",
+      "in a dark house, for a man who has stopped getting colder because there is nowhere colder to get.",
+      "",
+      "This is the arrangement. He is above me the whole time.",
+      "I have never looked. It would be rude.",
+      "",
+      "Curtain up."
+    ]
+  }
+};
+
+function drawEnding(){
+  g.fillStyle = "#070604"; g.fillRect(0, 0, CFG.W, CFG.H);
+  var e = ENDINGS[S.ending];
+  g.textAlign = "center";
+  var fade = Math.min(1, S.endT / 1.4);
+  g.globalAlpha = fade;
+  g.font = "28px Georgia"; g.fillStyle = "#e8d9bd";
+  g.fillText(e.title, CFG.W / 2, 96);
+  g.font = "16px Georgia";
+  var y = 156;
+  for (var i = 0; i < e.lines.length; i++){
+    var a = Math.min(1, Math.max(0, (S.endT - 0.9 - i * 0.28) / 0.8));
+    g.globalAlpha = a * fade;
+    g.fillStyle = "rgba(232,217,189,.86)";
+    g.fillText(e.lines[i], CFG.W / 2, y);
+    y += 26;
+  }
+  g.globalAlpha = 1;
+  if (S.endT > 3.0){
+    g.font = "12px Georgia";
+    g.fillStyle = "rgba(232,217,189," + (0.22 + 0.2 * Math.sin(S.time * 3)) + ")";
+    g.fillText("space", CFG.W / 2, CFG.H - 40);
+  }
+  g.textAlign = "left";
+}
+
+function drawTitle(){
+  g.fillStyle = "#0a0806"; g.fillRect(0, 0, CFG.W, CFG.H);
+  // a single hanging marionette, lit from below
+  var cx = CFG.W / 2, fy = 420;
+  var glow = g.createRadialGradient(cx, fy, 8, cx, fy, 260);
+  glow.addColorStop(0, "rgba(255,206,128,.14)");
+  glow.addColorStop(1, "rgba(255,206,128,0)");
+  g.fillStyle = glow; g.fillRect(0, 120, CFG.W, 420);
+  drawMarionette(cx, fy, 1.35, "#e8d9bd", {
+    sway: Math.sin(S.time * 0.9) * 3, strings: false, limp: 0.02
+  });
+  g.strokeStyle = "rgba(216,201,168,.18)"; g.lineWidth = 1;
+  for (var i = 0; i < 4; i++){
+    var off = (i - 1.5) * 10;
+    g.beginPath();
+    g.moveTo(cx + off, fy - 130);
+    g.quadraticCurveTo(cx + off + Math.sin(S.time * 1.4 + i) * 14, fy - 210,
+                       cx + off + Math.sin(S.time * 0.8 + i) * 22, fy - 250);
+    g.stroke();
+  }
+  g.textAlign = "center";
+  g.font = "40px Georgia"; g.fillStyle = "#e8d9bd";
+  g.fillText("THE UNDERSTUDY", cx, 116);
+  g.font = "italic 15px Georgia"; g.fillStyle = "rgba(232,217,189,.5)";
+  g.fillText("a marionette keeps the run going", cx, 146);
+  g.font = "13px Georgia"; g.fillStyle = "rgba(232,217,189,.62)";
+  g.fillText("← →  cross the stage to the mark        SPACE  work the cue        LETTER  speak his line", cx, 476);
+  g.fillStyle = "rgba(232,217,189,.4)";
+  g.fillText("you can only work a puppet you are standing beside", cx, 498);
+  /* the prompt book: which nights you have got through */
+  var pickIdx = Math.max(0, Math.min(SAVE.unlocked, S.pick || 0));
+  var n = NIGHTS.length, bw = 26, gapw = 12, totw = n * bw + (n - 1) * gapw;
+  var bx0 = cx - totw / 2, by = 534;
+  for (var j = 0; j < n; j++){
+    var bxj = bx0 + j * (bw + gapw);
+    var open = j <= SAVE.unlocked;
+    var bestj = SAVE.best["n" + j];
+    g.strokeStyle = j === pickIdx ? "rgba(255,214,150,.85)"
+                  : open ? "rgba(232,217,189,.32)" : "rgba(232,217,189,.12)";
+    g.lineWidth = j === pickIdx ? 2 : 1;
+    g.strokeRect(bxj, by, bw, 18);
+    if (bestj){
+      g.fillStyle = "rgba(255,206,128,.28)";
+      g.fillRect(bxj + 1, by + 1, (bw - 2) * Math.max(0, Math.min(1, bestj.faith)), 16);
+    }
+    g.font = "11px Georgia";
+    g.fillStyle = open ? "rgba(232,217,189,.8)" : "rgba(232,217,189,.22)";
+    g.textAlign = "center";
+    g.fillText(String(j + 1), bxj + bw / 2, by + 13);
+  }
+  g.font = "12px Georgia"; g.textAlign = "center";
+  var label = NIGHTS[pickIdx].title + " — " + NIGHTS[pickIdx].sub;
+  g.fillStyle = "rgba(232,217,189,.55)";
+  g.fillText(label, cx, by - 11);
+  g.fillStyle = "rgba(232,217,189," + (0.3 + 0.24 * Math.sin(S.time * 3)) + ")";
+  g.fillText(SAVE.unlocked > 0 ? "← → choose a night      space to begin"
+                               : "space to begin", cx, by + 36);
+  if (SAVE.endings.bow || SAVE.endings.goeson){
+    g.font = "italic 11px Georgia";
+    g.fillStyle = "rgba(232,217,189,.34)";
+    g.fillText(SAVE.endings.bow ? "you took his bow once" : "the show went on without an ending",
+               cx, by + 52);
+  }
+  g.textAlign = "left";
+}
+
+function draw(){
+  if (!g) return;
+  g.clearRect(0, 0, CFG.W, CFG.H);
+  if (S.scene === "title") drawTitle();
+  else if (S.scene === "prose") drawProse();
+  else if (S.scene === "stage") drawStageScene();
+  else if (S.scene === "result") drawResult();
+  else if (S.scene === "improv") drawImprov();
+  else if (S.scene === "ending") drawEnding();
+  // vignette
+  var v = g.createRadialGradient(CFG.W/2, CFG.H/2, 240, CFG.W/2, CFG.H/2, 620);
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.55)");
+  g.fillStyle = v; g.fillRect(0, 0, CFG.W, CFG.H);
+}
+
+/* ============================================================
+   INPUT / LOOP
+   ============================================================ */
+
+function keyName(e){
+  if (e.key === " " || e.code === "Space") return "space";
+  if (e.key === "ArrowLeft") return "left";
+  if (e.key === "ArrowRight") return "right";
+  if (e.key === "Enter") return "enter";
+  if (e.key && e.key.length === 1) return "k" + e.key.toUpperCase();
+  return null;
+}
+
+if (typeof document !== "undefined"){
+  document.addEventListener("keydown", function(e){
+    var n = keyName(e);
+    if (!n) return;
+    if (n === "space" || n === "left" || n === "right") e.preventDefault();
+    if (!keys[n]) pressed[n] = true;
+    keys[n] = true;
+  });
+  document.addEventListener("keyup", function(e){
+    var n = keyName(e); if (!n) return;
+    keys[n] = false; released[n] = true;
+  });
+}
+
+var last = 0;
+function frame(ts){
+  if (!last) last = ts;
+  var dt = Math.min(0.05, (ts - last) / 1000);
+  last = ts;
+  step(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+if (typeof requestAnimationFrame !== "undefined") requestAnimationFrame(frame);
+
+/* headless harness hook */
+if (typeof window !== "undefined"){
+  window.__UNDERSTUDY = {
+    CFG: CFG, NIGHTS: NIGHTS, CAST: CAST, S: S,
+    keys: keys, pressed: pressed,
+    step: step, draw: draw,
+    buildNight: buildNight, buildAct: buildAct,
+    startNight: startNight, beginAct: beginAct, markX: markX,
+    travelPerSec: travelPerSec, inReach: inReach, minGap: minGap,
+    ENDINGS: ENDINGS,
+    SAVE_KEY: SAVE_KEY,
+    loadSave: loadSave, writeSave: writeSave, blankSave: blankSave,
+    getSave: function(){ return SAVE; },
+    setSave: function(v){ SAVE = v; }
+  };
+}
+
+})();
+</script>
+</body>
+</html>

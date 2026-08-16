@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CHORUS</title>
+<style>
+  html,body{margin:0;height:100%;background:#07070b;overflow:hidden;
+    font-family:"Georgia","Times New Roman",serif;color:#e6ddc8;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{image-rendering:auto;background:#07070b;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c" width="960" height="448"></canvas></div>
+<script>
+"use strict";
+(function(){
+
+// ===========================================================================
+//  CHORUS  -- a deterministic fixed-timestep puzzle platformer.
+//
+//  Nothing in the simulation may consult Math.random or wall-clock time.
+//  Ghosts replay RECORDED POSITIONS, not recorded inputs, so a ghost can
+//  never desync no matter what the live body does to the world.
+// ===========================================================================
+
+var TILE      = 32;
+var TICKS     = 1200;          // one breath, at 60 Hz -> 20 seconds
+var DT        = 1 / 60;
+
+var PW = 18, PH = 26;          // body box
+var GRAV      = 0.62;
+// Tuned so the vertical reach forms a ladder:
+//   from the floor        -> a ledge 2 tiles up
+//   from one voice's back -> 3 tiles up
+//   from two, stacked     -> 4 tiles up
+var JUMP_V    = -10.2;
+var JUMP_CUT  = 0.45;          // vy multiplier when you release early
+var MAX_FALL  = 12;
+var WALK      = 3.2;
+var ACCEL     = 0.9;           // ground+air acceleration toward target speed
+var COYOTE    = 5;             // ticks of grace after leaving a ledge
+var BUFFER    = 6;             // ticks a jump press stays queued
+
+// note frequencies for the six organ keys -- a stack that is consonant in
+// any subset, so a half-solved puzzle still sounds like music
+var NOTES = [146.83, 220.00, 293.66, 349.23, 440.00, 587.33];
+var NOTE_NAMES = ["D", "A", "D", "F", "A", "D"];
+
+// ---------------------------------------------------------------- levels
+// #  stone          .  air           @  spawn
+// D  door           -  one-way ledge ^  spike
+// 1..6 organ key (solid, and sustains its note while a body rests on it)
+var LEVELS = [
+{
+  name: "i. one voice",
+  line: "nothing here is locked. walk.",
+  voices: 1,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#.......................DD...#",
+    "#.......................DD...#",
+    "#..@....................DD...#",
+    "####################..########",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ door: true }]
+},
+{
+  name: "ii. a note held",
+  line: "the key must stay pressed. you cannot be in two places. yet.",
+  voices: 2,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#.................DD.........#",
+    "#.................DD.........#",
+    "#..@....1.........DD.........#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { door: true }]
+},
+{
+  name: "iii. shoulders",
+  line: "a body left behind is still a body. stand on it.",
+  voices: 2,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#....................DD......#",
+    "#....................DD......#",
+    "#..................#####.....#",
+    "#............................#",
+    "#..@.........................#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ spot: [18, 10] }, { door: true }]
+},
+{
+  name: "iv. a third",
+  line: "two notes, two bodies. and someone left over to walk through.",
+  voices: 3,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#..............DD............#",
+    "#..............DD............#",
+    "#..@.1.........DD.......2....#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { key: 2 }, { door: true }]
+},
+{
+  name: "v. the low rung",
+  line: "some notes are written above the reach of one voice.",
+  voices: 3,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#....................1.......#",
+    "#.......DD.........#####.....#",
+    "#.......DD...................#",
+    "#..@....DD...................#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ spot: [17, 10] }, { key: 1 }, { door: true }]
+},
+{
+  name: "vi. antiphon",
+  line: "you are answering yourself now.",
+  voices: 4,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#....................2.......#",
+    "#...........DD.....#####.....#",
+    "#...........DD...............#",
+    "#..@..1.....DD...............#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { spot: [18, 10] }, { key: 2 }, { door: true }]
+},
+{
+  name: "vii. three throats",
+  line: "the chord is wider than your hands.",
+  voices: 5,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#................3...........#",
+    "#........DD....#####.........#",
+    "#........DD..................#",
+    "#..@..1..DD...............2..#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { key: 2 }, { spot: [14, 10] }, { key: 3 }, { door: true }]
+},
+{
+  name: "viii. the ladder of me",
+  line: "one standing on one standing on one.",
+  voices: 4,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#...................DD.......#",
+    "#...................DD.......#",
+    "#..................######....#",
+    "#............................#",
+    "#............................#",
+    "#..@.........................#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ spot: [17, 10] }, { spot: [17, 9] }, { door: true }]
+},
+{
+  name: "ix. the sharp floor",
+  line: "the ones who fell are not available to help you.",
+  voices: 4,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#.....................2......#",
+    "#.......DD..........#####....#",
+    "#.......DD...................#",
+    "#..@.1..DD...^^..............#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { spot: [18, 10] }, { key: 2 }, { door: true }]
+},
+{
+  name: "x. chorus",
+  line: "all of you. all at once. that was always the trick.",
+  voices: 6,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#.................4..........#",
+    "#...............######.......#",
+    "#...........3...........DD...#",
+    "#.........#####.........DD...#",
+    "#..@.1..................DD.2.#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { key: 2 }, { key: 3 }, { key: 4 }, { door: true }]
+},
+{
+  name: "xi. the trapdoor",
+  line: "some floors only hold you from above.",
+  voices: 2,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#.............1.......DD.....#",
+    "#...........-----.....DD.....#",
+    "#..@..................DD.....#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { door: true }]
+},
+{
+  name: "xii. the far side",
+  line: "over the wall is a one-way errand. choose who goes.",
+  voices: 4,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#..DD..........#.............#",
+    "#..DD..........#.............#",
+    "#..DD...@......#.....1....2..#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ spot: [14, 10] }, { key: 1 }, { key: 2 }, { door: true }]
+},
+{
+  name: "xiii. the overhang",
+  line: "there is no room to stand up under that.",
+  voices: 3,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#.............#######........#",
+    "#......................1.....#",
+    "#....DD........#########.....#",
+    "#....DD......................#",
+    "#.@..DD......................#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ spot: [26, 10] }, { key: 1 }, { door: true }]
+},
+{
+  name: "xiv. the choir stall",
+  line: "the last rung is always one body short.",
+  voices: 4,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#......................2.....#",
+    "#...................#######..#",
+    "#............................#",
+    "#...............1............#",
+    "#............#######.........#",
+    "#..DD........................#",
+    "#..DD...#####................#",
+    "#..DD.@......................#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { spot: [18, 6] }, { key: 2 }, { door: true }]
+},
+{
+  name: "xv. the gauntlet",
+  line: "three of you have to cross that. all three.",
+  voices: 5,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#..........................3.#",
+    "#.........DD............######",
+    "#.........DD.................#",
+    "#.@...1...DD..^^......2......#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { key: 2 }, { spot: [23, 10] }, { key: 3 }, { door: true }]
+},
+{
+  name: "xvi. the army",
+  line: "there is no limit here. bring all of you.",
+  unlimited: true,
+  voices: 999,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#......................6.....#",
+    "#..................######....#",
+    "#..............5.............#",
+    "#...........######...........#",
+    "#..........3......4..........#",
+    "#........#####..#####..DD....#",
+    "#......................DD....#",
+    "#.@..1.................DD.2..#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ],
+  plan: [{ key: 1 }, { key: 2 }, { spot: [8, 10] }, { key: 3 }, { key: 4 },
+         { key: 5 }, { key: 6 }, { door: true }]
+},
+{
+  name: "the playground",
+  line: "build whatever you like. nothing here is graded.",
+  playground: true,
+  unlimited: true,
+  voices: 999,
+  rows: [
+    "##############################",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#............................#",
+    "#......................DD....#",
+    "#......................DD....#",
+    "#..@...................DD....#",
+    "##############################",
+    "#............................#",
+    "##############################"
+  ]
+}
+];
+
+// ---------------------------------------------------------------- world
+function World(def){
+  this.def   = def;
+  this.rows  = def.rows;
+  this.h     = def.rows.length;
+  this.w     = def.rows[0].length;
+  this.solid = [];
+  this.spike = [];
+  this.oneway= [];
+  this.keys  = [];      // {n, tx, ty, x, y}
+  this.door  = null;    // {x, y, w, h, chord:[n...]}
+  this.spawn = { x: 0, y: 0 };
+
+  var doorTiles = [], chord = {};
+  for(var ty = 0; ty < this.h; ty++){
+    this.solid.push([]); this.spike.push([]); this.oneway.push([]);
+    for(var tx = 0; tx < this.w; tx++){
+      var ch = this.rows[ty][tx] || ".";
+      var s = false, sp = false, ow = false;
+      if(ch === "#") s = true;
+      else if(ch === "^") sp = true;
+      else if(ch === "-") ow = true;
+      else if(ch === "@"){ this.spawn = { x: tx * TILE + (TILE - PW) / 2, y: ty * TILE + TILE - PH }; }
+      else if(ch === "D"){ doorTiles.push([tx, ty]); }
+      else if(ch >= "1" && ch <= "6"){
+        // A key is a PLATE, not a block -- it must never be a wall you cannot
+        // walk past. It occupies an air tile resting on something solid, and
+        // it sounds while any body is standing in that tile.
+        var n = +ch;
+        chord[n] = true;
+        this.keys.push({ n: n, tx: tx, ty: ty, x: tx * TILE, y: ty * TILE });
+      }
+      this.solid[ty].push(s);
+      this.spike[ty].push(sp);
+      this.oneway[ty].push(ow);
+    }
+  }
+  if(doorTiles.length){
+    var minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+    for(var i = 0; i < doorTiles.length; i++){
+      minx = Math.min(minx, doorTiles[i][0]); maxx = Math.max(maxx, doorTiles[i][0]);
+      miny = Math.min(miny, doorTiles[i][1]); maxy = Math.max(maxy, doorTiles[i][1]);
+    }
+    this.door = {
+      x: minx * TILE, y: miny * TILE,
+      w: (maxx - minx + 1) * TILE, h: (maxy - miny + 1) * TILE,
+      chord: Object.keys(chord).map(Number).sort()
+    };
+  }
+}
+World.prototype.solidAt = function(tx, ty){
+  if(tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return true;
+  return this.solid[ty][tx];
+};
+World.prototype.spikeAt = function(tx, ty){
+  if(tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return false;
+  return this.spike[ty][tx];
+};
+World.prototype.onewayAt = function(tx, ty){
+  if(tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return false;
+  return this.oneway[ty][tx];
+};
+
+// ---------------------------------------------------------------- body
+function Body(x, y){
+  this.x = x; this.y = y; this.vx = 0; this.vy = 0;
+  this.onGround = false; this.coyote = 0; this.buffer = 0;
+  this.face = 1; this.dead = false; this.walkPhase = 0;
+}
+Body.prototype.rect = function(){ return { x: this.x, y: this.y, w: PW, h: PH }; };
+
+function overlap(a, b){
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// ---------------------------------------------------------------- game
+function Game(levelIndex){
+  this.load(levelIndex == null ? 0 : levelIndex);
+}
+Game.prototype.load = function(i){
+  this.index   = i;
+  this.def     = LEVELS[i];
+  this.world   = new World(this.def);
+  this.voices  = [];        // [{pos:Float32Array(TICKS*2), heldFrom:{n:tick}}]
+  this.startBreath();
+  this.won     = false;
+  this.winTick = 0;
+  this.failed  = false;
+  this.events  = [];        // {type,...} drained by the renderer/audio
+};
+Game.prototype.startBreath = function(){
+  this.tick    = 0;
+  this.body    = new Body(this.world.spawn.x, this.world.spawn.y);
+  this.rec     = new Float32Array(TICKS * 2);
+  this.recLen  = 0;
+  this.heldNow = {};
+  this.doorOpen= false;
+  this.deathTick = -1;
+};
+Game.prototype.voicesLeft = function(){
+  if(this.def.unlimited) return Infinity;
+  return this.def.voices - this.voices.length;
+};
+
+// where is ghost g at tick t? (clamped -- a finished voice holds its last pose)
+Game.prototype.ghostPos = function(g, t){
+  var v = this.voices[g];
+  var i = t;
+  if(i >= v.len) i = v.len - 1;
+  if(i < 0) i = 0;
+  return { x: v.pos[i * 2], y: v.pos[i * 2 + 1] };
+};
+Game.prototype.ghostRects = function(t){
+  var out = [];
+  for(var g = 0; g < this.voices.length; g++){
+    if(this.voices[g].deadAt >= 0 && t >= this.voices[g].deadAt) continue;
+    var p = this.ghostPos(g, t);
+    out.push({ x: p.x, y: p.y, w: PW, h: PH, g: g });
+  }
+  return out;
+};
+
+// which organ keys are pressed right now, by anybody
+Game.prototype.computeHeld = function(){
+  var held = {};
+  var bodies = this.ghostRects(this.tick);
+  if(!this.body.dead) bodies.push(this.body.rect());
+  for(var k = 0; k < this.world.keys.length; k++){
+    var key = this.world.keys[k];
+    var pad = { x: key.x + 2, y: key.y + 2, w: TILE - 4, h: TILE - 2 };
+    for(var b = 0; b < bodies.length; b++){
+      if(overlap(bodies[b], pad)){ held[key.n] = true; break; }
+    }
+  }
+  return held;
+};
+
+// is there anything holding this body up right now?
+Game.prototype.supported = function(body){
+  if(body.vy < 0) return false;
+  var w = this.world;
+  var feet = body.y + PH;
+  var tx0 = Math.floor((body.x + 1) / TILE);
+  var tx1 = Math.floor((body.x + PW - 2) / TILE);
+  var ty  = Math.floor((feet + 1) / TILE);
+  for(var tx = tx0; tx <= tx1; tx++){
+    if(w.solidAt(tx, ty)) return true;
+    if(w.onewayAt(tx, ty) && Math.abs(ty * TILE - feet) <= 2) return true;
+  }
+  if(body === this.body){
+    var gs = this.ghostRects(this.tick);
+    for(var i = 0; i < gs.length; i++){
+      var g = gs[i];
+      if(body.x + PW <= g.x + 2 || body.x >= g.x + g.w - 2) continue;
+      if(Math.abs(g.y - feet) <= 2) return true;
+    }
+  }
+  return false;
+};
+
+Game.prototype.moveBody = function(body, input){
+  var w = this.world;
+
+  // ---- horizontal ---------------------------------------------------------
+  var target = (input.right ? WALK : 0) - (input.left ? WALK : 0);
+  if(target !== 0) body.face = target > 0 ? 1 : -1;
+  if(body.vx < target) body.vx = Math.min(target, body.vx + ACCEL);
+  else if(body.vx > target) body.vx = Math.max(target, body.vx - ACCEL);
+
+  body.x += body.vx;
+  var r = body.rect();
+  var tx0 = Math.floor(r.x / TILE), tx1 = Math.floor((r.x + r.w - 1) / TILE);
+  var ty0 = Math.floor(r.y / TILE), ty1 = Math.floor((r.y + r.h - 1) / TILE);
+  for(var ty = ty0; ty <= ty1; ty++){
+    for(var tx = tx0; tx <= tx1; tx++){
+      if(!w.solidAt(tx, ty)) continue;
+      if(body.vx > 0){ body.x = tx * TILE - PW; body.vx = 0; }
+      else if(body.vx < 0){ body.x = (tx + 1) * TILE; body.vx = 0; }
+      r = body.rect();
+      tx0 = Math.floor(r.x / TILE); tx1 = Math.floor((r.x + r.w - 1) / TILE);
+    }
+  }
+
+  // ---- vertical -----------------------------------------------------------
+  var wasBottom = body.y + PH;
+  body.vy += GRAV;
+  if(body.vy > MAX_FALL) body.vy = MAX_FALL;
+  if(!input.jump && body.vy < 0) body.vy *= (1 - JUMP_CUT * 0.35);
+  body.y += body.vy;
+
+  var landed = false;
+  r = body.rect();
+  tx0 = Math.floor(r.x / TILE); tx1 = Math.floor((r.x + r.w - 1) / TILE);
+  ty0 = Math.floor(r.y / TILE); ty1 = Math.floor((r.y + r.h - 1) / TILE);
+  for(var ty2 = ty0; ty2 <= ty1; ty2++){
+    for(var tx2 = tx0; tx2 <= tx1; tx2++){
+      if(w.solidAt(tx2, ty2)){
+        if(body.vy > 0){ body.y = ty2 * TILE - PH; body.vy = 0; landed = true; }
+        else if(body.vy < 0){ body.y = (ty2 + 1) * TILE; body.vy = 0; }
+        r = body.rect();
+        ty0 = Math.floor(r.y / TILE); ty1 = Math.floor((r.y + r.h - 1) / TILE);
+      }else if(w.onewayAt(tx2, ty2) && body.vy > 0){
+        var top = ty2 * TILE;
+        if(wasBottom <= top + 1){
+          body.y = top - PH; body.vy = 0; landed = true;
+          r = body.rect();
+          ty0 = Math.floor(r.y / TILE); ty1 = Math.floor((r.y + r.h - 1) / TILE);
+        }
+      }
+    }
+  }
+
+  // ---- ghosts are one-way platforms --------------------------------------
+  if(body === this.body){
+    var gs = this.ghostRects(this.tick);
+    for(var i = 0; i < gs.length; i++){
+      var g = gs[i];
+      if(body.vy <= 0) break;
+      if(body.x + PW <= g.x + 2 || body.x >= g.x + g.w - 2) continue;
+      if(wasBottom <= g.y + 2 && body.y + PH >= g.y){
+        body.y = g.y - PH; body.vy = 0; landed = true;
+      }
+    }
+  }
+
+  // A body resting exactly on a tile boundary is NOT reported by the sweep
+  // above -- its bottom index lands one pixel short -- so onGround would blink
+  // off every other tick. Ask the floor directly instead.
+  body.onGround = landed || this.supported(body);
+  if(landed) body.coyote = COYOTE;
+  else if(body.coyote > 0) body.coyote--;
+
+  // ---- jump ---------------------------------------------------------------
+  if(input.jump) body.buffer = BUFFER;
+  else if(body.buffer > 0) body.buffer--;
+  if(body.buffer > 0 && body.coyote > 0){
+    body.vy = JUMP_V; body.buffer = 0; body.coyote = 0; body.onGround = false;
+    this.events.push({ type: "jump" });
+  }
+
+  if(Math.abs(body.vx) > 0.2 && body.onGround) body.walkPhase += Math.abs(body.vx) * 0.06;
+};
+
+// ONE simulation tick. input = {left,right,jump}
+Game.prototype.step = function(input){
+  if(this.won) { this.winTick++; return; }
+  var b = this.body;
+
+  if(!b.dead){
+    this.moveBody(b, input);
+
+    // spikes
+    var r = b.rect();
+    var tx0 = Math.floor((r.x + 3) / TILE), tx1 = Math.floor((r.x + r.w - 4) / TILE);
+    var ty0 = Math.floor((r.y + 3) / TILE), ty1 = Math.floor((r.y + r.h - 2) / TILE);
+    for(var ty = ty0; ty <= ty1 && !b.dead; ty++)
+      for(var tx = tx0; tx <= tx1; tx++)
+        if(this.world.spikeAt(tx, ty)){ b.dead = true; this.deathTick = this.tick;
+                                        this.events.push({ type: "death" }); break; }
+  }
+
+  // record BEFORE advancing the clock, so index t == pose at tick t
+  if(this.tick < TICKS){
+    this.rec[this.tick * 2]     = b.x;
+    this.rec[this.tick * 2 + 1] = b.y;
+    this.recLen = this.tick + 1;
+  }
+
+  this.heldNow = this.computeHeld();
+  var d = this.world.door;
+  var open = true;
+  if(d) for(var i = 0; i < d.chord.length; i++) if(!this.heldNow[d.chord[i]]) open = false;
+  if(!d) open = false;
+  if(open !== this.doorOpen) this.events.push({ type: open ? "open" : "close" });
+  this.doorOpen = open;
+
+  if(open && !b.dead && overlap(b.rect(), d)){
+    this.won = true;
+    this.events.push({ type: "win" });
+    return;
+  }
+
+  this.tick++;
+  if(this.tick >= TICKS || (b.dead && this.tick - this.deathTick > 30)){
+    this.endBreath(b.dead);
+  }
+};
+
+Game.prototype.endBreath = function(died){
+  if(!died){
+    this.voices.push({ pos: this.rec, len: this.recLen, deadAt: -1 });
+    this.events.push({ type: "voice" });
+  }else{
+    this.events.push({ type: "lost" });
+  }
+  if(this.voicesLeft() <= 0 && !this.won){
+    // out of voices: the piece has to start again
+    this.voices = [];
+    this.events.push({ type: "reset" });
+  }
+  this.startBreath();
+};
+
+// player-triggered: cut the breath short and become a voice now
+Game.prototype.cut = function(){
+  if(this.won) return;
+  this.endBreath(this.body.dead);
+};
+Game.prototype.restart = function(){
+  var i = this.index; this.load(i);
+};
+
+// ===========================================================================
+//  Everything below this line is presentation. The simulation above never
+//  reads from it.
+// ===========================================================================
+
+if(typeof module !== "undefined" && module.exports){
+  module.exports = { Game: Game, World: World, LEVELS: LEVELS, TILE: TILE,
+                     TICKS: TICKS, PW: PW, PH: PH, Body: Body, overlap: overlap };
+}
+
+if(typeof document === "undefined" || !document.getElementById) return;
+var canvas = document.getElementById("c");
+if(!canvas) return;
+var cx = canvas.getContext("2d");
+
+// ---------------------------------------------------------------- audio
+var Audio_ = (function(){
+  var ac = null, master = null, voices = {}, ready = false;
+  function init(){
+    if(ready) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.0001;
+    master.connect(ac.destination);
+    master.gain.exponentialRampToValueAtTime(0.30, ac.currentTime + 1.2);
+    ready = true;
+  }
+  function organ(freq){
+    // a cheap pipe: fundamental + octave + twelfth, slow attack
+    var g = ac.createGain();
+    g.gain.value = 0.0001;
+    g.connect(master);
+    var oscs = [];
+    var parts = [[1, 0.55], [2, 0.26], [3, 0.13], [4, 0.06]];
+    for(var i = 0; i < parts.length; i++){
+      var o = ac.createOscillator();
+      o.type = i === 0 ? "triangle" : "sine";
+      o.frequency.value = freq * parts[i][0];
+      var pg = ac.createGain();
+      pg.gain.value = parts[i][1];
+      o.connect(pg); pg.connect(g);
+      o.start();
+      oscs.push(o);
+    }
+    g.gain.exponentialRampToValueAtTime(0.20, ac.currentTime + 0.25);
+    return { g: g, oscs: oscs };
+  }
+  return {
+    resume: function(){ init(); if(ac && ac.state === "suspended") ac.resume(); },
+    hold: function(n){
+      if(!ready || voices[n]) return;
+      voices[n] = organ(NOTES[n - 1]);
+    },
+    release: function(n){
+      if(!ready || !voices[n]) return;
+      var v = voices[n]; delete voices[n];
+      v.g.gain.cancelScheduledValues(ac.currentTime);
+      v.g.gain.setValueAtTime(v.g.gain.value, ac.currentTime);
+      v.g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.5);
+      setTimeout(function(){ for(var i=0;i<v.oscs.length;i++) v.oscs[i].stop(); }, 700);
+    },
+    blip: function(freq, dur, vol){
+      if(!ready) return;
+      var o = ac.createOscillator(), g = ac.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      g.gain.value = 0.0001; o.connect(g); g.connect(master);
+      g.gain.exponentialRampToValueAtTime(vol || 0.12, ac.currentTime + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + (dur || 0.2));
+      o.start(); o.stop(ac.currentTime + (dur || 0.2) + 0.05);
+    },
+    allOff: function(){
+      for(var k in voices) if(voices.hasOwnProperty(k)) this.release(+k);
+    }
+  };
+})();
+
+// ---------------------------------------------------------------- input
+var keys = {};
+var game = new Game(0);
+var showTitle = true;
+var flash = 0, shake = 0, lineFade = 1;
+var stillTicks = 0, fastForward = false;
+var soundHeld = {};
+
+function keyName(e){
+  var k = e.key;
+  if(k === " ") return "space";
+  return k.length === 1 ? k.toLowerCase() : k;
+}
+window.addEventListener("keydown", function(e){
+  var k = keyName(e);
+  if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","space"].indexOf(k) >= 0) e.preventDefault();
+  if(keys[k]) return;
+  keys[k] = true;
+  Audio_.resume();
+  if(showTitle){ showTitle = false; return; }
+  if(k === "r") { Audio_.allOff(); soundHeld = {}; game.restart(); lineFade = 1; stillTicks = 0; }
+  if(k === "q") { game.cut(); stillTicks = 0; }
+  if(k === "n" && game.won){ nextLevel(); }
+});
+window.addEventListener("keyup", function(e){ keys[keyName(e)] = false; });
+window.addEventListener("blur", function(){ keys = {}; });
+canvas.addEventListener("pointerdown", function(){ Audio_.resume(); showTitle = false; });
+
+function nextLevel(){
+  Audio_.allOff(); soundHeld = {}; stillTicks = 0;
+  if(game.index + 1 < LEVELS.length){ game.load(game.index + 1); lineFade = 1; }
+  else { game.load(0); lineFade = 1; }
+}
+
+function readInput(){
+  return {
+    left:  !!(keys["a"] || keys["ArrowLeft"]),
+    right: !!(keys["d"] || keys["ArrowRight"]),
+    jump:  !!(keys["w"] || keys["space"] || keys["ArrowUp"])
+  };
+}
+
+// ---------------------------------------------------------------- resize
+function fit(){
+  var w = window.innerWidth, h = window.innerHeight;
+  var s = Math.min(w / 960, h / 448);
+  canvas.style.width  = Math.floor(960 * s) + "px";
+  canvas.style.height = Math.floor(448 * s) + "px";
+}
+window.addEventListener("resize", fit); fit();
+
+// ---------------------------------------------------------------- drawing
+function drawBody(b, alpha, tint, phase){
+  cx.save();
+  cx.globalAlpha = alpha;
+  var x = b.x, y = b.y;
+  // robe
+  cx.fillStyle = tint;
+  cx.beginPath();
+  cx.moveTo(x + PW / 2, y);
+  cx.lineTo(x + PW, y + 10);
+  cx.lineTo(x + PW - 1, y + PH);
+  cx.lineTo(x + 1, y + PH);
+  cx.lineTo(x, y + 10);
+  cx.closePath();
+  cx.fill();
+  // hood shadow
+  cx.fillStyle = "rgba(0,0,0,0.45)";
+  cx.beginPath();
+  cx.ellipse(x + PW / 2, y + 7, 5, 5.5, 0, 0, 6.283);
+  cx.fill();
+  // a small candle-glow at the chest
+  var gr = cx.createRadialGradient(x + PW/2, y + 15, 0, x + PW/2, y + 15, 22);
+  gr.addColorStop(0, "rgba(255,206,130," + (0.35 * alpha) + ")");
+  gr.addColorStop(1, "rgba(255,206,130,0)");
+  cx.fillStyle = gr;
+  cx.fillRect(x - 22, y - 8, PW + 44, PH + 30);
+  cx.restore();
+}
+
+function draw(){
+  var w = game.world, d = w.door;
+
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+  if(shake > 0) cx.translate((Math.random()-0.5)*10*shake, (Math.random()-0.5)*10*shake);
+
+  // ---- background
+  var bg = cx.createLinearGradient(0, 0, 0, 448);
+  bg.addColorStop(0, "#0d0c16");
+  bg.addColorStop(1, "#07070b");
+  cx.fillStyle = bg; cx.fillRect(-20, -20, 1000, 488);
+
+  // distant nave arches
+  cx.save();
+  cx.strokeStyle = "rgba(120,110,160,0.06)";
+  cx.lineWidth = 3;
+  for(var a = 0; a < 5; a++){
+    var ax = 120 + a * 190;
+    cx.beginPath();
+    cx.moveTo(ax - 70, 448);
+    cx.lineTo(ax - 70, 170);
+    cx.quadraticCurveTo(ax, 34, ax + 70, 170);
+    cx.lineTo(ax + 70, 448);
+    cx.stroke();
+  }
+  cx.restore();
+
+  // ---- tiles
+  for(var ty = 0; ty < w.h; ty++){
+    for(var tx = 0; tx < w.w; tx++){
+      var X = tx * TILE, Y = ty * TILE;
+      if(w.spike[ty][tx]){
+        cx.fillStyle = "#2a2030";
+        cx.fillRect(X, Y + TILE - 6, TILE, 6);
+        cx.fillStyle = "#c9b8d8";
+        for(var s = 0; s < 4; s++){
+          cx.beginPath();
+          cx.moveTo(X + s * 8, Y + TILE);
+          cx.lineTo(X + s * 8 + 4, Y + TILE - 13);
+          cx.lineTo(X + s * 8 + 8, Y + TILE);
+          cx.closePath(); cx.fill();
+        }
+        continue;
+      }
+      if(w.oneway[ty][tx]){
+        cx.fillStyle = "#3b3450";
+        cx.fillRect(X, Y, TILE, 6);
+        continue;
+      }
+      if(!w.solid[ty][tx]) continue;
+      var ch = w.rows[ty][tx];
+      if(ch >= "1" && ch <= "6") continue;   // keys drawn separately
+      var lit = 1 - Math.min(1, Math.abs(Y - 300) / 420);
+      cx.fillStyle = "rgb(" + (34 + lit*16|0) + "," + (30 + lit*13|0) + "," + (46 + lit*16|0) + ")";
+      cx.fillRect(X, Y, TILE, TILE);
+      if(!w.solidAt(tx, ty - 1)){
+        cx.fillStyle = "rgba(190,175,225,0.16)";
+        cx.fillRect(X, Y, TILE, 2);
+      }
+      cx.strokeStyle = "rgba(0,0,0,0.25)";
+      cx.lineWidth = 1;
+      cx.strokeRect(X + 0.5, Y + 0.5, TILE - 1, TILE - 1);
+    }
+  }
+
+  // ---- organ keys
+  for(var k = 0; k < w.keys.length; k++){
+    var key = w.keys[k];
+    var on = !!game.heldNow[key.n];
+    cx.save();
+    if(on){
+      var g2 = cx.createRadialGradient(key.x + 16, key.y + 8, 0, key.x + 16, key.y + 8, 90);
+      g2.addColorStop(0, "rgba(255,214,140,0.34)");
+      g2.addColorStop(1, "rgba(255,214,140,0)");
+      cx.fillStyle = g2;
+      cx.fillRect(key.x - 90, key.y - 90, 180, 180);
+    }
+    // the plate itself: a shallow lip on the ground, pressed flat when sounding
+    var plateH = on ? 4 : 9;
+    var top = key.y + TILE - plateH;
+    if(!on){
+      // a dormant key still has to be findable across a dark nave
+      var dim = cx.createRadialGradient(key.x + 16, top, 0, key.x + 16, top, 46);
+      dim.addColorStop(0, "rgba(176,158,224,0.20)");
+      dim.addColorStop(1, "rgba(176,158,224,0)");
+      cx.fillStyle = dim;
+      cx.fillRect(key.x - 46, top - 46, 92, 92);
+    }
+    cx.fillStyle = on ? "#f0dfb0" : "#9b8cc4";
+    cx.fillRect(key.x + 2, top, TILE - 4, plateH);
+    cx.fillStyle = on ? "rgba(255,255,255,0.65)" : "rgba(255,255,255,0.34)";
+    cx.fillRect(key.x + 2, top, TILE - 4, 2);
+    // its letter, floating just above
+    cx.fillStyle = on ? "rgba(255,226,160,0.95)" : "rgba(214,204,240,0.62)";
+    cx.font = "600 14px Georgia, serif";
+    cx.textAlign = "center"; cx.textBaseline = "middle";
+    cx.fillText(NOTE_NAMES[key.n - 1], key.x + 16, key.y + 9);
+    cx.restore();
+  }
+
+  // ---- door
+  if(d){
+    cx.save();
+    if(game.doorOpen){
+      var dg = cx.createLinearGradient(d.x, d.y, d.x, d.y + d.h);
+      dg.addColorStop(0, "rgba(255,232,180,0.95)");
+      dg.addColorStop(1, "rgba(255,196,120,0.55)");
+      cx.fillStyle = dg;
+      cx.fillRect(d.x, d.y, d.w, d.h);
+      var hg = cx.createRadialGradient(d.x + d.w/2, d.y + d.h/2, 0, d.x + d.w/2, d.y + d.h/2, 150);
+      hg.addColorStop(0, "rgba(255,220,150,0.35)");
+      hg.addColorStop(1, "rgba(255,220,150,0)");
+      cx.fillStyle = hg;
+      cx.fillRect(d.x - 150, d.y - 150, d.w + 300, d.h + 300);
+    }else{
+      cx.fillStyle = "#191426";
+      cx.fillRect(d.x, d.y, d.w, d.h);
+      cx.strokeStyle = "rgba(180,164,220,0.45)";
+      cx.lineWidth = 2;
+      cx.strokeRect(d.x + 1, d.y + 1, d.w - 2, d.h - 2);
+      // the chord it wants, written on the door
+      cx.fillStyle = "rgba(210,198,240,0.55)";
+      cx.font = "600 12px Georgia, serif";
+      cx.textAlign = "center"; cx.textBaseline = "middle";
+      for(var ci = 0; ci < d.chord.length; ci++){
+        var n = d.chord[ci];
+        var yy = d.y + d.h / 2 + (ci - (d.chord.length - 1) / 2) * 15;
+        cx.fillStyle = game.heldNow[n] ? "rgba(255,220,150,0.95)" : "rgba(210,198,240,0.4)";
+        cx.fillText(NOTE_NAMES[n - 1], d.x + d.w / 2, yy);
+      }
+    }
+    cx.restore();
+  }
+
+  // ---- ghosts
+  var gs = game.ghostRects(game.tick);
+  for(var i = 0; i < gs.length; i++){
+    drawBody(gs[i], 0.42, "rgba(150,180,220,0.85)");
+  }
+
+  // ---- the live body
+  if(!game.body.dead) drawBody(game.body, 1, "#e7dcc4");
+  else drawBody(game.body, 0.3, "#7a5a5a");
+
+  // ---- vignette
+  var vg = cx.createRadialGradient(480, 224, 165, 480, 224, 560);
+  vg.addColorStop(0, "rgba(0,0,0,0)");
+  vg.addColorStop(1, "rgba(0,0,0,0.75)");
+  cx.fillStyle = vg; cx.fillRect(0, 0, 960, 448);
+
+  // ---- hud
+  cx.textAlign = "left"; cx.textBaseline = "top";
+  cx.fillStyle = "rgba(230,221,200,0.85)";
+  cx.font = "300 19px Georgia, serif";
+  cx.fillText(game.def.name, 20, 16);
+
+  // breath meter, and the plain number of seconds until you become a voice
+  var frac = 1 - game.tick / TICKS;
+  cx.fillStyle = "rgba(255,255,255,0.10)";
+  cx.fillRect(20, 46, 220, 5);
+  cx.fillStyle = frac < 0.2 ? "rgba(240,150,140,0.9)" : "rgba(230,214,170,0.75)";
+  cx.fillRect(20, 46, 220 * frac, 5);
+  if(!game.won){
+    var left = Math.max(0, Math.ceil((TICKS - game.tick) / 60));
+    cx.font = "300 13px Georgia, serif";
+    cx.fillStyle = frac < 0.2 ? "rgba(240,150,140,0.9)" : "rgba(230,221,200,0.5)";
+    cx.fillText(left + "s", 250, 44);
+    if(fastForward){
+      cx.fillStyle = "rgba(255,226,160,0.9)";
+      cx.fillText("»»", 278, 44);
+    }
+  }
+
+  // voices remaining
+  cx.textAlign = "right";
+  if(game.def.unlimited){
+    cx.fillStyle = "rgba(150,180,220,0.9)";
+    cx.font = "300 24px Georgia, serif";
+    cx.fillText(game.voices.length + "  ∞", 940, 14);
+  }
+  for(var v = 0; game.def.unlimited ? false : v < game.def.voices; v++){
+    var used = v < game.voices.length;
+    cx.beginPath();
+    cx.arc(940 - v * 20, 26, 6, 0, 6.283);
+    cx.fillStyle = used ? "rgba(150,180,220,0.85)" : "rgba(255,255,255,0.16)";
+    cx.fill();
+  }
+  cx.fillStyle = "rgba(230,221,200,0.45)";
+  cx.font = "300 13px Georgia, serif";
+  cx.fillText(game.def.unlimited ? "voices, as many as you like" : "voices", 940, 40);
+
+  // Once you have parked yourself somewhere useful there is nothing left to do
+  // but wait out the clock, so say so, loudly, rather than making the player
+  // rediscover q every level.
+  if(!game.won && !showTitle && stillTicks > 60 && game.tick > 40 && !game.body.dead){
+    var pulse = 0.55 + 0.35 * Math.sin(game.tick * 0.07);
+    cx.textAlign = "center";
+    cx.fillStyle = "rgba(255,226,160," + pulse + ")";
+    cx.font = "300 20px Georgia, serif";
+    cx.fillText("press  q  to leave this one here", 480, 300);
+    cx.fillStyle = "rgba(230,221,200,0.4)";
+    cx.font = "300 14px Georgia, serif";
+    cx.fillText("or hold  shift  to run the breath out", 480, 324);
+  }
+
+  // the level's line, fading
+  if(lineFade > 0 && !showTitle && !game.won){
+    cx.textAlign = "center";
+    cx.fillStyle = "rgba(230,221,200," + Math.min(0.7, lineFade) + ")";
+    cx.font = "italic 300 18px Georgia, serif";
+    cx.fillText(game.def.line, 480, 124);
+  }
+
+  cx.textAlign = "left";
+  cx.fillStyle = "rgba(230,221,200,0.34)";
+  cx.font = "300 13px Georgia, serif";
+  cx.fillText("a/d move   ·   w jump   ·   q leave this self here   ·   shift fast-forward   ·   r begin again", 20, 430);
+
+  // ---- win
+  if(game.won){
+    cx.fillStyle = "rgba(8,7,14," + Math.min(0.78, game.winTick / 60) + ")";
+    cx.fillRect(0, 0, 960, 448);
+    if(game.winTick > 20){
+      cx.textAlign = "center";
+      cx.fillStyle = "rgba(255,232,180,0.95)";
+      cx.font = "300 44px Georgia, serif";
+      cx.fillText("the door answers", 480, 160);
+      cx.fillStyle = "rgba(230,221,200,0.6)";
+      cx.font = "300 18px Georgia, serif";
+      cx.fillText((game.voices.length + 1) + " of you sang it", 480, 214);
+      if(game.winTick > 70){
+        cx.fillStyle = "rgba(230,221,200," + (0.4 + 0.3*Math.sin(game.winTick*0.08)) + ")";
+        cx.fillText(game.index + 1 < LEVELS.length ? "press n" : "press n to begin again", 480, 264);
+      }
+    }
+  }
+
+  // ---- title
+  if(showTitle){
+    cx.fillStyle = "rgba(6,5,10,0.92)";
+    cx.fillRect(0, 0, 960, 448);
+    cx.textAlign = "center";
+    cx.fillStyle = "rgba(240,232,210,0.95)";
+    cx.font = "300 68px Georgia, serif";
+    cx.fillText("CHORUS", 480, 150);
+    cx.fillStyle = "rgba(230,221,200,0.55)";
+    cx.font = "italic 300 20px Georgia, serif";
+    cx.fillText("one body. two hands. the chord needs more than that.", 480, 214);
+    cx.fillStyle = "rgba(230,221,200,0.4)";
+    cx.font = "300 17px Georgia, serif";
+    cx.fillText("every twenty seconds you leave a self behind,", 480, 272);
+    cx.fillText("still standing where you left it, still holding its note.", 480, 298);
+    cx.fillStyle = "rgba(230,221,200,0.7)";
+    cx.font = "300 18px Georgia, serif";
+    cx.fillText("press any key", 480, 378);
+  }
+
+  if(flash > 0){
+    cx.fillStyle = "rgba(255,236,190," + (flash * 0.3) + ")";
+    cx.fillRect(0, 0, 960, 448);
+  }
+  cx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+// a small window for the headless harness -- read-only apart from goTo()
+window.__chorus = {
+  peek: function(){
+    return {
+      level: game.index, name: game.def.name, tick: game.tick,
+      voices: game.voices.length, allowed: game.def.unlimited ? "inf" : game.def.voices,
+      x: Math.round(game.body.x), y: Math.round(game.body.y),
+      onGround: game.body.onGround, dead: game.body.dead,
+      held: Object.keys(game.heldNow).map(Number).sort(),
+      chord: game.world.door ? game.world.door.chord : [],
+      doorOpen: game.doorOpen, won: game.won, title: showTitle,
+      still: stillTicks, ff: fastForward, unlimited: !!game.def.unlimited
+    };
+  },
+  goTo: function(i){ showTitle = false; Audio_.allOff(); soundHeld = {}; game.load(i); lineFade = 1; },
+  // drop a voice straight onto a tile, to photograph the late-game states
+  place: function(tx, ty){
+    var pos = new Float32Array(TICKS * 2);
+    var px = tx * TILE + (TILE - PW) / 2, py = (ty + 1) * TILE - PH;
+    for(var t = 0; t < TICKS; t++){ pos[t*2] = px; pos[t*2+1] = py; }
+    game.voices.push({ pos: pos, len: TICKS, deadAt: -1 });
+  }
+};
+
+// ---------------------------------------------------------------- loop
+var acc = 0, last = 0;
+function frame(ts){
+  if(!last) last = ts;
+  var dt = Math.min(0.1, (ts - last) / 1000);
+  last = ts;
+  if(!showTitle){
+    acc += dt;
+    // Shift runs the clock out. It only multiplies whole simulation ticks, so
+    // the physics is bit-for-bit what it would have been in real time.
+    fastForward = !!keys["Shift"] && !game.won;
+    var reps = fastForward ? 8 : 1;
+    while(acc >= DT){
+      acc -= DT;
+      for(var s = 0; s < reps; s++){
+        var inp = readInput();
+        game.step(inp);
+        if(game.body.onGround && !inp.left && !inp.right && !game.body.dead) stillTicks++;
+        else stillTicks = 0;
+      }
+    }
+  }
+
+  // drain events into sound + screen feedback
+  for(var i = 0; i < game.events.length; i++){
+    var e = game.events[i];
+    if(e.type === "win")   { flash = 1; Audio_.blip(880, 1.2, 0.18); }
+    if(e.type === "open")  { flash = 0.6; Audio_.blip(660, 0.5, 0.10); }
+    if(e.type === "death") { shake = 1; Audio_.blip(70, 0.6, 0.16); }
+    if(e.type === "voice") { Audio_.blip(330, 0.4, 0.07); }
+    if(e.type === "reset") { shake = 0.5; Audio_.blip(98, 0.9, 0.12); }
+  }
+  game.events.length = 0;
+
+  // sustained organ notes follow the held keys exactly
+  for(var n = 1; n <= 6; n++){
+    var on = !!game.heldNow[n];
+    if(on && !soundHeld[n]){ Audio_.hold(n); soundHeld[n] = true; }
+    if(!on && soundHeld[n]){ Audio_.release(n); soundHeld[n] = false; }
+  }
+
+  flash = Math.max(0, flash - dt * 2);
+  shake = Math.max(0, shake - dt * 2.5);
+  lineFade = Math.max(0, lineFade - dt * 0.13);
+
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

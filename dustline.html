@@ -1,0 +1,3416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>DUSTLINE</title>
+<style>
+  html,body{margin:0;padding:0;background:#0b0908;overflow:hidden;height:100%;
+    font-family:"Georgia","Times New Roman",serif;-webkit-user-select:none;user-select:none;touch-action:none;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{image-rendering:auto;box-shadow:0 0 80px rgba(0,0,0,.9);cursor:default;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="cv"></canvas></div>
+<script>
+"use strict";
+/* ============================================================================
+   DUSTLINE  —  a positional deckbuilding roguelike on a stretch of dead rail.
+   Single file. Canvas 2D. No dependencies.
+   ========================================================================== */
+
+var W = 1280, H = 760;
+var cv = document.getElementById('cv');
+var ctx = cv.getContext('2d');
+cv.width = W; cv.height = H;
+
+/* ---------------------------------------------------------------- palette */
+var P = {
+  bg:    '#17120f',
+  bg2:   '#0e0b09',
+  panel: '#241b16',
+  panel2:'#2f241c',
+  edge:  '#4a3728',
+  ink:   '#f2e6d2',
+  dim:   '#a08d76',
+  faint: '#6b5947',
+  brass: '#d9a441',
+  rust:  '#b8563f',
+  blood: '#c0483a',
+  sky:   '#6f97ab',
+  moss:  '#87a45c',
+  plum:  '#9b7bb5',
+  gold:  '#f0c96b',
+  bone:  '#e8dcc4'
+};
+
+/* -------------------------------------------------------------- utilities */
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function sign(n){ return n<0?-1:(n>0?1:0); }
+function now(){ return performance.now(); }
+
+/* seeded RNG (mulberry32) */
+function mkRng(seed){
+  var s = seed>>>0;
+  return function(){
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    var t = Math.imul(s ^ s>>>15, 1 | s);
+    t = t + Math.imul(t ^ t>>>7, 61 | t) ^ t;
+    return ((t ^ t>>>14) >>> 0) / 4294967296;
+  };
+}
+var rng = mkRng(Date.now()&0x7fffffff);   // replaced per-run
+function rnd(){ return rng(); }
+function rint(a,b){ return a + Math.floor(rnd()*(b-a+1)); }        // inclusive
+function chance(p){ return rnd() < p; }
+function pick(arr){ return arr[Math.floor(rnd()*arr.length)]; }
+function shuffle(arr){
+  for(var i=arr.length-1;i>0;i--){ var j=Math.floor(rnd()*(i+1)); var t=arr[i]; arr[i]=arr[j]; arr[j]=t; }
+  return arr;
+}
+function pickN(arr,n){ var c = arr.slice(); shuffle(c); return c.slice(0,n); }
+function uniq(a){ var s={},o=[]; for(var i=0;i<a.length;i++){ if(!s[a[i]]){s[a[i]]=1;o.push(a[i]);} } return o; }
+
+/* --------------------------------------------------------- draw utilities */
+function rr(x,y,w,h,r){
+  r = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+function fillRR(x,y,w,h,r,col){ ctx.fillStyle=col; rr(x,y,w,h,r); ctx.fill(); }
+function strokeRR(x,y,w,h,r,col,lw){ ctx.strokeStyle=col; ctx.lineWidth=lw||2; rr(x,y,w,h,r); ctx.stroke(); }
+function txt(s,x,y,col,size,align,font,baseline){
+  ctx.fillStyle = col||P.ink;
+  ctx.font = (size||16)+'px '+(font||'Georgia, serif');
+  ctx.textAlign = align||'left';
+  ctx.textBaseline = baseline||'alphabetic';
+  ctx.fillText(s,x,y);
+}
+function txtb(s,x,y,col,size,align,font){
+  ctx.fillStyle = col||P.ink;
+  ctx.font = 'bold '+(size||16)+'px '+(font||'Georgia, serif');
+  ctx.textAlign = align||'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(s,x,y);
+}
+function measure(s,size,bold,font){
+  ctx.font = (bold?'bold ':'')+(size||16)+'px '+(font||'Georgia, serif');
+  return ctx.measureText(s).width;
+}
+/* word-wrap into lines that fit maxw */
+function wrap(s, maxw, size, bold, font){
+  ctx.font = (bold?'bold ':'')+(size||16)+'px '+(font||'Georgia, serif');
+  var words = String(s).split(' '), lines = [], cur = '';
+  for(var i=0;i<words.length;i++){
+    var w = words[i];
+    if(w === '\n'){ lines.push(cur); cur=''; continue; }
+    var t = cur ? cur+' '+w : w;
+    if(ctx.measureText(t).width > maxw && cur){ lines.push(cur); cur = w; }
+    else cur = t;
+  }
+  if(cur) lines.push(cur);
+  return lines;
+}
+function wrapDraw(s,x,y,maxw,size,col,align,lh,bold){
+  var lines = wrap(s,maxw,size,bold);
+  lh = lh || size*1.25;
+  for(var i=0;i<lines.length;i++) (bold?txtb:txt)(lines[i], x, y+i*lh, col, size, align||'left');
+  return lines.length*lh;
+}
+/* one line, centered at x; supports *bold-brass* segments */
+function drawRichLine(line,x,y,size,col){
+  var parts = line.split('*'), total = 0, i;
+  for(i=0;i<parts.length;i++){ total += measure(parts[i], size, i%2===1); }
+  var cx = x - total/2;
+  for(i=0;i<parts.length;i++){
+    var b = i%2===1;
+    ctx.fillStyle = b ? P.gold : col;
+    ctx.font = (b?'bold ':'')+size+'px Georgia, serif';
+    ctx.textAlign = 'left'; ctx.textBaseline='alphabetic';
+    ctx.fillText(parts[i], cx, y);
+    cx += measure(parts[i], size, b);
+  }
+}
+function shadowOn(blur,col){ ctx.shadowBlur=blur; ctx.shadowColor=col; }
+function shadowOff(){ ctx.shadowBlur=0; ctx.shadowColor='transparent'; }
+
+/* linear gradient helper */
+function lg(x0,y0,x1,y1,stops){
+  var g = ctx.createLinearGradient(x0,y0,x1,y1);
+  for(var i=0;i<stops.length;i++) g.addColorStop(stops[i][0], stops[i][1]);
+  return g;
+}
+
+/* hit-testing helper: register clickable rects each frame */
+var HOT = [];
+function hot(x,y,w,h,id,data){ HOT.push({x:x,y:y,w:w,h:h,id:id,data:data}); }
+function hitAt(mx,my){
+  for(var i=HOT.length-1;i>=0;i--){
+    var r = HOT[i];
+    if(mx>=r.x && mx<=r.x+r.w && my>=r.y && my<=r.y+r.h) return r;
+  }
+  return null;
+}
+
+/* ==========================================================================
+   GLOBAL STATE
+   ========================================================================== */
+var G = null;      // run state
+var B = null;      // battle state (null outside combat)
+var SCREEN = 'title';
+var LANE = 9;      // tiles on the rail
+
+/* status metadata: n=name, c=color, p=permanent(no decay), d=description */
+var ST = {
+  str:   {n:'Grit',      c:P.rust,  p:1, d:'Attacks deal +1 damage per stack.'},
+  dex:   {n:'Footing',   c:P.sky,   p:1, d:'Gain +1 Block from card effects per stack.'},
+  vuln:  {n:'Exposed',   c:P.blood, p:0, d:'Takes 50% more attack damage.'},
+  weak:  {n:'Shaken',    c:P.plum,  p:0, d:'Deals 25% less attack damage.'},
+  frail: {n:'Brittle',   c:P.plum,  p:0, d:'Gains 25% less Block.'},
+  root:  {n:'Pinned',    c:P.faint, p:0, d:'Cannot move.'},
+  stun:  {n:'Reeling',   c:P.gold,  p:0, d:'Loses its next turn.'},
+  poison:{n:'Venom',     c:P.moss,  p:0, d:'Loses HP equal to stacks at turn start, then 1 stack fades.'},
+  mark:  {n:'Mark',      c:P.brass, p:1, d:'Takes +1 attack damage per stack. Does not fade.'},
+  retal: {n:'Barbs',     c:P.rust,  p:1, d:'Attackers at range 1 take damage equal to stacks.'},
+  regen: {n:'Mending',   c:P.moss,  p:0, d:'Heals HP equal to stacks at turn start, then 1 stack fades.'},
+  dodge: {n:'Ghost',     c:P.sky,   p:1, d:'The next attacks against you miss. One stack per dodge.'},
+  burn:  {n:'Cinders',   c:P.rust,  p:0, d:'Takes damage equal to stacks at end of turn, then 1 stack fades.'}
+};
+
+function st(u,k){ return u.st[k]|0; }
+function pw(k){ return (B && B.p.pw) ? (B.p.pw[k]|0) : 0; }
+function addpw(k,n){ if(!B) return; B.p.pw[k] = (B.p.pw[k]|0) + n; }
+function setst(u,k,v){ if(v<=0) delete u.st[k]; else u.st[k]=v; }
+function addst(u,k,n){ if(n===0) return; setst(u,k, st(u,k)+n); }
+
+/* ==========================================================================
+   FX  —  floating text, flashes, muzzle lines
+   ========================================================================== */
+var FX = [];
+function fxText(x,y,s,col,size,rise){
+  FX.push({k:'t',x:x,y:y,s:s,c:col||P.ink,sz:size||24,t:0,life:0.95,vy:rise===undefined?-38:rise});
+}
+function fxFlash(x,y,r,col,life){ FX.push({k:'f',x:x,y:y,r:r,c:col||P.gold,t:0,life:life||0.3}); }
+function fxLine(x0,y0,x1,y1,col,life,lw){ FX.push({k:'l',x:x0,y:y0,x1:x1,y1:y1,c:col||P.gold,t:0,life:life||0.22,lw:lw||3}); }
+function fxPuff(x,y,n,col,spd){
+  for(var i=0;i<n;i++){
+    var a = rnd()*Math.PI*2, s=(spd||90)*(0.3+rnd());
+    FX.push({k:'p',x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-20,r:2+rnd()*3,c:col||'#a08d76',t:0,life:0.5+rnd()*0.5});
+  }
+}
+function fxShake(n){ SHAKE = Math.max(SHAKE, n); }
+var SHAKE = 0;
+function updFX(dt){
+  for(var i=FX.length-1;i>=0;i--){
+    var f = FX[i]; f.t += dt;
+    if(f.k==='t'){ f.y += f.vy*dt; f.vy *= 0.94; }
+    if(f.k==='p'){ f.x += f.vx*dt; f.y += f.vy*dt; f.vy += 260*dt; f.vx*=0.97; }
+    if(f.t >= f.life) FX.splice(i,1);
+  }
+  SHAKE = Math.max(0, SHAKE - dt*38);
+}
+function drawFX(){
+  for(var i=0;i<FX.length;i++){
+    var f = FX[i], a = 1 - f.t/f.life;
+    ctx.globalAlpha = clamp(a,0,1);
+    if(f.k==='t'){
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font='bold '+f.sz+'px Georgia, serif';
+      ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillText(f.s,f.x+2,f.y+2);
+      ctx.fillStyle=f.c; ctx.fillText(f.s,f.x,f.y);
+    } else if(f.k==='f'){
+      var rr2 = f.r*(0.6+1.2*(f.t/f.life));
+      ctx.globalAlpha = clamp(a*0.8,0,1);
+      ctx.fillStyle=f.c; ctx.beginPath(); ctx.arc(f.x,f.y,rr2,0,7); ctx.fill();
+    } else if(f.k==='l'){
+      ctx.strokeStyle=f.c; ctx.lineWidth=f.lw*(1-f.t/f.life*0.7);
+      ctx.beginPath(); ctx.moveTo(f.x,f.y); ctx.lineTo(f.x1,f.y1); ctx.stroke();
+    } else if(f.k==='p'){
+      ctx.fillStyle=f.c; ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,7); ctx.fill();
+    }
+  }
+  ctx.globalAlpha=1;
+}
+
+/* ==========================================================================
+   ACTION QUEUE  —  paces the enemy turn so it reads
+   ========================================================================== */
+var Q = [];
+function queue(fn, delay){ Q.push({fn:fn, d:delay===undefined?0.32:delay, t:0}); }
+function qBusy(){ return Q.length>0; }
+function updQ(dt){
+  var guard = 0;
+  while(Q.length && guard++ < 400){
+    var q = Q[0];
+    q.t += dt;
+    if(q.t >= q.d){ Q.shift(); dt = q.t - q.d; if(q.fn) q.fn(); }
+    else break;
+  }
+}
+function clearQ(){ Q.length = 0; }
+
+/* ==========================================================================
+   BATTLE ENGINE
+   ========================================================================== */
+function dist(a,b){ return Math.abs(a.pos-b.pos); }
+function inRangeD(d, r){ return d>=r[0] && d<=r[1]; }
+function unitAt(pos){
+  if(!B) return null;
+  if(B.p.pos===pos) return B.p;
+  for(var i=0;i<B.es.length;i++) if(!B.es[i].dead && B.es[i].pos===pos) return B.es[i];
+  return null;
+}
+function occupied(pos){ return !!unitAt(pos); }
+function alive(){ var o=[]; for(var i=0;i<B.es.length;i++) if(!B.es[i].dead) o.push(B.es[i]); return o; }
+function onCover(u){ return B.cover.indexOf(u.pos) >= 0; }
+
+/* --- movement --------------------------------------------------------- */
+function handHas(id){
+  if(!B) return false;
+  for(var i=0;i<B.hand.length;i++) if(B.hand[i].id===id) return true;
+  return false;
+}
+function moveUnit(u, dir, steps, jump){
+  if(st(u,'root')>0){ if(u===B.p) fxText(tileX(u.pos), laneY()-70, 'PINNED', P.faint, 20); return 0; }
+  if(u===B.p && handHas('leadweight')){ fxText(tileX(u.pos), laneY()-70, 'LEAD WEIGHT', P.faint, 20); return 0; }
+  var moved = 0;
+  for(var i=0;i<steps;i++){
+    var np = u.pos + dir;
+    if(np<0 || np>=LANE) break;
+    if(occupied(np)){
+      if(!jump) break;
+      // jump: look for the next free tile beyond
+      var k = np, found = -1;
+      while(k>=0 && k<LANE){ if(!occupied(k)){ found=k; break; } k+=dir; }
+      if(found<0) break;
+      moved += Math.abs(found-u.pos); u.pos = found; i = steps; break;
+    }
+    u.pos = np; moved++;
+  }
+  if(moved>0 && u===B.p){ B.movedThisTurn += moved; trig('onMove', moved); }
+  return moved;
+}
+function stepToward(e, maxSteps){
+  var d = sign(B.p.pos - e.pos);
+  if(d===0) return 0;
+  return moveUnit(e, d, maxSteps, false);
+}
+function stepAway(e, maxSteps){
+  var d = -sign(B.p.pos - e.pos);
+  if(d===0) d = e.pos < LANE/2 ? 1 : -1;
+  return moveUnit(e, d, maxSteps, false);
+}
+
+/* --- damage ------------------------------------------------------------ */
+function atkPower(src, base){
+  var d = base + st(src,'str');
+  if(st(src,'weak')>0) d = Math.floor(d*0.75);
+  return Math.max(0, d);
+}
+function unitX(u){ return tileX(u.pos); }
+
+/* deal attack damage. src may be null for non-attack sources (poison etc) */
+function dealDmg(src, tgt, base, opt){
+  opt = opt || {};
+  if(tgt.dead || B.over) return 0;
+  var d = base;
+  if(src && !opt.pure) d = atkPower(src, base);
+  if(!opt.pure){
+    if(st(tgt,'vuln')>0) d = Math.floor(d*1.5);
+    d += st(tgt,'mark');
+    if(src === B.p){
+      var rg = dist(src,tgt);
+      if(st(tgt,'mark')>0) d += pw('brand');
+      if(pw('sights') && rg>=4) d += pw('sights');
+      if(pw('close') && rg<=1) d += pw('close');
+      d += heatBonus();
+    }
+    if(src) { var m = trigMod('modDamageDealt', d, src, tgt, opt); d = m; }
+    var rangeUsed = src ? dist(src,tgt) : 0;
+    if(onCover(tgt) && rangeUsed>=2) d = Math.max(0, d-3);
+  }
+  d = Math.max(0, Math.round(d));
+
+  // dodge
+  if(src && !opt.pure && st(tgt,'dodge')>0){
+    addst(tgt,'dodge',-1);
+    fxText(unitX(tgt), laneY()-96, 'MISS', P.sky, 26);
+    return 0;
+  }
+
+  var absorbed = Math.min(tgt.block, d);
+  tgt.block -= absorbed;
+  var hpDmg = d - absorbed;
+  if(hpDmg>0){
+    tgt.hp -= hpDmg;
+    tgt.hitT = 0.28;
+    fxText(unitX(tgt), laneY()-100, '-'+hpDmg, tgt===B.p?P.blood:P.gold, tgt===B.p?30:28);
+    if(tgt===B.p){ fxShake(9); trig('onPlayerDamaged', hpDmg); }
+    else fxPuff(unitX(tgt), laneY()-46, 5, P.blood, 90);
+  } else if(d>0){
+    fxText(unitX(tgt), laneY()-100, '-'+d, P.sky, 22);
+  } else {
+    fxText(unitX(tgt), laneY()-100, 'BLOCKED', P.sky, 18);
+  }
+  B.log.push((src===B.p?'You':(src?src.name:'—'))+' hit '+(tgt===B.p?'you':tgt.name)+' for '+d);
+
+  // retaliation (barbs) — only melee
+  if(src && !opt.noRetal && st(tgt,'retal')>0 && dist(src,tgt)<=1 && !src.dead){
+    dealDmg(null, src, st(tgt,'retal'), {pure:true, noRetal:true});
+  }
+  if(tgt===B.p && src && !src.dead && B.counter>0 && !opt.noRetal){
+    var cd = B.counter; B.counter = 0;
+    fxText(unitX(src), laneY()-140, 'COUNTER', P.brass, 20);
+    dealDmg(null, src, cd, {pure:true, noRetal:true});
+  }
+  if(tgt.hp<=0) killUnit(tgt);
+  if(src===B.p && !opt.noHooks) trig('onAttackDealt', tgt, d);
+  return d;
+}
+function loseHp(u, n){
+  if(n<=0 || u.dead) return;
+  u.hp -= n; u.hitT = 0.28;
+  fxText(unitX(u), laneY()-100, '-'+n, P.moss, 24);
+  if(u.hp<=0) killUnit(u);
+}
+function healUnit(u,n){
+  if(u.dead || n<=0) return;
+  var before = u.hp;
+  u.hp = Math.min(u.maxHp, u.hp+n);
+  if(u.hp>before) fxText(unitX(u), laneY()-100, '+'+(u.hp-before), P.moss, 24);
+}
+function gainBlock(u, n){
+  if(n<=0) return 0;
+  n += st(u,'dex');
+  if(st(u,'frail')>0) n = Math.floor(n*0.75);
+  n = Math.max(0,n);
+  u.block += n;
+  if(n>0) fxText(unitX(u), laneY()-124, '+'+n+' blk', P.sky, 20);
+  return n;
+}
+function killUnit(u){
+  if(u===B.p){
+    if(hasTrink('halo') && !G.haloUsed){
+      G.haloUsed = true;
+      u.hp = Math.max(1, Math.round(u.maxHp*0.3));
+      fxText(unitX(u), laneY()-190, 'THE HALO HOLDS', P.gold, 26);
+      fxFlash(unitX(u), laneY()-50, 60, P.gold, 0.6);
+      return;
+    }
+    u.hp = 0; B.over = 'lose'; return;
+  }
+  u.dead = true; u.hp = 0;
+  fxPuff(unitX(u), laneY()-50, 22, P.rust, 150);
+  fxText(unitX(u), laneY()-120, 'DOWN', P.rust, 26);
+  B.log.push(u.name+' is down.');
+  trig('onKill', u);
+  if(alive().length===0 && !B.over) B.over = 'win';
+}
+function applyStatus(u, key, n){
+  if(u.dead || n===0) return;
+  if(u !== B.p) n = trigMod('modStatus', n, u, key);
+  addst(u,key,n);
+  if(ST[key]) fxText(unitX(u), laneY()-150, ST[key].n+(n>0?' +'+n:' '+n), ST[key].c, 18);
+}
+
+/* --- card piles -------------------------------------------------------- */
+function drawCards(n){
+  for(var i=0;i<n;i++){
+    if(B.hand.length >= 10){ fxText(W/2, H-330, 'HAND FULL', P.rust, 22); break; }
+    if(B.draw.length===0){
+      if(B.discard.length===0) break;
+      B.draw = shuffle(B.discard); B.discard = [];
+    }
+    var c = B.draw.pop();
+    B.hand.push(c);
+    c.animT = 0;
+    trig('onDraw', c);
+  }
+}
+function discardCard(c){ B.discard.push(c); }
+function exhaustCard(c){ B.exhaust.push(c); trig('onExhaust', c); }
+function addCardToHand(defId, up){
+  if(B.hand.length>=10) return;
+  var c = mkCard(defId, up); c.temp = true; B.hand.push(c);
+}
+function addCardToDraw(defId, up, top){
+  var c = mkCard(defId, up); c.temp = true;
+  if(top) B.draw.push(c); else B.draw.splice(Math.floor(rnd()*(B.draw.length+1)),0,c);
+}
+function addCardToDiscard(defId, up){ var c = mkCard(defId, up); c.temp = true; B.discard.push(c); }
+
+/* --- class resources --------------------------------------------------- */
+function chambers(){ return B.p.chambers|0; }
+function reload(n){
+  if(G.cls!=='marshal') return;
+  var before = B.p.chambers;
+  B.p.chambers = clamp(B.p.chambers + n, 0, B.p.maxChambers);
+  if(B.p.chambers>before){ fxText(unitX(B.p), laneY()-170, 'RELOAD', P.brass, 20); trig('onReload', B.p.chambers-before); }
+}
+function spendChamber(n){
+  B.p.chambers = clamp(B.p.chambers-n, 0, B.p.maxChambers);
+  if(B.p.chambers===0 && pw('deadman') && !B.deadmanUsed){
+    B.deadmanUsed = true;
+    B.energy += pw('deadman');
+    fxText(unitX(B.p), laneY()-190, 'CLICK. +2', P.gold, 22);
+  }
+}
+function heatCap(){ return 6 + pw('sink'); }
+function addHeat(n){
+  if(G.cls!=='boiler') return;
+  var before = B.p.heat;
+  B.p.heat = clamp(B.p.heat+n, 0, 14);
+  var gained = B.p.heat - before;
+  if(gained>0){
+    fxText(unitX(B.p), laneY()-170, 'HEAT +'+gained, P.rust, 18);
+    if(pw('molten')){
+      var l = alive();
+      for(var i=0;i<l.length;i++) if(dist(B.p,l[i])<=2) dealDmg(null, l[i], pw('molten'), {pure:true});
+    }
+  }
+}
+function ventHeat(){
+  if(G.cls!=='boiler') return;
+  var cap = heatCap();
+  if(B.p.heat > cap){
+    var over = B.p.heat - cap;
+    fxText(unitX(B.p), laneY()-200, 'OVERPRESSURE', P.rust, 20);
+    dealDmg(null, B.p, over, {pure:true});
+    B.p.heat = Math.max(0, B.p.heat - 4);
+  }
+}
+function heatBonus(){ return G.cls==='boiler' ? Math.floor(B.p.heat/3)*(1+pw('vessel')) : 0; }
+
+/* --- trinket hooks ------------------------------------------------------ */
+function trig(name){
+  if(!G) return;
+  var args = Array.prototype.slice.call(arguments,1);
+  for(var i=0;i<G.trinkets.length;i++){
+    var t = TRINK[G.trinkets[i]];
+    if(t && t[name]){
+      try { t[name].apply(null, args); } catch(e){ console.error('trinket '+t.id+'.'+name, e); }
+    }
+  }
+}
+function trigMod(name, val){
+  if(!G) return val;
+  var rest = Array.prototype.slice.call(arguments,2);
+  for(var i=0;i<G.trinkets.length;i++){
+    var t = TRINK[G.trinkets[i]];
+    if(t && t[name]){
+      try { val = t[name].apply(null, [val].concat(rest)); } catch(e){ console.error(e); }
+    }
+  }
+  return val;
+}
+function hasTrink(id){ return G && G.trinkets.indexOf(id)>=0; }
+
+/* --- turn flow ---------------------------------------------------------- */
+function startBattle(enc){
+  var p = {
+    isP:true, name:'You', pos: 2, hp:G.hp, maxHp:G.maxHp, block:0, st:{}, dead:false, hitT:0,
+    chambers: G.cls==='marshal' ? (G.maxChambers||6) : 0, maxChambers: G.maxChambers||6,
+    heat: 0, pw:{}
+  };
+  B = {
+    p:p, es:[], hand:[], draw:[], discard:[], exhaust:[],
+    energy:0, maxEnergy:G.maxEnergy||3, turn:0, over:null, log:[],
+    cover:[], movedThisTurn:0, cardsPlayed:0, attacksThisTurn:0, drawBonus:0,
+    enc: enc, sel:-1, reward:null, firstTurn:true, blockKeep:false, ended:false
+  };
+  // terrain: 1-2 cover tiles, never on a starting position
+  var covers = enc.cover===undefined ? rint(1,2) : enc.cover;
+  var tries = 0;
+  while(B.cover.length<covers && tries++<40){
+    var t = rint(1, LANE-2);
+    if(t!==p.pos && B.cover.indexOf(t)<0) B.cover.push(t);
+  }
+  // spawn enemies right-to-left
+  var slots = [];
+  for(var i=0;i<enc.foes.length;i++){
+    var want = LANE-1-i*1;
+    slots.push(want);
+  }
+  for(var i=0;i<enc.foes.length;i++){
+    var def = FOE[enc.foes[i]];
+    var e = mkFoe(def, slots[i]);
+    B.es.push(e);
+  }
+  // build draw pile
+  var d = [];
+  for(var i=0;i<G.deck.length;i++) d.push(cloneCard(G.deck[i]));
+  B.draw = shuffle(d);
+  // innate cards to the top
+  var innates = [];
+  for(var i=B.draw.length-1;i>=0;i--){ if(CD(B.draw[i]).innate){ innates.push(B.draw.splice(i,1)[0]); } }
+  for(var i=0;i<innates.length;i++) B.draw.push(innates[i]);
+
+  clearQ(); FX.length = 0;
+  SCREEN = 'battle';
+  B.log.push('— '+(enc.name||'Ambush')+' —');
+  trig('onBattleStart');
+  for(var i=0;i<B.es.length;i++) chooseIntent(B.es[i]);
+  startPlayerTurn();
+}
+function mkFoe(def, pos){
+  var hp = rint(def.hp[0], def.hp[1]);
+  if(G.ascension) hp = Math.round(hp*1.15);
+  var e = {
+    isP:false, def:def, id:def.id, name:def.name, art:def.art, kind:def.kind||'normal',
+    pos:pos, hp:hp, maxHp:hp, block:0, st:{}, dead:false, hitT:0,
+    mi:0, intent:null, mem:{}, col:def.col||P.rust, scale:def.scale||1
+  };
+  if(def.init) def.init(e);
+  return e;
+}
+function startPlayerTurn(){
+  if(B.over) return;
+  B.turn++;
+  B.movedThisTurn = 0; B.cardsPlayed = 0; B.attacksThisTurn = 0;
+  if(!B.blockKeep) B.p.block = 0;
+  B.blockKeep = false;
+  B.energy = B.maxEnergy + (B.bonusEnergy||0);
+  // start of turn ticks
+  if(st(B.p,'poison')>0){ var pz = st(B.p,'poison'); loseHp(B.p, pz); addst(B.p,'poison',-1); }
+  if(st(B.p,'regen')>0){ healUnit(B.p, st(B.p,'regen')); addst(B.p,'regen',-1); }
+  if(B.over){ finishBattle(); return; }
+  // the dust rises: nothing on this line is allowed to stand still forever
+  if(B.turn > 45){
+    var l = alive();
+    for(var i=0;i<l.length;i++) addst(l[i],'str',2);
+    if(B.turn===46) fxText(W/2, 150, 'THE DUST RISES', P.rust, 30, -10);
+  }
+  if(pw('furnace')) addHeat(2*pw('furnace'));
+  B.counter = 0; B.deadmanUsed = false;
+  trig('onTurnStart', B.turn);
+  drawCards(5 + B.drawBonus + pw('bandolier'));
+  B.firstTurn = false;
+  B.phase = 'player';
+}
+function endPlayerTurn(){
+  if(B.over || B.phase!=='player') return;
+  B.phase = 'resolving';
+  B.sel = -1;
+  trig('onTurnEnd');
+  // curses that bite while held
+  var gd = 0;
+  for(var i=0;i<B.hand.length;i++) if(B.hand[i].id==='gravedust') gd += 2;
+  if(gd>0) dealDmg(null,B.p,gd,{pure:true});
+  // burn
+  if(st(B.p,'burn')>0){ dealDmg(null,B.p, st(B.p,'burn'), {pure:true}); addst(B.p,'burn',-1); }
+  ventHeat();
+  // discard hand
+  for(var i=B.hand.length-1;i>=0;i--){
+    var c = B.hand[i];
+    var d = CD(c);
+    if(d.ethereal){ B.hand.splice(i,1); exhaustCard(c); continue; }
+    if(d.retain || c.retain){ continue; }
+    B.hand.splice(i,1); discardCard(c);
+  }
+  decayStatuses(B.p);
+  if(B.over){ finishBattle(); return; }
+  queue(function(){ enemyTurn(); }, 0.25);
+}
+function decayStatuses(u){
+  for(var k in u.st){
+    if(ST[k] && !ST[k].p && k!=='poison' && k!=='regen' && k!=='burn'){
+      addst(u,k,-1);
+    }
+  }
+}
+function enemyTurn(){
+  if(B.over){ finishBattle(); return; }
+  var list = alive();
+  for(var i=0;i<list.length;i++){
+    (function(e){
+      queue(function(){
+        if(B.over || e.dead) return;
+        e.block = 0;
+        if(st(e,'poison')>0){ var pz=st(e,'poison'); loseHp(e,pz); addst(e,'poison',-1); }
+        if(e.dead || B.over) return;
+        if(st(e,'stun')>0){
+          addst(e,'stun',-1);
+          fxText(unitX(e), laneY()-150, 'REELING', P.gold, 20);
+          decayStatuses(e); chooseIntent(e); return;
+        }
+        e.actT = 0.3;
+        resolveIntent(e);
+        if(st(e,'burn')>0 && !e.dead){ dealDmg(null,e,st(e,'burn'),{pure:true}); addst(e,'burn',-1); }
+        decayStatuses(e);
+        if(!e.dead) chooseIntent(e);
+      }, 0.5);
+    })(list[i]);
+  }
+  queue(function(){
+    if(B.over){ finishBattle(); return; }
+    trig('onEnemyTurnEnd');
+    startPlayerTurn();
+  }, 0.35);
+}
+function chooseIntent(e){
+  var m;
+  if(e.def.ai) m = e.def.ai(e);
+  else { m = e.def.moves[e.mi % e.def.moves.length]; e.mi++; }
+  e.intent = m;
+}
+function resolveIntent(e){
+  var m = e.intent;
+  if(!m) return;
+  if(m.kind==='attack'){
+    var d = dist(e, B.p);
+    if(!inRangeD(d, m.rng) && m.step){
+      // close the gap (or back up if too close)
+      if(d > m.rng[1]) stepToward(e, m.step);
+      else if(d < m.rng[0]) stepAway(e, m.step);
+      d = dist(e, B.p);
+    }
+    if(inRangeD(d, m.rng)){
+      var hits = m.hits||1;
+      for(var i=0;i<hits;i++){
+        if(B.over) break;
+        fxLine(unitX(e), laneY()-46, unitX(B.p), laneY()-46, m.rng[1]>1?P.gold:P.rust, 0.2, m.rng[1]>1?2:5);
+        dealDmg(e, B.p, m.dmg);
+      }
+      if(m.on) m.on(e);
+    } else {
+      fxText(unitX(e), laneY()-150, 'OUT OF REACH', P.faint, 20);
+      B.log.push(e.name+' cannot reach you.');
+      if(pw('standoff')) drawCards(pw('standoff'));
+      if(pw('standoff')) gainBlock(B.p, 2*pw('standoff'));
+      if(m.miss) m.miss(e);
+    }
+  } else if(m.kind==='defend'){
+    gainBlock(e, m.block||0);
+    if(m.on) m.on(e);
+  } else if(m.kind==='move'){
+    if(m.on) m.on(e); else stepToward(e, m.step||1);
+  } else {
+    if(m.on) m.on(e);
+  }
+}
+function finishBattle(){
+  if(B.ended) return;
+  B.ended = true;
+  clearQ();
+  if(B.over==='win'){
+    G.hp = B.p.hp;
+    trig('onBattleWin');
+    queue(function(){ battleReward(); }, 0.5);
+  } else {
+    G.hp = 0;
+    queue(function(){ SCREEN='gameover'; }, 0.8);
+  }
+}
+
+/* --- playing cards ------------------------------------------------------ */
+function cardCost(c){
+  var d = CD(c);
+  var cost = c.costOverride!==undefined ? c.costOverride : num(c,'cost');
+  cost = trigMod('modCost', cost, c);
+  if(d.costFn) cost = d.costFn(c, cost);
+  return Math.max(0, cost);
+}
+function cardAmmo(c){ var d=CD(c); return d.ammo|0; }
+function validTargets(c){
+  var d = CD(c);
+  if(d.targets!=='enemy') return [];
+  var r = cardRange(c), o = [], list = alive();
+  for(var i=0;i<list.length;i++){ if(inRangeD(dist(B.p,list[i]), r)) o.push(list[i]); }
+  return o;
+}
+function cardRange(c){
+  var d = CD(c);
+  var r = (c.up && d.u && d.u.range) ? d.u.range : (d.range || [1,99]);
+  r = trigMod('modRange', r.slice(), c);
+  if(pw('scope') && d.type==='attack' && r[1] < 90) r[1] += pw('scope');
+  return r;
+}
+function canPlay(c){
+  var d = CD(c);
+  if(d.unplayable) return false;
+  if(B.energy < cardCost(c)) return false;
+  if(cardAmmo(c) > chambers() && G.cls==='marshal') return false;
+  if(d.targets==='enemy' && validTargets(c).length===0) return false;
+  if(d.playable && !d.playable(c)) return false;
+  return true;
+}
+function playCard(idx, target){
+  if(B.phase!=='player' || B.over) return false;
+  var c = B.hand[idx];
+  if(!c || !canPlay(c)) return false;
+  var d = CD(c);
+  if(d.targets==='enemy'){
+    var vt = validTargets(c);
+    if(!target || target.dead || vt.indexOf(target)<0) target = vt[0];
+    if(!target) return false;
+  }
+  var cost = cardCost(c);
+  B.energy -= cost;
+  if(cardAmmo(c)) spendChamber(cardAmmo(c));
+  B.hand.splice(idx,1);
+  B.cardsPlayed++;
+  if(d.type==='attack') B.attacksThisTurn++;
+  B.playing = c;
+  trig('onPlayCard', c);
+  try { d.play(c, target); } catch(e){ console.error('card '+d.id, e); }
+  B.playing = null;
+  if(d.type==='power' || d.exhaust || c.exhaustNow) exhaustCard(c);
+  else if(c.temp && d.vanish) exhaustCard(c);
+  else discardCard(c);
+  if(!B.over && alive().length===0) B.over='win';
+  if(B.over) finishBattle();
+  return true;
+}
+
+/* ==========================================================================
+   CARDS
+   ========================================================================== */
+var CARD = {}, ALL_CARDS = [], UID = 0;
+function C(o){
+  if(!o.n) o.n = {};
+  CARD[o.id] = o; ALL_CARDS.push(o); return o;
+}
+function mkCard(id, up){ return {id:id, up:!!up, uid:++UID}; }
+function cloneCard(c){ return {id:c.id, up:c.up, uid:++UID}; }
+function CD(c){ return CARD[c.id]; }
+function num(c,k){
+  var d = CD(c);
+  if(k==='cost') return (c.up && d.u && d.u.cost!==undefined) ? d.u.cost : d.cost;
+  if(c.up && d.u && d.u[k]!==undefined) return d.u[k];
+  return d.n && d.n[k]!==undefined ? d.n[k] : 0;
+}
+function cardName(c){ return CD(c).name + (c.up?'+':''); }
+
+/* ---- helpers for card effects ---- */
+function nearestEnemy(){
+  var l = alive(), best=null, bd=99;
+  for(var i=0;i<l.length;i++){ var d=dist(B.p,l[i]); if(d<bd){bd=d;best=l[i];} }
+  return best;
+}
+function towardDir(){ var n=nearestEnemy(); if(!n) return 1; return sign(n.pos-B.p.pos)||1; }
+function awayDir(){ return -towardDir(); }
+function advance(n, jump){ return moveUnit(B.p, towardDir(), n, jump); }
+function fallBack(n, jump){ return moveUnit(B.p, awayDir(), n, jump); }
+function foesWithin(r){ var l=alive(), o=[]; for(var i=0;i<l.length;i++) if(dist(B.p,l[i])<=r) o.push(l[i]); return o; }
+function foesBeyond(r){ var l=alive(), o=[]; for(var i=0;i<l.length;i++) if(dist(B.p,l[i])>=r) o.push(l[i]); return o; }
+function pull(e, n){ // drag a foe toward the player
+  var d = sign(B.p.pos - e.pos);
+  if(d===0) return 0;
+  var moved = 0;
+  for(var i=0;i<n;i++){
+    var np = e.pos + d;
+    if(np===B.p.pos || np<0 || np>=LANE || occupied(np)) break;
+    e.pos = np; moved++;
+  }
+  if(moved) fxText(unitX(e), laneY()-170, 'DRAGGED', P.brass, 18);
+  return moved;
+}
+function push(e, n){
+  var d = -sign(B.p.pos - e.pos) || 1;
+  var moved = 0;
+  for(var i=0;i<n;i++){
+    var np = e.pos + d;
+    if(np<0 || np>=LANE || occupied(np)) break;
+    e.pos = np; moved++;
+  }
+  return moved;
+}
+function behind(t){ // the foe on the far side of t from the player
+  var d = sign(t.pos - B.p.pos) || 1;
+  var l = alive(), best=null, bd=99;
+  for(var i=0;i<l.length;i++){
+    var e=l[i]; if(e===t) continue;
+    if(sign(e.pos-t.pos)===d){ var dd=Math.abs(e.pos-t.pos); if(dd<bd){bd=dd;best=e;} }
+  }
+  return best;
+}
+function hitAll(list, dmg){ for(var i=0;i<list.length;i++) dealDmg(B.p, list[i], dmg); }
+function shot(t, dmg, times){
+  times = times||1;
+  for(var i=0;i<times;i++){
+    if(t.dead) break;
+    fxLine(unitX(B.p), laneY()-52, unitX(t), laneY()-52, P.gold, 0.18, 3);
+    dealDmg(B.p, t, dmg);
+  }
+}
+
+/* =============================== NEUTRAL ================================= */
+C({id:'sidestep', name:'Sidestep', cls:'any', type:'skill', rarity:'common', cost:0, n:{b:4}, u:{b:6},
+  text:function(c){ return 'Fall back *1*. Gain *'+num(c,'b')+'* Block.'; },
+  play:function(c){ fallBack(1); gainBlock(B.p, num(c,'b')); }});
+
+C({id:'closein', name:'Close In', cls:'any', type:'skill', rarity:'common', cost:0, n:{m:2,dr:1}, u:{m:2,dr:1,b:4},
+  text:function(c){ return 'Advance up to *'+num(c,'m')+'*. Draw *'+num(c,'dr')+'*.'+(c.up?' Gain *4* Block.':''); },
+  play:function(c){ advance(num(c,'m')); drawCards(num(c,'dr')); if(c.up) gainBlock(B.p,4); }});
+
+C({id:'dustkick', name:'Dust Kick', cls:'any', type:'skill', rarity:'common', cost:1, n:{s:2,r:2}, u:{s:3,r:3},
+  text:function(c){ return 'Apply *'+num(c,'s')+'* Shaken to foes within *'+num(c,'r')+'*.'; },
+  play:function(c){ var l=foesWithin(num(c,'r')); for(var i=0;i<l.length;i++) applyStatus(l[i],'weak',num(c,'s')); fxPuff(unitX(B.p), laneY()-16, 14, '#8d7a5f', 120); }});
+
+C({id:'railspike', name:'Rail Spike', cls:'any', type:'attack', rarity:'common', cost:1, targets:'enemy', range:[1,2], n:{d:9}, u:{d:12},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage.'; },
+  play:function(c,t){ shot(t, num(c,'d')); }});
+
+C({id:'gritteeth', name:'Grit Teeth', cls:'any', type:'skill', rarity:'uncommon', cost:1, n:{b:8,s:1}, u:{b:10,s:1},
+  text:function(c){ return 'Gain *'+num(c,'b')+'* Block and *'+num(c,'s')+'* Grit.'; },
+  play:function(c){ gainBlock(B.p,num(c,'b')); applyStatus(B.p,'str',num(c,'s')); }});
+
+C({id:'snakebite', name:'Snakebite', cls:'any', type:'attack', rarity:'uncommon', cost:1, targets:'enemy', range:[1,3], n:{d:5,p:4}, u:{d:6,p:6},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage. Apply *'+num(c,'p')+'* Venom.'; },
+  play:function(c,t){ shot(t,num(c,'d')); if(!t.dead) applyStatus(t,'poison',num(c,'p')); }});
+
+C({id:'patience', name:"Vulture's Patience", cls:'any', type:'skill', rarity:'uncommon', cost:1, n:{dr:2}, u:{dr:3},
+  text:function(c){ return 'Draw *'+num(c,'dr')+'*. If no foe is within *3*, gain *1* Energy.'; },
+  play:function(c){ drawCards(num(c,'dr')); if(foesWithin(3).length===0){ B.energy++; fxText(unitX(B.p),laneY()-190,'+1',P.gold,24);} }});
+
+C({id:'hardluck', name:'Hard Luck', cls:'any', type:'skill', rarity:'uncommon', cost:0, exhaust:true, n:{h:3}, u:{h:1},
+  text:function(c){ return 'Gain *2* Energy. Lose *'+num(c,'h')+'* HP. Exhaust.'; },
+  play:function(c){ B.energy += 2; dealDmg(null,B.p,num(c,'h'),{pure:true}); }});
+
+C({id:'rations', name:'Trail Rations', cls:'any', type:'skill', rarity:'common', cost:1, exhaust:true, n:{h:6}, u:{h:10},
+  text:function(c){ return 'Heal *'+num(c,'h')+'* HP. Exhaust.'; },
+  play:function(c){ healUnit(B.p, num(c,'h')); }});
+
+C({id:'deadeye', name:'Deadeye', cls:'any', type:'skill', rarity:'uncommon', cost:1, targets:'enemy', range:[1,99], n:{m:3}, u:{m:5},
+  text:function(c){ return 'Apply *'+num(c,'m')+'* Mark to a foe at any range.'; },
+  play:function(c,t){ applyStatus(t,'mark',num(c,'m')); }});
+
+C({id:'hobble', name:'Hobble', cls:'any', type:'skill', rarity:'uncommon', cost:1, targets:'enemy', range:[1,4], n:{p:2}, u:{p:3},
+  text:function(c){ return 'Apply *'+num(c,'p')+'* Pinned.'; },
+  play:function(c,t){ applyStatus(t,'root',num(c,'p')); }});
+
+C({id:'bandolier', name:'Bandolier', cls:'any', type:'power', rarity:'rare', cost:2, u:{cost:1},
+  text:function(c){ return 'At the start of your turn, draw *1* extra card.'; },
+  play:function(c){ addpw('bandolier',1); }});
+
+C({id:'ironnerve', name:'Iron Nerve', cls:'any', type:'power', rarity:'uncommon', cost:1, n:{s:2}, u:{s:3},
+  text:function(c){ return 'Gain *'+num(c,'s')+'* Grit.'; },
+  play:function(c){ applyStatus(B.p,'str',num(c,'s')); }});
+
+C({id:'longodds', name:'Long Odds', cls:'any', type:'attack', rarity:'rare', cost:2, targets:'enemy', range:[1,99], n:{d:24,d2:10}, u:{d:32,d2:14},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage if the foe is *4*+ tiles away, otherwise *'+num(c,'d2')+'*.'; },
+  play:function(c,t){ shot(t, dist(B.p,t)>=4 ? num(c,'d') : num(c,'d2')); }});
+
+C({id:'snakeoil', name:'Rattlesnake Oil', cls:'any', type:'skill', rarity:'rare', cost:0, exhaust:true, n:{g:2}, u:{g:3},
+  text:function(c){ return 'Gain *'+num(c,'g')+'* Ghost. Exhaust.'; },
+  play:function(c){ applyStatus(B.p,'dodge',num(c,'g')); }});
+
+C({id:'tumbleweed', name:'Tumbleweed', cls:'any', type:'skill', rarity:'common', cost:1, n:{b:2}, u:{b:3},
+  text:function(c){ return 'Fall back up to *2*. Gain *'+num(c,'b')+'* Block per tile moved.'; },
+  play:function(c){ var m = fallBack(2); gainBlock(B.p, m*num(c,'b')); }});
+
+C({id:'bootknife', name:'Boot Knife', cls:'any', type:'attack', rarity:'common', cost:0, targets:'enemy', range:[1,1], n:{d:5}, u:{d:8},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage. Draw *1*.'; },
+  play:function(c,t){ shot(t,num(c,'d')); drawCards(1); }});
+
+C({id:'circle', name:'Circle Round', cls:'any', type:'skill', rarity:'uncommon', cost:1, n:{b:3}, u:{b:6},
+  text:function(c){ return 'Advance up to *3*, vaulting over bodies. Gain *'+num(c,'b')+'* Block.'; },
+  play:function(c){ advance(3,true); gainBlock(B.p,num(c,'b')); }});
+
+C({id:'standoff', name:'Standoff', cls:'any', type:'power', rarity:'rare', cost:2, u:{cost:1},
+  text:function(c){ return 'Whenever a foe cannot reach you, draw *1* and gain *2* Block.'; },
+  play:function(c){ addpw('standoff',1); }});
+
+C({id:'scope', name:'Spyglass', cls:'any', type:'power', rarity:'uncommon', cost:1, n:{r:1}, u:{r:2},
+  text:function(c){ return 'Your attacks gain *+'+num(c,'r')+'* maximum range.'; },
+  play:function(c){ addpw('scope',num(c,'r')); }});
+
+/* =============================== MARSHAL ================================= */
+C({id:'sixgun', name:'Sixgun', cls:'marshal', type:'attack', rarity:'starter', cost:1, targets:'enemy', range:[2,5], ammo:1, n:{d:7}, u:{d:10},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage.'; },
+  play:function(c,t){ shot(t,num(c,'d')); }});
+
+C({id:'brace', name:'Brace', cls:'marshal', type:'skill', rarity:'starter', cost:1, n:{b:5}, u:{b:8},
+  text:function(c){ return 'Gain *'+num(c,'b')+'* Block.'; },
+  play:function(c){ gainBlock(B.p,num(c,'b')); }});
+
+C({id:'reload', name:'Reload', cls:'marshal', type:'skill', rarity:'starter', cost:0, n:{a:3}, u:{a:4,dr:1},
+  text:function(c){ return 'Load *'+num(c,'a')+'* chambers.'+(c.up?' Draw *1*.':''); },
+  play:function(c){ reload(num(c,'a')); if(c.up) drawCards(1); }});
+
+C({id:'takeaim', name:'Take Aim', cls:'marshal', type:'skill', rarity:'common', cost:0, targets:'enemy', range:[1,99], n:{m:2}, u:{m:3},
+  text:function(c){ return 'Apply *'+num(c,'m')+'* Mark.'; },
+  play:function(c,t){ applyStatus(t,'mark',num(c,'m')); }});
+
+C({id:'fanhammer', name:'Fan the Hammer', cls:'marshal', type:'attack', rarity:'common', cost:1, targets:'enemy', range:[2,4], ammo:3, n:{d:4}, u:{d:5},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage *3* times.'; },
+  play:function(c,t){ shot(t,num(c,'d'),3); }});
+
+C({id:'doubletap', name:'Double Tap', cls:'marshal', type:'attack', rarity:'common', cost:1, targets:'enemy', range:[2,5], ammo:2, n:{d:6}, u:{d:8},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage *2* times.'; },
+  play:function(c,t){ shot(t,num(c,'d'),2); }});
+
+C({id:'speedload', name:'Speedloader', cls:'marshal', type:'skill', rarity:'common', cost:0, n:{a:4}, u:{a:6},
+  text:function(c){ return 'Load *'+num(c,'a')+'* chambers.'; },
+  play:function(c){ reload(num(c,'a')); }});
+
+C({id:'hipfire', name:'Hip Fire', cls:'marshal', type:'attack', rarity:'common', cost:0, targets:'enemy', range:[1,2], ammo:1, n:{d:6}, u:{d:9},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage.'; },
+  play:function(c,t){ shot(t,num(c,'d')); }});
+
+C({id:'calledshot', name:'Called Shot', cls:'marshal', type:'attack', rarity:'uncommon', cost:2, targets:'enemy', range:[3,6], ammo:1, n:{d:14,m:2}, u:{d:18,m:3},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage. Apply *'+num(c,'m')+'* Mark.'; },
+  play:function(c,t){ shot(t,num(c,'d')); if(!t.dead) applyStatus(t,'mark',num(c,'m')); }});
+
+C({id:'trickshot', name:'Trick Shot', cls:'marshal', type:'attack', rarity:'uncommon', cost:1, ammo:1, targets:'none', n:{d:8}, u:{d:11},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage to every foe *2*+ tiles away.'; },
+  play:function(c){ hitAll(foesBeyond(2), num(c,'d')); }});
+
+C({id:'steadyhand', name:'Steady Hand', cls:'marshal', type:'skill', rarity:'common', cost:1, n:{b:6,a:2}, u:{b:9,a:3},
+  text:function(c){ return 'Gain *'+num(c,'b')+'* Block. Load *'+num(c,'a')+'*.'; },
+  play:function(c){ gainBlock(B.p,num(c,'b')); reload(num(c,'a')); }});
+
+C({id:'brandpow', name:"Gunslinger's Eye", cls:'marshal', type:'power', rarity:'rare', cost:1, n:{d:3}, u:{d:5},
+  text:function(c){ return 'Marked foes take *'+num(c,'d')+'* additional damage from your attacks.'; },
+  play:function(c){ addpw('brand',num(c,'d')); }});
+
+C({id:'sixways', name:'Six Ways From Sunday', cls:'marshal', type:'attack', rarity:'rare', cost:2, targets:'enemy', range:[2,6], ammo:6, n:{d:36}, u:{d:46},
+  text:function(c){ return 'Empty the cylinder. Deal *'+num(c,'d')+'* damage.'; },
+  play:function(c,t){ shot(t,num(c,'d')); fxFlash(unitX(t), laneY()-50, 40, P.gold, 0.4); fxShake(12); }});
+
+C({id:'emptych', name:'Empty Chamber', cls:'marshal', type:'attack', rarity:'uncommon', cost:0, targets:'enemy', range:[2,5], n:{d:5,d2:15}, u:{d:8,d2:20},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage, or *'+num(c,'d2')+'* if your cylinder is empty.'; },
+  play:function(c,t){ shot(t, chambers()===0 ? num(c,'d2') : num(c,'d')); }});
+
+C({id:'quickdraw', name:'Quickdraw', cls:'marshal', type:'skill', rarity:'uncommon', cost:0, exhaust:true, n:{dr:2}, u:{dr:3},
+  text:function(c){ return 'Draw *'+num(c,'dr')+'*. Load *1*. Exhaust.'; },
+  play:function(c){ drawCards(num(c,'dr')); reload(1); }});
+
+C({id:'coverfire', name:'Cover Fire', cls:'marshal', type:'skill', rarity:'uncommon', cost:1, n:{s:2}, u:{s:3},
+  text:function(c){ return 'Apply *'+num(c,'s')+'* Shaken and *'+num(c,'s')+'* Exposed to foes *2*+ tiles away.'; },
+  play:function(c){ var l=foesBeyond(2); for(var i=0;i<l.length;i++){ applyStatus(l[i],'weak',num(c,'s')); applyStatus(l[i],'vuln',num(c,'s')); } }});
+
+C({id:'rollfire', name:'Roll and Fire', cls:'marshal', type:'attack', rarity:'uncommon', cost:1, targets:'enemy', range:[1,5], ammo:1, n:{d:10}, u:{d:14},
+  text:function(c){ return 'Fall back *2*, then deal *'+num(c,'d')+'* damage.'; },
+  play:function(c,t){ fallBack(2); if(inRangeD(dist(B.p,t), cardRange(c))) shot(t,num(c,'d')); else { var n=nearestEnemy(); if(n) shot(n,num(c,'d')); } }});
+
+C({id:'pistolwhip', name:'Pistol Whip', cls:'marshal', type:'attack', rarity:'common', cost:0, targets:'enemy', range:[1,1], n:{d:8}, u:{d:11},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage. If the foe is Exposed, apply *1* Reeling.'; },
+  play:function(c,t){ var ex = st(t,'vuln')>0; shot(t,num(c,'d')); if(ex && !t.dead) applyStatus(t,'stun',1); }});
+
+C({id:'bandroll', name:'Bandolier Roll', cls:'marshal', type:'skill', rarity:'uncommon', cost:1, u:{cost:0},
+  text:function(c){ return 'Load your cylinder full. If it was empty, gain *1* Energy.'; },
+  play:function(c){ var was = chambers()===0; reload(99); if(was){ B.energy++; fxText(unitX(B.p),laneY()-190,'+1',P.gold,24);} }});
+
+C({id:'longshot', name:'The Long Shot', cls:'marshal', type:'attack', rarity:'rare', cost:2, targets:'enemy', range:[4,8], ammo:1, n:{d:30}, u:{d:40},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage. Range *4*+ only.'; },
+  play:function(c,t){ shot(t,num(c,'d')); fxShake(8); }});
+
+C({id:'powderburn', name:'Powder Burn', cls:'marshal', type:'attack', rarity:'uncommon', cost:1, targets:'enemy', range:[1,1], ammo:1, n:{d:12,b:4}, u:{d:16,b:6},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage. Apply *'+num(c,'b')+'* Cinders.'; },
+  play:function(c,t){ shot(t,num(c,'d')); if(!t.dead) applyStatus(t,'burn',num(c,'b')); }});
+
+C({id:'marshalword', name:"Marshal's Word", cls:'marshal', type:'skill', rarity:'uncommon', cost:1, n:{m:3}, u:{m:4},
+  text:function(c){ return 'Apply *'+num(c,'m')+'* Mark to ALL foes.'; },
+  play:function(c){ var l=alive(); for(var i=0;i<l.length;i++) applyStatus(l[i],'mark',num(c,'m')); }});
+
+C({id:'deadman', name:"Deadman's Click", cls:'marshal', type:'power', rarity:'rare', cost:1, n:{e:2}, u:{e:3},
+  text:function(c){ return 'The first time your cylinder empties each turn, gain *'+num(c,'e')+'* Energy.'; },
+  play:function(c){ addpw('deadman',num(c,'e')); }});
+
+C({id:'ironsights', name:'Iron Sights', cls:'marshal', type:'power', rarity:'rare', cost:2, n:{d:4}, u:{cost:1,d:6},
+  text:function(c){ return 'Your attacks deal *+'+num(c,'d')+'* damage at range *4* or greater.'; },
+  play:function(c){ addpw('sights',num(c,'d')); }});
+
+C({id:'extcyl', name:'Extended Cylinder', cls:'marshal', type:'power', rarity:'rare', cost:1, n:{a:3}, u:{a:4},
+  text:function(c){ return 'Your cylinder holds *'+num(c,'a')+'* more. Load *'+num(c,'a')+'*.'; },
+  play:function(c){ B.p.maxChambers += num(c,'a'); G.maxChambers = (G.maxChambers||6) + num(c,'a'); reload(num(c,'a')); }});
+
+C({id:'paceoff', name:'Pace Off', cls:'marshal', type:'skill', rarity:'common', cost:0, n:{a:2}, u:{a:3},
+  text:function(c){ return 'Fall back *1*. Load *'+num(c,'a')+'*.'; },
+  play:function(c){ fallBack(1); reload(num(c,'a')); }});
+
+C({id:'ricochet', name:'Ricochet', cls:'marshal', type:'attack', rarity:'uncommon', cost:1, targets:'enemy', range:[3,6], ammo:1, n:{d:7}, u:{d:10},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage to the target and the foe behind it.'; },
+  play:function(c,t){ var b = behind(t); shot(t,num(c,'d')); if(b && !b.dead) shot(b,num(c,'d')); }});
+
+C({id:'lastbullet', name:'Last Bullet', cls:'marshal', type:'attack', rarity:'rare', cost:0, targets:'enemy', range:[2,6], ammo:1, exhaust:true, n:{d:8,e:4}, u:{d:10,e:5},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage plus *'+num(c,'e')+'* per empty chamber. Exhaust.'; },
+  play:function(c,t){ var empty = B.p.maxChambers - chambers(); shot(t, num(c,'d') + empty*num(c,'e')); }});
+
+/* ============================== BOILERMAN ================================ */
+C({id:'pistonjab', name:'Piston Jab', cls:'boiler', type:'attack', rarity:'starter', cost:1, targets:'enemy', range:[1,2], n:{d:8}, u:{d:11},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage.'; },
+  play:function(c,t){ shot(t,num(c,'d')); }});
+
+C({id:'plateup', name:'Plate Up', cls:'boiler', type:'skill', rarity:'starter', cost:1, n:{b:6}, u:{b:9},
+  text:function(c){ return 'Gain *'+num(c,'b')+'* Block.'; },
+  play:function(c){ gainBlock(B.p,num(c,'b')); }});
+
+C({id:'stoke', name:'Stoke', cls:'boiler', type:'skill', rarity:'starter', cost:0, n:{h:3,b:3}, u:{h:4,b:5},
+  text:function(c){ return 'Gain *'+num(c,'h')+'* Heat and *'+num(c,'b')+'* Block.'; },
+  play:function(c){ addHeat(num(c,'h')); gainBlock(B.p,num(c,'b')); }});
+
+C({id:'heave', name:'Heave', cls:'boiler', type:'attack', rarity:'starter', cost:1, targets:'enemy', range:[1,3], n:{d:6}, u:{d:9},
+  text:function(c){ return 'Advance up to *2*, then deal *'+num(c,'d')+'* damage.'; },
+  play:function(c,t){ advance(2); var tt = inRangeD(dist(B.p,t),[1,1])?t:(nearestEnemy()||t); if(dist(B.p,tt)<=1) shot(tt,num(c,'d')); else shot(t,num(c,'d')); }});
+
+C({id:'scattergun', name:'Scattergun', cls:'boiler', type:'attack', rarity:'common', cost:1, targets:'enemy', range:[1,2], n:{d:14}, u:{d:19},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage. Range *1*-*2* only.'; },
+  play:function(c,t){ shot(t,num(c,'d')); fxPuff(unitX(t),laneY()-50,10,P.gold,140); }});
+
+C({id:'flarevent', name:'Flare Vent', cls:'boiler', type:'attack', rarity:'common', cost:1, targets:'enemy', range:[1,3], n:{d:6,b:5}, u:{d:8,b:7},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage. Apply *'+num(c,'b')+'* Cinders. Gain *2* Heat.'; },
+  play:function(c,t){ shot(t,num(c,'d')); if(!t.dead) applyStatus(t,'burn',num(c,'b')); addHeat(2); }});
+
+C({id:'bulwark', name:'Bulwark', cls:'boiler', type:'skill', rarity:'common', cost:1, n:{b:10}, u:{b:14},
+  text:function(c){ return 'Gain *'+num(c,'b')+'* Block.'; },
+  play:function(c){ gainBlock(B.p,num(c,'b')); }});
+
+C({id:'barbplate', name:'Barbed Plate', cls:'boiler', type:'power', rarity:'uncommon', cost:1, n:{r:3}, u:{r:4},
+  text:function(c){ return 'Gain *'+num(c,'r')+'* Barbs.'; },
+  play:function(c){ applyStatus(B.p,'retal',num(c,'r')); }});
+
+C({id:'overpressure', name:'Overpressure', cls:'boiler', type:'attack', rarity:'rare', cost:2, targets:'enemy', range:[1,2], n:{d:4,m:3}, u:{d:5,m:4},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage plus *'+num(c,'m')+'* per Heat. Lose all Heat.'; },
+  play:function(c,t){ var h=B.p.heat; shot(t, num(c,'d') + h*num(c,'m')); B.p.heat=0; fxShake(10); }});
+
+C({id:'grapple', name:'Grapple Line', cls:'boiler', type:'skill', rarity:'common', cost:0, targets:'enemy', range:[2,5], n:{p:1}, u:{p:2},
+  text:function(c){ return 'Drag a foe *2* tiles toward you. Apply *'+num(c,'p')+'* Pinned.'; },
+  play:function(c,t){ pull(t,2); applyStatus(t,'root',num(c,'p')); }});
+
+C({id:'roar', name:'Boiler Roar', cls:'boiler', type:'skill', rarity:'uncommon', cost:1, n:{s:2,b:5}, u:{s:3,b:8},
+  text:function(c){ return 'Apply *'+num(c,'s')+'* Shaken to foes within *3*. Gain *'+num(c,'b')+'* Block and *2* Heat.'; },
+  play:function(c){ var l=foesWithin(3); for(var i=0;i<l.length;i++) applyStatus(l[i],'weak',num(c,'s')); gainBlock(B.p,num(c,'b')); addHeat(2); }});
+
+C({id:'steamdash', name:'Steam Dash', cls:'boiler', type:'skill', rarity:'common', cost:0, n:{dr:1}, u:{dr:2},
+  text:function(c){ return 'Advance up to *3*, vaulting over bodies. Gain *2* Heat. Draw *'+num(c,'dr')+'*.'; },
+  play:function(c){ advance(3,true); addHeat(2); drawCards(num(c,'dr')); }});
+
+C({id:'rivetgun', name:'Rivet Gun', cls:'boiler', type:'attack', rarity:'common', cost:1, targets:'enemy', range:[2,4], n:{d:7}, u:{d:9},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage *2* times.'; },
+  play:function(c,t){ shot(t,num(c,'d'),2); }});
+
+C({id:'furnace', name:'Furnace Heart', cls:'boiler', type:'power', rarity:'rare', cost:2, u:{cost:1},
+  text:function(c){ return 'At the start of your turn, gain *2* Heat.'; },
+  play:function(c){ addpw('furnace',1); }});
+
+C({id:'anvildrop', name:'Anvil Drop', cls:'boiler', type:'attack', rarity:'uncommon', cost:2, targets:'enemy', range:[1,1], n:{d:20}, u:{d:26},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage. Apply *1* Reeling.'; },
+  play:function(c,t){ shot(t,num(c,'d')); if(!t.dead) applyStatus(t,'stun',1); fxShake(12); }});
+
+C({id:'coolant', name:'Coolant Flush', cls:'boiler', type:'skill', rarity:'common', cost:0, n:{b:2}, u:{b:3},
+  text:function(c){ return 'Lose all Heat. Gain *'+num(c,'b')+'* Block per Heat lost.'; },
+  play:function(c){ var h=B.p.heat; B.p.heat=0; gainBlock(B.p, h*num(c,'b')); }});
+
+C({id:'slagspray', name:'Slag Spray', cls:'boiler', type:'attack', rarity:'uncommon', cost:1, targets:'none', n:{d:5,b:3}, u:{d:7,b:4},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage and apply *'+num(c,'b')+'* Cinders to foes within *2*.'; },
+  play:function(c){ var l=foesWithin(2); for(var i=0;i<l.length;i++){ dealDmg(B.p,l[i],num(c,'d')); if(!l[i].dead) applyStatus(l[i],'burn',num(c,'b')); } }});
+
+C({id:'bracing', name:'Bracing Stance', cls:'boiler', type:'skill', rarity:'uncommon', cost:1, n:{b:9}, u:{b:13},
+  text:function(c){ return 'Gain *'+num(c,'b')+'* Block. You cannot move this turn.'; },
+  play:function(c){ gainBlock(B.p,num(c,'b')); applyStatus(B.p,'root',1); }});
+
+C({id:'pistonstorm', name:'Piston Storm', cls:'boiler', type:'attack', rarity:'rare', cost:2, targets:'enemy', range:[1,2], n:{d:6,t:3}, u:{d:6,t:4},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage *'+num(c,'t')+'* times.'; },
+  play:function(c,t){ shot(t,num(c,'d'),num(c,'t')); }});
+
+C({id:'heatsink', name:'Heat Sink', cls:'boiler', type:'power', rarity:'uncommon', cost:1, n:{h:3}, u:{h:5},
+  text:function(c){ return 'Your safe Heat limit rises by *'+num(c,'h')+'*.'; },
+  play:function(c){ addpw('sink',num(c,'h')); }});
+
+C({id:'ironlung', name:'Iron Lung', cls:'boiler', type:'skill', rarity:'uncommon', cost:1, n:{h:8}, u:{h:12},
+  text:function(c){ return 'Heal *'+num(c,'h')+'* HP. Gain *3* Heat.'; },
+  play:function(c){ healUnit(B.p,num(c,'h')); addHeat(3); }});
+
+C({id:'crankup', name:'Crank Up', cls:'boiler', type:'skill', rarity:'common', cost:0, n:{h:3}, u:{h:4},
+  text:function(c){ return 'Gain *'+num(c,'h')+'* Heat. Draw *1*.'; },
+  play:function(c){ addHeat(num(c,'h')); drawCards(1); }});
+
+C({id:'chainyank', name:'Chain Yank', cls:'boiler', type:'attack', rarity:'uncommon', cost:1, targets:'enemy', range:[2,4], n:{d:9}, u:{d:13},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage and drag the foe *2* toward you.'; },
+  play:function(c,t){ shot(t,num(c,'d')); if(!t.dead) pull(t,2); }});
+
+C({id:'molten', name:'Molten Core', cls:'boiler', type:'power', rarity:'rare', cost:2, u:{cost:1},
+  text:function(c){ return 'Whenever you gain Heat, deal *1* damage to foes within *2*.'; },
+  play:function(c){ addpw('molten',1); }});
+
+C({id:'tectonic', name:'Tectonic', cls:'boiler', type:'attack', rarity:'rare', cost:3, targets:'none', n:{d:12,v:2}, u:{d:16,v:3},
+  text:function(c){ return 'Deal *'+num(c,'d')+'* damage to ALL foes and apply *'+num(c,'v')+'* Exposed.'; },
+  play:function(c){ var l=alive(); for(var i=0;i<l.length;i++){ dealDmg(B.p,l[i],num(c,'d')); if(!l[i].dead) applyStatus(l[i],'vuln',num(c,'v')); } fxShake(16); }});
+
+C({id:'counterw', name:'Counterweight', cls:'boiler', type:'skill', rarity:'uncommon', cost:1, n:{b:6,d:8}, u:{b:10,d:12},
+  text:function(c){ return 'Gain *'+num(c,'b')+'* Block. The next hit against you this turn takes *'+num(c,'d')+'* back.'; },
+  play:function(c){ gainBlock(B.p,num(c,'b')); B.counter = Math.max(B.counter||0, num(c,'d')); }});
+
+C({id:'vessel', name:'Pressure Vessel', cls:'boiler', type:'power', rarity:'rare', cost:2, u:{cost:1},
+  text:function(c){ return 'Your Heat damage bonus is doubled.'; },
+  play:function(c){ addpw('vessel',1); }});
+
+C({id:'slamshut', name:'Slam Shut', cls:'boiler', type:'skill', rarity:'uncommon', cost:0, exhaust:true, n:{b:12}, u:{b:16},
+  text:function(c){ return 'Gain *'+num(c,'b')+'* Block. Exhaust.'; },
+  play:function(c){ gainBlock(B.p,num(c,'b')); }});
+
+C({id:'closequarters', name:'Close Quarters', cls:'boiler', type:'power', rarity:'rare', cost:1, n:{d:4}, u:{d:6},
+  text:function(c){ return 'Your attacks deal *+'+num(c,'d')+'* damage at range *1*.'; },
+  play:function(c){ addpw('close',num(c,'d')); }});
+
+/* ============================== CURSES =================================== */
+C({id:'gravedust', name:'Grave Dust', cls:'curse', type:'curse', rarity:'curse', cost:0, unplayable:true,
+  text:function(c){ return 'Unplayable. While in hand, take *2* damage at end of turn.'; },
+  play:function(){}});
+C({id:'leadweight', name:'Lead Weight', cls:'curse', type:'curse', rarity:'curse', cost:0, unplayable:true, retain:true,
+  text:function(c){ return 'Unplayable. Retained. You cannot move while this is in hand.'; },
+  play:function(){}});
+C({id:'doubt', name:'Doubt', cls:'curse', type:'curse', rarity:'curse', cost:0, unplayable:true,
+  text:function(c){ return 'Unplayable. Clutters the hand.'; },
+  play:function(){}});
+C({id:'scrap', name:'Scrap', cls:'curse', type:'status', rarity:'curse', cost:0, unplayable:true, ethereal:true,
+  text:function(c){ return 'Unplayable. Exhausts at end of turn.'; },
+  play:function(){}});
+
+/* card pools by class */
+function poolFor(cls, rarity){
+  var o = [];
+  for(var i=0;i<ALL_CARDS.length;i++){
+    var d = ALL_CARDS[i];
+    if(d.rarity!==rarity) continue;
+    if(d.cls!=='any' && d.cls!==cls) continue;
+    o.push(d.id);
+  }
+  return o;
+}
+function starterDeck(cls){
+  var d = [], i;
+  if(cls==='marshal'){
+    for(i=0;i<4;i++) d.push(mkCard('sixgun'));
+    for(i=0;i<3;i++) d.push(mkCard('brace'));
+    d.push(mkCard('reload')); d.push(mkCard('reload'));
+    d.push(mkCard('pistolwhip'));   // the answer to a foe in your face
+    d.push(mkCard('sidestep'));     // ...or the way out of it
+  } else {
+    for(i=0;i<4;i++) d.push(mkCard('pistonjab'));
+    for(i=0;i<3;i++) d.push(mkCard('plateup'));
+    d.push(mkCard('stoke')); d.push(mkCard('stoke'));
+    d.push(mkCard('heave'));
+    d.push(mkCard('sidestep'));
+  }
+  return d;
+}
+/* weighted random card of a run-appropriate rarity */
+function rollCard(cls, biasRare){
+  var r = rnd() + (biasRare||0);
+  var rar = r>0.92 ? 'rare' : (r>0.62 ? 'uncommon' : 'common');
+  var p = poolFor(cls, rar);
+  if(!p.length) p = poolFor(cls,'common');
+  return pick(p);
+}
+function cardRewardChoices(cls, n, biasRare){
+  var out = [], guard = 0;
+  while(out.length<n && guard++<200){
+    var id = rollCard(cls, biasRare);
+    var dup = false;
+    for(var i=0;i<out.length;i++) if(out[i].id===id) dup = true;
+    if(!dup) out.push(mkCard(id));
+  }
+  return out;
+}
+
+/* ==========================================================================
+   TRINKETS
+   ========================================================================== */
+var TRINK = {}, TRINK_LIST = [];
+function TR(o){ TRINK[o.id]=o; TRINK_LIST.push(o); return o; }
+
+TR({id:'casing', name:'Brass Casing', rar:'common', desc:'At the start of each battle, gain 5 Block.',
+  onBattleStart:function(){ gainBlock(B.p,5); }});
+TR({id:'spurs', name:'Worn Spurs', rar:'common', desc:'The first time you move each turn, gain 3 Block.',
+  onTurnStart:function(){ B.spursUsed=false; },
+  onMove:function(){ if(!B.spursUsed){ B.spursUsed=true; gainBlock(B.p,3); } }});
+TR({id:'luckyslug', name:'Lucky Slug', rar:'common', desc:'Draw 1 extra card on the first turn of each battle.',
+  onTurnStart:function(t){ if(t===1) B.drawBonus += 1; },
+  onTurnEnd:function(){ if(B.turn===1) B.drawBonus -= 1; }});
+TR({id:'tinstar', name:'Tin Star', rar:'common', desc:'Foes begin each battle with 2 Mark.',
+  onBattleStart:function(){ var l=alive(); for(var i=0;i<l.length;i++) addst(l[i],'mark',2); }});
+TR({id:'tobacco', name:'Dry Tobacco', rar:'common', desc:'Heal 5 HP after each battle.',
+  onBattleWin:function(){ G.hp = Math.min(G.maxHp, G.hp+5); }});
+TR({id:'coat', name:'Buffalo Coat', rar:'common', desc:'Raises your maximum HP by 10.',
+  pickup:function(){ G.maxHp += 10; G.hp += 10; }});
+TR({id:'fang', name:'Snake Fang', rar:'common', desc:'Your Venom applications are increased by 2.',
+  modStatus:function(v,u,k){ return (k==='poison'&&v>0) ? v+2 : v; }});
+TR({id:'railnail', name:'Rail Nail', rar:'common', desc:'Attacks at range 1 deal 3 more damage.',
+  modDamageDealt:function(d,src,tgt){ return (src===B.p && dist(src,tgt)<=1) ? d+3 : d; }});
+TR({id:'whetstone', name:'Whetstone', rar:'common', desc:'Your first attack each turn deals 4 more damage.',
+  modDamageDealt:function(d,src,tgt){ return (src===B.p && B.attacksThisTurn<=1 && !B.whetUsed) ? d+4 : d; },
+  onAttackDealt:function(){ B.whetUsed = true; },
+  onTurnStart:function(){ B.whetUsed = false; }});
+
+TR({id:'ironbit', name:'Iron Bit', rar:'uncommon', desc:'At the start of your turn, if you have no Block, gain 6 Block.',
+  onTurnStart:function(){ if(B.p.block<=0) gainBlock(B.p,6); }});
+TR({id:'coyotetooth', name:'Coyote Tooth', rar:'uncommon', desc:'Whenever you drop a foe, draw 1 card.',
+  onKill:function(){ if(!B.over) drawCards(1); }});
+TR({id:'powderhorn', name:'Powder Horn', rar:'uncommon', desc:'Begin each battle with 2 extra chambers loaded, or 4 Heat.',
+  onBattleStart:function(){ if(G.cls==='marshal'){ B.p.maxChambers+=2; reload(2); } else addHeat(4); }});
+TR({id:'watch', name:'Pocket Watch', rar:'uncommon', desc:'Gain 1 Energy on the first turn of each battle.',
+  onTurnStart:function(t){ if(t===1) B.energy++; }});
+TR({id:'gravemarker', name:'Grave Marker', rar:'uncommon', desc:'Whenever a card is Exhausted, gain 3 Block.',
+  onExhaust:function(){ gainBlock(B.p,3); }});
+TR({id:'boots', name:"Dead Man's Boots", rar:'uncommon', desc:'Whenever you move, deal 2 damage to foes within 1.',
+  onMove:function(){ var l=foesWithin(1); for(var i=0;i<l.length;i++) dealDmg(null,l[i],2,{pure:true}); }});
+TR({id:'feather', name:'Vulture Feather', rar:'uncommon', desc:'At the end of your turn, if no foe is within 2, gain 7 Block.',
+  onTurnEnd:function(){ if(foesWithin(2).length===0){ gainBlock(B.p,7); B.blockKeep=false; } }});
+TR({id:'silverbullet', name:'Silver Bullet', rar:'uncommon', desc:'The first attack each battle deals double damage.',
+  modDamageDealt:function(d,src){ return (src===B.p && !B.silverUsed) ? d*2 : d; },
+  onAttackDealt:function(){ B.silverUsed = true; },
+  onBattleStart:function(){ B.silverUsed = false; }});
+TR({id:'crackedbell', name:'Cracked Bell', rar:'uncommon', desc:'Foes begin each battle with 2 Shaken.',
+  onBattleStart:function(){ var l=alive(); for(var i=0;i<l.length;i++) addst(l[i],'weak',2); }});
+TR({id:'ledger', name:'Company Ledger', rar:'uncommon', desc:'Earn 15 extra gold from each battle.'});
+TR({id:'saltpouch', name:'Salt Pouch', rar:'uncommon', desc:'Curses and debris you draw are Exhausted immediately.',
+  onDraw:function(c){
+    var d = CD(c);
+    if(d.type==='curse' || d.type==='status'){
+      var i = B.hand.indexOf(c);
+      if(i>=0){ B.hand.splice(i,1); exhaustCard(c); drawCards(1); }
+    }
+  }});
+
+TR({id:'chamberheart', name:'Six-Chamber Heart', rar:'rare', desc:'Your cylinder holds 3 more, or you begin battles with 6 Heat.',
+  pickup:function(){ if(G.cls==='marshal') G.maxChambers = (G.maxChambers||6)+3; },
+  onBattleStart:function(){ if(G.cls==='boiler') addHeat(6); else reload(99); }});
+TR({id:'oxspike', name:"The Ox's Spike", rar:'rare', desc:'All your attacks deal 3 more damage.',
+  modDamageDealt:function(d,src){ return src===B.p ? d+3 : d; }});
+TR({id:'ghostiron', name:'Ghost Iron', rar:'rare', desc:'Gain 1 Ghost at the start of each battle.',
+  onBattleStart:function(){ addst(B.p,'dodge',1); }});
+TR({id:'locket', name:"Widow's Locket", rar:'rare', desc:'Gain 10 Block at the start of each battle.',
+  onBattleStart:function(){ gainBlock(B.p,10); }});
+TR({id:'coin', name:"Preacher's Coin", rar:'rare', desc:'Every third card you play each turn, draw 1.',
+  onPlayCard:function(){ if(B.cardsPlayed>0 && B.cardsPlayed%3===0) drawCards(1); }});
+TR({id:'blastcap', name:'Blasting Cap', rar:'rare', desc:'Whenever you reload or gain Heat, deal 3 damage to the nearest foe.',
+  onReload:function(){ var n=nearestEnemy(); if(n) dealDmg(null,n,3,{pure:true}); }});
+TR({id:'whistle', name:'Bone Whistle', rar:'rare', desc:'The first card you play each turn costs 1 less.',
+  modCost:function(cost){ return B.cardsPlayed===0 ? Math.max(0,cost-1) : cost; }});
+TR({id:'longdark', name:'The Long Dark', rar:'rare', desc:'At the end of your turn, apply 1 Exposed to foes within 3.',
+  onTurnEnd:function(){ var l=foesWithin(3); for(var i=0;i<l.length;i++) addst(l[i],'vuln',1); }});
+TR({id:'halo', name:'Rusted Halo', rar:'rare', desc:'Once per run, surviving a killing blow leaves you at 30% HP.'});
+
+/* boss trinkets — always a trade */
+TR({id:'seal', name:"Governor's Seal", rar:'boss', desc:'+1 Max Energy. Lose 12 Max HP.',
+  pickup:function(){ G.maxEnergy++; G.maxHp -= 12; G.hp = Math.min(G.hp, G.maxHp); }});
+TR({id:'twincyl', name:'Twin Cylinders', rar:'boss', desc:'+1 Max Energy. Draw 1 fewer card each turn.',
+  pickup:function(){ G.maxEnergy++; },
+  onTurnStart:function(){ B.drawBonus -= 1; }, onTurnEnd:function(){ B.drawBonus += 1; }});
+TR({id:'bargain', name:"Widow's Bargain", rar:'boss', desc:'+1 Max Energy. A Grave Dust curse joins your deck.',
+  pickup:function(){ G.maxEnergy++; G.deck.push(mkCard('gravedust')); }});
+TR({id:'coupler', name:'Iron Coupler', rar:'boss', desc:'+1 Max Energy. You begin each battle with 2 Cinders.',
+  pickup:function(){ G.maxEnergy++; },
+  onBattleStart:function(){ addst(B.p,'burn',2); }});
+
+function trinketPool(rar){
+  var o = [];
+  for(var i=0;i<TRINK_LIST.length;i++){
+    var t = TRINK_LIST[i];
+    if(t.rar!==rar) continue;
+    if(G.trinkets.indexOf(t.id)>=0) continue;
+    o.push(t.id);
+  }
+  return o;
+}
+function rollTrinket(rar){
+  if(!rar){ var r=rnd(); rar = r>0.85?'rare':(r>0.5?'uncommon':'common'); }
+  var p = trinketPool(rar);
+  if(!p.length) p = trinketPool('common');
+  if(!p.length) p = trinketPool('uncommon');
+  if(!p.length) p = trinketPool('rare');
+  return p.length ? pick(p) : null;
+}
+function giveTrinket(id){
+  if(!id || G.trinkets.indexOf(id)>=0) return;
+  G.trinkets.push(id);
+  var t = TRINK[id];
+  if(t.pickup) t.pickup();
+  G.hp = clamp(G.hp, 1, G.maxHp);
+}
+
+/* ==========================================================================
+   TONICS
+   ========================================================================== */
+var TONIC = {}, TONIC_LIST = [];
+function TN(o){ TONIC[o.id]=o; TONIC_LIST.push(o); return o; }
+TN({id:'redeye', name:'Redeye', desc:'Heal 15 HP.', use:function(){ healUnit(B.p,15); G.hp=B.p.hp; }});
+TN({id:'powder', name:'Powder Draught', desc:'Gain 2 Energy.', use:function(){ B.energy+=2; }});
+TN({id:'steady', name:'Steady Draught', desc:'Gain 14 Block.', use:function(){ gainBlock(B.p,14); }});
+TN({id:'venomv', name:'Snake Venom', desc:'Apply 8 Venom to the nearest foe.', use:function(){ var n=nearestEnemy(); if(n) applyStatus(n,'poison',8); }});
+TN({id:'firewater', name:'Fire Water', desc:'Deal 14 damage to foes within 2.', use:function(){ hitAll(foesWithin(2),14); }});
+TN({id:'ghostdust', name:'Ghost Dust', desc:'Gain 2 Ghost.', use:function(){ applyStatus(B.p,'dodge',2); }});
+TN({id:'bull', name:'Bull Tonic', desc:'Gain 3 Grit.', use:function(){ applyStatus(B.p,'str',3); }});
+TN({id:'catsgrace', name:"Cat's Grace", desc:'Gain 3 Footing.', use:function(){ applyStatus(B.p,'dex',3); }});
+TN({id:'clarity', name:'Clarity', desc:'Draw 3 cards.', use:function(){ drawCards(3); }});
+TN({id:'gunpowder', name:'Gunpowder Tea', desc:'Load your cylinder full, or gain 6 Heat.', use:function(){ if(G.cls==='marshal') reload(99); else addHeat(6); }});
+TN({id:'rattleroil', name:'Rattler Oil', desc:'Apply 3 Exposed to ALL foes.', use:function(){ var l=alive(); for(var i=0;i<l.length;i++) applyStatus(l[i],'vuln',3); }});
+TN({id:'miner', name:"Miner's Tonic", desc:'Gain 22 Block.', use:function(){ gainBlock(B.p,22); }});
+TN({id:'blink', name:'Blink Tonic', desc:'Fall back up to 4 and gain 8 Block.', use:function(){ fallBack(4,true); gainBlock(B.p,8); }});
+TN({id:'reaper', name:"Reaper's Draught", desc:'Deal 28 damage to the nearest foe.', use:function(){ var n=nearestEnemy(); if(n) dealDmg(B.p,n,28,{pure:true}); }});
+function rollTonic(){ return pick(TONIC_LIST).id; }
+function useTonic(i){
+  if(!B || B.phase!=='player' || B.over) return;
+  var id = G.tonics[i]; if(!id) return;
+  G.tonics.splice(i,1);
+  TONIC[id].use();
+  fxText(unitX(B.p), laneY()-210, TONIC[id].name, P.moss, 20);
+  if(!B.over && alive().length===0) B.over='win';
+  if(B.over) finishBattle();
+}
+
+/* ==========================================================================
+   BESTIARY
+   ========================================================================== */
+var FOE = {};
+function F(o){ FOE[o.id]=o; return o; }
+function atk(name,dmg,rng,step,hits,on){ return {kind:'attack',name:name,dmg:dmg,rng:rng,step:step||0,hits:hits||1,on:on}; }
+function def(name,block,on){ return {kind:'defend',name:name,block:block,on:on}; }
+function act(name,on,icon){ return {kind:'act',name:name,on:on,icon:icon||'buff'}; }
+function mv(name,on){ return {kind:'move',name:name,on:on}; }
+function pullPlayer(e,n){
+  var d = sign(e.pos - B.p.pos); if(d===0) return;
+  for(var i=0;i<n;i++){
+    var np = B.p.pos + d;
+    if(np<0||np>=LANE||occupied(np)) break;
+    B.p.pos = np;
+  }
+  fxText(unitX(B.p), laneY()-170, 'HAULED IN', P.rust, 18);
+}
+function pushPlayer(e,n){
+  var d = -sign(e.pos - B.p.pos) || 1;
+  for(var i=0;i<n;i++){
+    var np = B.p.pos + d;
+    if(np<0||np>=LANE||occupied(np)) break;
+    B.p.pos = np;
+  }
+}
+function spawnFoe(id, near){
+  if(alive().length >= 5) return null;
+  var order = [];
+  for(var i=0;i<LANE;i++) order.push(i);
+  order.sort(function(a,b){ return Math.abs(a-near)-Math.abs(b-near); });
+  for(var i=0;i<order.length;i++){
+    if(!occupied(order[i])){
+      var e = mkFoe(FOE[id], order[i]);
+      B.es.push(e); chooseIntent(e);
+      fxPuff(tileX(e.pos), laneY()-40, 12, P.plum, 110);
+      return e;
+    }
+  }
+  return null;
+}
+function allyHeal(e,n){
+  var l = alive();
+  for(var i=0;i<l.length;i++) if(l[i]!==e) healUnit(l[i],n);
+}
+function buffAllies(e,k,n){
+  var l = alive();
+  for(var i=0;i<l.length;i++) if(l[i]!==e) applyStatus(l[i],k,n);
+}
+
+/* ---------------- ACT I — THE FLATS ---------------- */
+F({id:'coyote', name:'Coyote', art:'beast', col:'#a8814e', act:1, hp:[18,23], scale:0.85,
+  moves:[ atk('Lunge',6,[1,1],3), atk('Snap',8,[1,1],2), mv('Circle',function(e){ stepAway(e,1); gainBlock(e,4); }) ]});
+F({id:'bandit', name:'Rail Bandit', art:'man', col:'#8a6a4a', act:1, hp:[27,33],
+  moves:[ atk('Pistol',7,[2,5],1), def('Take Cover',7), atk('Pistol',7,[2,5],1), atk('Butt Stroke',9,[1,1],2) ]});
+F({id:'crow', name:'Dust Crow', art:'bird', col:'#4a4a52', act:1, hp:[14,19], scale:0.8,
+  moves:[ atk('Peck',5,[1,1],4), act('Screech',function(e){ applyStatus(B.p,'weak',1); buffAllies(e,'str',1); }) ]});
+F({id:'scrapper', name:'Scrapper', art:'man', col:'#9c5a3c', act:1, hp:[31,37],
+  moves:[ atk('Cleaver',10,[1,1],2), act('Work Up',function(e){ applyStatus(e,'str',2); gainBlock(e,4); }), atk('Cleaver',10,[1,1],2) ]});
+F({id:'prospector', name:'Prospector', art:'man', col:'#b08a3a', act:1, hp:[24,29],
+  moves:[ def('Light the Fuse',6), atk('Dynamite',13,[3,8],0,1,function(e){ fxFlash(unitX(B.p),laneY()-50,30,P.rust,0.4); }) ]});
+F({id:'rattler', name:'Rattler', art:'snake', col:'#8f9b52', act:1, hp:[20,26], scale:0.9,
+  moves:[ atk('Fangs',5,[1,1],2,1,function(e){ applyStatus(B.p,'poison',3); }), def('Coil',9) ]});
+
+F({id:'hollis', name:'Ironjaw Hollis', art:'man', col:'#c06a3a', act:1, kind:'elite', hp:[62,70], scale:1.15,
+  moves:[ atk('Scattergun',15,[1,2],2), def('Reload',10,function(e){ applyStatus(e,'str',2); }),
+          atk('Boot',7,[1,1],1,1,function(e){ pushPlayer(e,2); }), atk('Scattergun',15,[1,2],2) ]});
+F({id:'bountyman', name:'The Bounty Man', art:'man', col:'#6f97ab', act:1, kind:'elite', hp:[55,62], scale:1.1,
+  ai:function(e){
+    var d = dist(e,B.p);
+    e.mi++;
+    if(e.mi%3===0) return mv('Reposition', function(x){ stepAway(x,2); gainBlock(x,8); });
+    if(d>=4) return atk('Rifle',14,[4,8],0);
+    return atk('Bayonet',10,[1,2],2);
+  }});
+F({id:'coyoteking', name:'The Coyote King', art:'beast', col:'#d0a050', act:1, kind:'boss', hp:[125,125], scale:1.5,
+  ai:function(e){
+    e.mi++;
+    var d = dist(e,B.p);
+    if(e.mi===1) return act('Howl at the Flats', function(x){ applyStatus(x,'str',2); spawnFoe('coyote', x.pos); });
+    if(e.mi%5===0) return act('Call the Pack', function(x){ spawnFoe('coyote', x.pos); spawnFoe('crow', x.pos); gainBlock(x,12); });
+    if(d>=3) return atk('Pounce',13,[1,3],4);
+    if(e.mi%3===0) return atk('Rend',7,[1,1],0,2);
+    return atk('Maul',15,[1,1],2);
+  }});
+
+/* ---------------- ACT II — THE BONEYARD ---------------- */
+F({id:'bonepicker', name:'Bonepicker', art:'skel', col:'#cfc3a4', act:2, hp:[32,38],
+  moves:[ atk('Claw',10,[1,1],2), def('Rattle',9), atk('Claw',10,[1,1],2) ]});
+F({id:'gravehound', name:'Grave Hound', art:'beast', col:'#6d6357', act:2, hp:[27,32], scale:0.9,
+  moves:[ atk('Lunge',9,[1,1],4), act('Bay',function(e){ applyStatus(B.p,'weak',2); buffAllies(e,'str',1); }), atk('Lunge',9,[1,1],4) ]});
+F({id:'wight', name:'Gallows Wight', art:'skel', col:'#9fb0a0', act:2, hp:[34,41],
+  moves:[ atk('Noose',8,[2,4],1,1,function(e){ pullPlayer(e,2); applyStatus(B.p,'root',1); }), def('Sway',10), atk('Throttle',12,[1,1],1) ]});
+F({id:'crawler', name:'Ash Crawler', art:'spider', col:'#a35a3a', act:2, hp:[40,47],
+  moves:[ atk('Sear',6,[1,2],2,1,function(e){ applyStatus(B.p,'burn',4); }), mv('Skitter',function(e){ stepToward(e,2); gainBlock(e,8); }) ]});
+F({id:'wraith', name:'Dust Wraith', art:'wraith', col:'#8f9fb8', act:2, hp:[29,35],
+  moves:[ atk('Chill',9,[1,3],3,1,function(e){ applyStatus(B.p,'frail',2); }), act('Fade',function(e){ gainBlock(e,10); applyStatus(e,'dodge',1); }) ]});
+F({id:'preacher', name:'Carrion Preacher', art:'man', col:'#7a6a8a', act:2, hp:[44,51],
+  moves:[ act('Sermon',function(e){ applyStatus(B.p,'weak',2); allyHeal(e,8); buffAllies(e,'str',1); }),
+          atk('Rebuke',13,[2,5],1), atk('Rebuke',13,[2,5],1) ]});
+
+F({id:'choirsnake', name:'The Rattler Choir', art:'snake', col:'#c0b24a', act:2, kind:'elite', hp:[85,92], scale:1.25,
+  ai:function(e){
+    e.mi++;
+    if(e.mi%4===0) return act('Chorus', function(x){ applyStatus(B.p,'poison',6); gainBlock(x,12); });
+    if(e.mi%2===0) return atk('Weave',6,[1,3],2,2,function(){ applyStatus(B.p,'poison',3); });
+    return atk('Strike',14,[1,2],3);
+  }});
+F({id:'graveengine', name:'Grave Engine', art:'machine', col:'#7d8a91', act:2, kind:'elite', hp:[95,105], scale:1.3,
+  moves:[ def('Seal Plates',16,function(e){ applyStatus(e,'retal',3); }), atk('Pile Driver',18,[1,1],1),
+          atk('Grinder',7,[1,2],1,3), def('Seal Plates',16) ]});
+F({id:'widow', name:'The Widow', art:'spider', col:'#9b7bb5', act:2, kind:'boss', hp:[175,175], scale:1.55,
+  ai:function(e){
+    e.mi++;
+    var d = dist(e,B.p);
+    if(e.mi===1) return act('Spin the Web', function(x){ applyStatus(B.p,'root',2); gainBlock(x,15); });
+    if(e.mi%6===0) return act('Brood', function(x){ spawnFoe('broodling', x.pos); spawnFoe('broodling', x.pos); });
+    if(e.mi%4===0) return act('Venom Spray', function(x){ applyStatus(B.p,'poison',7); applyStatus(B.p,'frail',2); });
+    if(d>=3) return atk('Silk Line',11,[2,6],1,1,function(x){ pullPlayer(x,3); });
+    return atk('Fangs',10,[1,2],2,2);
+  }});
+F({id:'broodling', name:'Broodling', art:'spider', col:'#b39ac9', act:2, hp:[16,20], scale:0.65,
+  moves:[ atk('Nip',6,[1,1],3,1,function(){ applyStatus(B.p,'poison',2); }) ]});
+
+/* ---------------- ACT III — THE TERMINUS ---------------- */
+F({id:'drone', name:'Tick Drone', art:'machine', col:'#8fa2ac', act:3, hp:[30,36], scale:0.8,
+  moves:[ atk('Spark',9,[2,5],2), mv('Reposition',function(e){ stepAway(e,2); gainBlock(e,6); }) ]});
+F({id:'sentinel', name:'Sentinel', art:'machine', col:'#6f8090', act:3, hp:[46,53],
+  moves:[ def('Interlock',14), atk('Baton',14,[1,2],2), atk('Baton',14,[1,2],2) ]});
+F({id:'railhound', name:'Rail Hound', art:'machine', col:'#a8703a', act:3, hp:[41,48], scale:0.95,
+  moves:[ atk('Charge',16,[1,1],5), mv('Wind Up',function(e){ gainBlock(e,10); applyStatus(e,'str',2); }) ]});
+F({id:'tower', name:'Signal Tower', art:'tower', col:'#b0a070', act:3, hp:[38,45], scale:1.1,
+  init:function(e){ e.st.root = 99; },
+  moves:[ atk('Beam',10,[3,8],0,1,function(){ applyStatus(B.p,'mark',2); }), def('Recharge',12), atk('Beam',10,[3,8],0) ]});
+F({id:'companyman', name:'Company Man', art:'man', col:'#5f7f9f', act:3, hp:[50,58],
+  moves:[ act('Requisition',function(e){ buffAllies(e,'str',2); gainBlock(e,10); }),
+          atk('Service Pistol',12,[2,4],1), atk('Service Pistol',12,[2,4],1) ]});
+F({id:'golem', name:'Ash Golem', art:'golem', col:'#8a6a5a', act:3, hp:[62,70], scale:1.2,
+  moves:[ atk('Slam',20,[1,1],1), def('Settle',18), atk('Sweep',9,[1,2],1,2) ]});
+
+F({id:'foreman', name:'Foreman Culch', art:'man', col:'#c07a3a', act:3, kind:'elite', hp:[115,125], scale:1.25,
+  ai:function(e){
+    e.mi++;
+    if(e.mi%4===0) return act('Whip the Line', function(x){ spawnFoe('drone', x.pos); applyStatus(x,'str',3); });
+    if(e.mi%3===0) return def('Brace the Gang',20, function(x){ buffAllies(x,'dex',2); });
+    return atk('Coupling Rod',17,[1,3],2);
+  }});
+F({id:'ironchoir', name:'The Iron Choir', art:'tower', col:'#9a8fb0', act:3, kind:'elite', hp:[120,130], scale:1.3,
+  ai:function(e){
+    e.mi++;
+    if(e.mi%3===0) return act('Discordance', function(x){ applyStatus(B.p,'frail',3); applyStatus(B.p,'weak',3); gainBlock(x,18); });
+    return atk('Toll',8,[1,8],0,3);
+  }});
+F({id:'ironox', name:'THE IRON OX', art:'loco', col:'#b4552f', act:3, kind:'boss', hp:[260,260], scale:1.8,
+  init:function(e){ e.mem.phase = 1; },
+  ai:function(e){
+    e.mi++;
+    if(e.hp < e.maxHp*0.45 && e.mem.phase===1){
+      e.mem.phase = 2;
+      return act('FULL STEAM', function(x){ applyStatus(x,'str',4); gainBlock(x,30); applyStatus(B.p,'burn',5); });
+    }
+    var d = dist(e,B.p);
+    if(e.mi%5===0) return act('Whistle', function(x){ applyStatus(B.p,'weak',3); applyStatus(B.p,'frail',3); gainBlock(x,20); });
+    if(e.mem.phase===2 && e.mi%3===0) return atk('Steam Scour',9,[1,5],1,3);
+    if(d>=3) return atk('Cowcatcher',20,[1,3],4);
+    return atk('Piston Slam',19,[1,2],2);
+  }});
+
+/* ==========================================================================
+   ENCOUNTERS
+   ========================================================================== */
+var ENC = {
+  1: {
+    easy:[ {name:'Stray Coyotes', foes:['coyote','coyote']},
+           {name:'A Lone Bandit', foes:['bandit']},
+           {name:'Carrion Birds', foes:['crow','crow','crow']},
+           {name:'Rattler in the Ties', foes:['rattler']} ],
+    hard:[ {name:'Bandit Camp', foes:['bandit','bandit']},
+           {name:'Scrapper and Dog', foes:['scrapper','coyote']},
+           {name:'Blasting Crew', foes:['prospector','bandit']},
+           {name:'Snake Nest', foes:['rattler','rattler','crow']},
+           {name:'The Wrecking Party', foes:['scrapper','crow','coyote']} ],
+    elite:[ {name:'Ironjaw Hollis', foes:['hollis']}, {name:'The Bounty Man', foes:['bountyman']} ],
+    boss:[ {name:'The Coyote King', foes:['coyoteking']} ]
+  },
+  2: {
+    easy:[ {name:'Bone Pickings', foes:['bonepicker','bonepicker']},
+           {name:'Hound at the Gate', foes:['gravehound','gravehound']},
+           {name:'Something Fading', foes:['wraith']},
+           {name:'Crawler in the Ash', foes:['crawler']} ],
+    hard:[ {name:'The Gallows Row', foes:['wight','bonepicker']},
+           {name:'Sermon in the Dust', foes:['preacher','gravehound']},
+           {name:'Ashfall', foes:['crawler','wraith']},
+           {name:'Three Wights', foes:['wight','wight']},
+           {name:'The Chanting Dead', foes:['preacher','bonepicker','wraith']} ],
+    elite:[ {name:'The Rattler Choir', foes:['choirsnake']}, {name:'Grave Engine', foes:['graveengine']} ],
+    boss:[ {name:'The Widow of the Boneyard', foes:['widow']} ]
+  },
+  3: {
+    easy:[ {name:'Drone Patrol', foes:['drone','drone']},
+           {name:'A Sentinel', foes:['sentinel']},
+           {name:'Signal Post', foes:['tower','drone']},
+           {name:'Loose Hound', foes:['railhound']} ],
+    hard:[ {name:'Company Detail', foes:['companyman','sentinel']},
+           {name:'The Watch Line', foes:['tower','tower']},
+           {name:'Golem Yard', foes:['golem','drone']},
+           {name:'Rail Kennel', foes:['railhound','railhound']},
+           {name:'Terminus Guard', foes:['sentinel','drone','tower']} ],
+    elite:[ {name:'Foreman Culch', foes:['foreman']}, {name:'The Iron Choir', foes:['ironchoir']} ],
+    boss:[ {name:'THE IRON OX', foes:['ironox']} ]
+  }
+};
+
+/* ==========================================================================
+   RUN + MAP
+   ========================================================================== */
+var ROWS = 15, COLS = 6;
+var ACTNAME = {1:'I — THE FLATS', 2:'II — THE BONEYARD', 3:'III — THE TERMINUS'};
+var ACTSUB = {1:'Sun-bleached track. Coyotes and men who act like them.',
+              2:'Where the line runs through the buried. Nothing here stayed down.',
+              3:'Company iron. The Ox is stoked and waiting at the end of the rail.'};
+
+function genMap(act){
+  var grid = [], nodes = [], r, c;
+  for(r=0;r<ROWS;r++) grid.push(new Array(COLS));
+  function ensure(r,c){
+    if(!grid[r][c]){ grid[r][c] = {r:r,c:c,type:null,to:[],id:nodes.length,done:false}; nodes.push(grid[r][c]); }
+    return grid[r][c];
+  }
+  function edgeExists(r,a,b){
+    var n = grid[r][a];
+    return n && n.to.indexOf(grid[r+1][b] ? grid[r+1][b].id : -1) >= 0;
+  }
+  var paths = 6;
+  for(var p=0;p<paths;p++){
+    var cc = rint(0,COLS-1);
+    var cur = ensure(0,cc);
+    for(r=1;r<ROWS;r++){
+      var nc;
+      if(r===ROWS-1) nc = 2;
+      else {
+        nc = clamp(cur.c + rint(-1,1), 0, COLS-1);
+        // avoid crossing an existing diagonal edge
+        if(nc !== cur.c && grid[r-1][nc] && grid[r][cur.c] && edgeExists(r-1, nc, cur.c)) nc = cur.c;
+      }
+      var nx = ensure(r,nc);
+      if(cur.to.indexOf(nx.id)<0) cur.to.push(nx.id);
+      cur = nx;
+    }
+  }
+  // assign node types
+  for(var i=0;i<nodes.length;i++){
+    var n = nodes[i];
+    if(n.r===0){ n.type='easy'; continue; }
+    if(n.r===ROWS-1){ n.type='boss'; continue; }
+    if(n.r===ROWS-2){ n.type='rest'; continue; }
+    if(n.r===8){ n.type='chest'; continue; }
+    if(n.r<=3){ n.type = chance(0.65) ? 'battle' : 'event'; continue; }
+    var roll = rnd();
+    if(roll<0.36) n.type='battle';
+    else if(roll<0.58) n.type='event';
+    else if(roll<0.74) n.type='elite';
+    else if(roll<0.82) n.type='shop';
+    else n.type='rest';
+  }
+  return {nodes:nodes, act:act, cur:-1, row:-1};
+}
+function mapNodes(){ return G.map.nodes; }
+function availableNodes(){
+  if(G.map.cur<0){
+    var o=[];
+    for(var i=0;i<G.map.nodes.length;i++) if(G.map.nodes[i].r===0) o.push(G.map.nodes[i]);
+    return o;
+  }
+  var cur = G.map.nodes[G.map.cur], out=[];
+  for(var i=0;i<cur.to.length;i++) out.push(G.map.nodes[cur.to[i]]);
+  return out;
+}
+
+/* ---------------------------------------------------------------- new run */
+function newRun(cls, seed){
+  seed = seed===undefined ? (Math.floor(Math.random()*0x7fffffff)) : seed;
+  rng = mkRng(seed);
+  G = {
+    seed:seed, cls:cls,
+    maxHp: cls==='marshal' ? 72 : 84,
+    hp: 0, gold: 99, maxEnergy:3, maxChambers:6,
+    deck: starterDeck(cls), trinkets:[], tonics:[], maxTonics:3,
+    act:1, map:null, haloUsed:false, kills:0, elites:0,
+    removals:0, shopCards:null, hist:[], won:false, turnsTotal:0
+  };
+  G.hp = G.maxHp;
+  giveTrinket(cls==='marshal' ? 'casing' : 'spurs');
+  G.map = genMap(1);
+  SCREEN = 'map';
+  save();
+}
+function nextAct(){
+  G.act++;
+  if(G.act>3){ SCREEN='victory'; G.won=true; save(); return; }
+  G.map = genMap(G.act);
+  SCREEN = 'map';
+  save();
+}
+
+/* -------------------------------------------------------------- node flow */
+function enterNode(n){
+  G.map.cur = n.id; G.map.row = n.r;
+  n.done = true;
+  G.curNode = n;
+  save();
+  if(n.type==='easy' || n.type==='battle'){
+    var pool = ENC[G.act][ n.type==='easy' || n.r<=2 ? 'easy' : 'hard' ];
+    var e = pick(pool);
+    startBattle({name:e.name, foes:e.foes.slice(), tier: n.r<=2?'easy':'hard'});
+  } else if(n.type==='elite'){
+    var e2 = pick(ENC[G.act].elite);
+    startBattle({name:e2.name, foes:e2.foes.slice(), tier:'elite'});
+  } else if(n.type==='boss'){
+    var e3 = pick(ENC[G.act].boss);
+    startBattle({name:e3.name, foes:e3.foes.slice(), tier:'boss', cover:2});
+  } else if(n.type==='shop'){
+    openShop();
+  } else if(n.type==='rest'){
+    SCREEN = 'rest'; REST = {done:false};
+  } else if(n.type==='chest'){
+    CHEST = {opts:[rollTrinket(chance(0.5)?'uncommon':'common'), rollTrinket('uncommon'), rollTrinket('rare')], taken:false};
+    CHEST.opts = uniq(CHEST.opts.filter(function(x){return !!x;}));
+    SCREEN = 'chest';
+  } else if(n.type==='event'){
+    startEvent();
+  }
+}
+/* -------------------------------------------------------------- rewards */
+var REWARD = null, REST = null, CHEST = null, SHOP = null, EVT = null, PICK = null;
+function battleReward(){
+  var tier = B.enc.tier || 'easy';
+  var gold = tier==='boss' ? rint(95,120) : tier==='elite' ? rint(45,65) : tier==='hard' ? rint(20,30) : rint(12,20);
+  if(hasTrink('ledger')) gold += 15;
+  G.kills++;
+  if(tier==='elite') G.elites++;
+  var items = [];
+  items.push({k:'gold', v:gold});
+  var bias = tier==='elite' ? 0.12 : (tier==='boss' ? 0.2 : 0);
+  items.push({k:'cards', v:cardRewardChoices(G.cls, 3, bias)});
+  var pchance = tier==='easy'?0.35:(tier==='hard'?0.45:0.7);
+  if(chance(pchance) && G.tonics.length < G.maxTonics) items.push({k:'tonic', v:rollTonic()});
+  if(tier==='elite'){ var t=rollTrinket(); if(t) items.push({k:'trinket', v:t}); }
+  if(tier==='boss'){
+    var bt = trinketPool('boss');
+    if(bt.length) items.push({k:'trinketChoice', v:pickN(bt, Math.min(3,bt.length))});
+  }
+  REWARD = {items:items, taken:[], tier:tier};
+  SCREEN = 'reward';
+  save();
+}
+function takeReward(i){
+  var it = REWARD.items[i];
+  if(!it || REWARD.taken.indexOf(i)>=0) return;
+  if(it.k==='gold'){ G.gold += it.v; REWARD.taken.push(i); }
+  else if(it.k==='tonic'){
+    if(G.tonics.length>=G.maxTonics) return;
+    G.tonics.push(it.v); REWARD.taken.push(i);
+  }
+  else if(it.k==='trinket'){ giveTrinket(it.v); REWARD.taken.push(i); }
+  else if(it.k==='cards'){ REWARD.pickIdx = i; SCREEN='cardpick'; }
+  else if(it.k==='trinketChoice'){ REWARD.pickIdx = i; SCREEN='trinketpick'; }
+  save();
+}
+function leaveReward(){
+  REWARD = null;
+  var n = G.curNode;
+  if(n && n.type==='boss'){ nextAct(); }
+  else SCREEN = 'map';
+  save();
+}
+
+/* ---------------------------------------------------------------- shop */
+function openShop(){
+  var cards = [];
+  for(var i=0;i<5;i++){
+    var id = rollCard(G.cls, i===4?0.25:0);
+    var dup=false;
+    for(var j=0;j<cards.length;j++) if(cards[j].c.id===id) dup=true;
+    if(dup){ i--; continue; }
+    var cd = CARD[id];
+    var price = cd.rarity==='rare'?rint(140,180):cd.rarity==='uncommon'?rint(85,120):rint(45,70);
+    cards.push({c:mkCard(id, chance(0.15)), p:price});
+  }
+  var tr = [];
+  for(var i=0;i<2;i++){
+    var t = rollTrinket();
+    if(t && !tr.some(function(x){return x.t===t;})){
+      var tp = TRINK[t].rar==='rare'?rint(230,300):TRINK[t].rar==='uncommon'?rint(160,210):rint(110,150);
+      tr.push({t:t,p:tp});
+    }
+  }
+  var tn = [];
+  for(var i=0;i<3;i++) tn.push({t:rollTonic(), p:rint(45,75)});
+  SHOP = {cards:cards, trink:tr, tonics:tn, removePrice: 75 + G.removals*25, removed:false};
+  SCREEN = 'shop';
+  save();
+}
+function buyCard(i){
+  var it = SHOP.cards[i];
+  if(!it || it.sold || G.gold < it.p) return;
+  G.gold -= it.p; it.sold = true;
+  G.deck.push(it.c);
+  save();
+}
+function buyTrink(i){
+  var it = SHOP.trink[i];
+  if(!it || it.sold || G.gold < it.p) return;
+  G.gold -= it.p; it.sold = true; giveTrinket(it.t);
+  save();
+}
+function buyTonic(i){
+  var it = SHOP.tonics[i];
+  if(!it || it.sold || G.gold < it.p || G.tonics.length>=G.maxTonics) return;
+  G.gold -= it.p; it.sold = true; G.tonics.push(it.t);
+  save();
+}
+function buyRemoval(){
+  if(SHOP.removed || G.gold < SHOP.removePrice || G.deck.length<=4) return;
+  openPicker('BURN A CARD', G.deck, function(idx){
+    G.gold -= SHOP.removePrice; SHOP.removed = true; G.removals++;
+    G.deck.splice(idx,1);
+    SCREEN = 'shop'; save();
+  }, function(){ SCREEN='shop'; });
+}
+
+/* ---------------------------------------------------------------- rest */
+function doRest(){
+  if(REST.done) return;
+  REST.done = true;
+  var heal = Math.round(G.maxHp*0.32);
+  G.hp = Math.min(G.maxHp, G.hp+heal);
+  REST.msg = 'You sleep by the fire. +'+heal+' HP.';
+  save();
+}
+function doSharpen(){
+  if(REST.done) return;
+  var up = [];
+  for(var i=0;i<G.deck.length;i++) if(!G.deck[i].up && CD(G.deck[i]).rarity!=='curse') up.push(G.deck[i]);
+  if(!up.length){ REST.msg='Nothing left to sharpen.'; return; }
+  openPicker('SHARPEN A CARD', G.deck, function(idx){
+    var c = G.deck[idx];
+    if(c.up || CD(c).rarity==='curse'){ return false; }
+    c.up = true; REST.done = true;
+    REST.msg = cardName(c)+' is honed.';
+    SCREEN = 'rest'; save();
+  }, function(){ SCREEN='rest'; }, function(c){ return !c.up && CD(c).rarity!=='curse'; });
+}
+function doDigIn(){
+  if(REST.done) return;
+  REST.done = true;
+  if(G.tonics.length < G.maxTonics){ var t = rollTonic(); G.tonics.push(t); REST.msg='You turn out your pack: '+TONIC[t].name+'.'; }
+  else { G.gold += 40; REST.msg='No room in the pack. You bury 40 gold worth of nothing, and take it back. +40 gold.'; }
+  save();
+}
+function leaveRest(){ REST=null; SCREEN='map'; save(); }
+
+/* ---------------------------------------------------------------- picker */
+function openPicker(title, cards, cb, cancel, filter){
+  PICK = {title:title, cards:cards, cb:cb, cancel:cancel, filter:filter, scroll:0};
+  SCREEN = 'picker';
+}
+
+/* ---------------------------------------------------------------- events */
+var EVENTS = [
+  {id:'hanged', name:'The Hanged Man', act:0,
+   text:'A body turns slow on a rope slung from the water tower. His boots are good. His pockets are better. Somebody left him as a message, and the message was not for you.',
+   opts:[
+     {t:'Cut him down', d:'Take what he carried.', go:function(){ G.gold += 45; G.deck.push(mkCard('gravedust')); return 'Forty-five in coin, and something that follows you off the gravel. (+45 gold, Grave Dust added to your deck)'; }},
+     {t:'Leave him be', d:'Say the words and walk.', go:function(){ G.hp = Math.min(G.maxHp, G.hp+6); return 'You say what you remember of the words. It is not much, but you walk lighter. (+6 HP)'; }}
+   ]},
+  {id:'salesman', name:'The Snake Oil Man', act:0,
+   text:'A wagon painted with a coiled serpent. The man behind it has too many teeth and all of them are for you. "Two bottles," he says, "and the road stops hurting."',
+   opts:[
+     {t:'Buy two (60 gold)', d:'Requires 60 gold.', avail:function(){ return G.gold>=60; },
+      go:function(){ G.gold-=60; var a=0; for(var i=0;i<2;i++){ if(G.tonics.length<G.maxTonics){ G.tonics.push(rollTonic()); a++; } } return a?('Two bottles, and they even work. (+'+a+' tonic'+(a>1?'s':'')+')'):'Your pack is full. He keeps the coin anyway.'; }},
+     {t:'Take the wagon', d:'He is one man. Lose 9 HP.',
+      go:function(){ G.hp -= 9; G.gold += 70; if(G.tonics.length<G.maxTonics) G.tonics.push(rollTonic()); return 'He fights harder than he looks. You leave with his purse and a bottle. (-9 HP, +70 gold, +1 tonic)'; }},
+     {t:'Walk on', d:'Nothing bought, nothing owed.', go:function(){ return 'The serpent on the wagon watches you the whole way past.'; }}
+   ]},
+  {id:'well', name:'The Dry Well', act:0,
+   text:'Stone lip, no bucket, no rope. You drop a pebble and count. You are still counting.',
+   opts:[
+     {t:'Drink what pools below', d:'A gamble.',
+      go:function(){ if(chance(0.55)){ var h=Math.min(22,G.maxHp-G.hp); G.hp+=h; return 'Cold and clean. (+'+h+' HP)'; } G.hp-=11; return 'Alkali. You spend an hour on your knees. (-11 HP)'; }},
+     {t:'Pay the well (30 gold)', d:'Old habit. Requires 30 gold.', avail:function(){ return G.gold>=30; },
+      go:function(){ G.gold-=30; var t=rollTrinket('common'); giveTrinket(t); return 'Something rattles up the shaft and lands at your boot. ('+(t?TRINK[t].name:'nothing')+')'; }}
+   ]},
+  {id:'handcar', name:'The Abandoned Handcar', act:0,
+   text:'A pump handcar sits on the line, brake set, as if the crew stepped off for a minute in 1871.',
+   opts:[
+     {t:'Ride it a while', d:'Save your legs.', go:function(){ G.gold += 30; G.hp = Math.min(G.maxHp, G.hp+8); return 'You make good time and find coin wedged under the seat. (+30 gold, +8 HP)'; }},
+     {t:'Strip it for parts', d:'Sharpen a card.',
+      go:function(){
+        var opts=[]; for(var i=0;i<G.deck.length;i++) if(!G.deck[i].up && CD(G.deck[i]).rarity!=='curse') opts.push(G.deck[i]);
+        if(!opts.length) return 'Nothing of yours takes an edge.';
+        var c = pick(opts); c.up = true;
+        return 'Good steel in the axle bearings. '+cardName(c)+' is honed.'; }}
+   ]},
+  {id:'tent', name:"The Preacher's Tent", act:0,
+   text:'Canvas gone the color of the ground. Inside, a man who has not had a congregation in a long time, and is very glad to see you.',
+   opts:[
+     {t:'Confess', d:'Burn a card from your deck.',
+      go:function(){ EVT.pickAfter = 'remove'; return null; }},
+     {t:'Tithe (70 gold)', d:'Requires 70 gold.', avail:function(){ return G.gold>=70; },
+      go:function(){ G.gold-=70; G.maxHp+=13; G.hp+=13; return 'He blesses the road, your gun, and your liver. (+13 Max HP)'; }},
+     {t:'Take the collection plate', d:'He will not stop you.',
+      go:function(){ G.gold += 90; G.deck.push(mkCard('doubt')); return 'Ninety in mixed coin. He does not stop you. He does not stop watching, either. (+90 gold, Doubt added to your deck)'; }}
+   ]},
+  {id:'cache', name:'The Buried Cache', act:0,
+   text:'A cairn of rail spikes driven into the hardpan in a shape that means something to somebody. The ground under it is soft.',
+   opts:[
+     {t:'Dig', d:'Costs 8 HP.',
+      go:function(){ G.hp -= 8; var t=rollTrinket('uncommon'); giveTrinket(t); return 'Two hours in the sun with your hands. '+(t?TRINK[t].name+' comes up with the dirt.':'Nothing but dirt.')+' (-8 HP)'; }},
+     {t:'Leave it buried', d:'Somebody meant it to stay down.', go:function(){ G.gold+=15; return 'You take the spikes instead. Iron is iron. (+15 gold)'; }}
+   ]},
+  {id:'whistling', name:'The Whistling Rails', act:0,
+   text:'The line hums. Not wind — the rail itself, singing on a note that sits under your back teeth. There is no train for sixty miles.',
+   opts:[
+     {t:'Put your ear to the iron', d:'Listen properly.',
+      go:function(){ var id = rollCard(G.cls, 0.6); G.deck.push(mkCard(id)); G.hp -= 5; return 'It tells you something about how to hold a thing. (-5 HP, '+CARD[id].name+' added to your deck)'; }},
+     {t:'Stuff your ears and pass', d:'Do not encourage it.', go:function(){ G.gold+=40; return 'You find forty in coin laid out on a tie, in a neat row, pointing the way you came. (+40 gold)'; }}
+   ]},
+  {id:'deadmanhand', name:"Dead Man's Hand", act:0,
+   text:'Four men around a crate, playing cards by lamplight. One of them has been dead since sundown and the others have not remarked on it.',
+   opts:[
+     {t:'Sit in (60 gold)', d:'Requires 60 gold.', avail:function(){ return G.gold>=60; },
+      go:function(){ G.gold-=60; if(chance(0.5)){ G.gold+=170; return 'You take the pot and leave before anyone thinks it over. (+170 gold)'; } return 'The dead man wins with a hand he could not have been dealt. (-60 gold)'; }},
+     {t:'Fold and drink', d:'Rest a while.', go:function(){ G.hp=Math.min(G.maxHp,G.hp+10); return 'The whiskey is bad and the company is worse, but you sleep. (+10 HP)'; }}
+   ]},
+  {id:'ashstorm', name:'The Ash Storm', act:0,
+   text:'It comes up the line like a wall the color of a bad bruise. You have about ninety seconds to decide.',
+   opts:[
+     {t:'Push through it', d:'Costs HP.',
+      go:function(){ G.hp -= 13; var a=0; for(var i=0;i<2;i++) if(G.tonics.length<G.maxTonics){ G.tonics.push(rollTonic()); a++; }
+        return 'You come out the far side scoured raw, holding what the storm took off somebody else. (-13 HP, +'+a+' tonic'+(a===1?'':'s')+')'; }},
+     {t:'Shelter under the trestle', d:'Wait it out.', go:function(){ G.hp=Math.min(G.maxHp,G.hp+12); return 'Six hours in the dark listening to the world sand itself down. You sleep some. (+12 HP)'; }}
+   ]},
+  {id:'sump', name:'The Sump', act:0,
+   text:'Black water in a cut beside the grade, skinned over with something that catches the light like oil and moves like it is thinking.',
+   opts:[
+     {t:'Wash your iron in it', d:'Transform a card.',
+      go:function(){ EVT.pickAfter = 'transform'; return null; }},
+     {t:'Drink', d:'You have had worse.',
+      go:function(){ G.maxHp+=8; G.hp = Math.max(1, G.hp-6); return 'It burns going down and keeps burning, and something in you gets harder about it. (+8 Max HP, -6 HP)'; }}
+   ]},
+  {id:'smith', name:'The Wandering Smith', act:0,
+   text:'A mule, a portable forge, and a woman who has not spoken to anyone in eleven days and is not going to start with pleasantries. She looks at your gear and names a price before you speak.',
+   opts:[
+     {t:'Sharpen (80 gold)', d:'Requires 80 gold.', avail:function(){ return G.gold>=80; },
+      go:function(){ EVT.pickAfter='upgrade'; return null; }},
+     {t:'Burn a card (50 gold)', d:'Requires 50 gold.', avail:function(){ return G.gold>=50 && G.deck.length>4; },
+      go:function(){ EVT.pickAfter='removePaid'; return null; }},
+     {t:'Move along', d:'She is already packing.', go:function(){ return 'She is packed and gone before you are out of sight.'; }}
+   ]},
+  {id:'oxshadow', name:"The Ox's Shadow", act:3,
+   text:'The grade ahead is scored with two parallel gouges a yard deep, still warm. Something enormous passed here going the other way, and it was in a hurry.',
+   opts:[
+     {t:'Salvage the wreckage', d:'Costs a fifth of your HP.',
+      go:function(){ var l=Math.round(G.hp*0.2); G.hp-=l; var t=rollTrinket('rare'); giveTrinket(t); return 'You pull '+(t?TRINK[t].name:'nothing')+' out of a boiler plate folded like paper. (-'+l+' HP)'; }},
+     {t:'Follow the gouges back', d:'See what it left.', go:function(){ G.gold+=110; return 'A company paymaster car, on its side, doors sprung. (+110 gold)'; }}
+   ]}
+];
+function startEvent(){
+  var pool = EVENTS.filter(function(e){ return e.act===0 || e.act===G.act; });
+  var seen = G.hist;
+  var fresh = pool.filter(function(e){ return seen.indexOf(e.id)<0; });
+  var ev = pick(fresh.length ? fresh : pool);
+  G.hist.push(ev.id);
+  EVT = {e:ev, result:null, pickAfter:null};
+  SCREEN = 'event';
+}
+function chooseEventOpt(i){
+  var o = EVT.e.opts[i];
+  if(!o || EVT.result) return;
+  if(o.avail && !o.avail()) return;
+  var r = o.go();
+  if(EVT.pickAfter){ resolveEventPick(EVT.pickAfter); return; }
+  EVT.result = r || '...';
+  G.hp = clamp(G.hp, 1, G.maxHp);
+  save();
+}
+function resolveEventPick(kind){
+  if(kind==='remove' || kind==='removePaid'){
+    openPicker('BURN A CARD', G.deck, function(idx){
+      if(kind==='removePaid') G.gold -= 50;
+      G.deck.splice(idx,1);
+      EVT.pickAfter=null; EVT.result = 'It goes in the fire. You do not miss it yet.';
+      SCREEN='event'; save();
+    }, function(){ EVT.pickAfter=null; EVT.result='You change your mind.'; SCREEN='event'; });
+  } else if(kind==='upgrade'){
+    openPicker('SHARPEN A CARD', G.deck, function(idx){
+      var c=G.deck[idx];
+      if(c.up || CD(c).rarity==='curse') return false;
+      G.gold -= 80; c.up = true;
+      EVT.pickAfter=null; EVT.result = cardName(c)+' comes off her stone with a new edge.';
+      SCREEN='event'; save();
+    }, function(){ EVT.pickAfter=null; EVT.result='She shrugs and goes back to the fire.'; SCREEN='event'; },
+      function(c){ return !c.up && CD(c).rarity!=='curse'; });
+  } else if(kind==='transform'){
+    openPicker('DIP A CARD', G.deck, function(idx){
+      var old = G.deck[idx];
+      var id = rollCard(G.cls, 0.15), guard=0;
+      while(id===old.id && guard++<30) id = rollCard(G.cls, 0.15);
+      G.deck.splice(idx,1,mkCard(id));
+      EVT.pickAfter=null; EVT.result = CARD[old.id].name+' comes out of the water as '+CARD[id].name+'.';
+      SCREEN='event'; save();
+    }, function(){ EVT.pickAfter=null; EVT.result='You keep your hands dry.'; SCREEN='event'; });
+  }
+}
+function leaveEvent(){ EVT=null; SCREEN='map'; save(); }
+
+/* ---------------------------------------------------------------- save */
+var SAVEKEY = 'dustline_save_v1';
+var METAKEY = 'dustline_meta_v1';
+var META = {runs:0, wins:0, best:0, seenTitle:false};
+function save(){
+  try {
+    if(G && !G.won && G.hp>0) localStorage.setItem(SAVEKEY, JSON.stringify(G));
+    else localStorage.removeItem(SAVEKEY);
+  } catch(e){}
+}
+function loadSave(){
+  try {
+    var s = localStorage.getItem(SAVEKEY);
+    if(!s) return null;
+    var g = JSON.parse(s);
+    if(!g || !g.deck || !g.map) return null;
+    return g;
+  } catch(e){ return null; }
+}
+function loadMeta(){
+  try { var m = JSON.parse(localStorage.getItem(METAKEY)); if(m) META = m; } catch(e){}
+}
+function saveMeta(){ try{ localStorage.setItem(METAKEY, JSON.stringify(META)); }catch(e){} }
+function clearSave(){ try{ localStorage.removeItem(SAVEKEY); }catch(e){} }
+
+/* ==========================================================================
+   LAYOUT + ART
+   ========================================================================== */
+var LX0 = 148, LSTEP = 123;
+function tileX(i){ return LX0 + i*LSTEP; }
+function laneY(){ return 452; }
+var TT = 0;   // global time
+
+function bgSky(actn){
+  var g;
+  if(actn===1) g = lg(0,0,0,H,[[0,'#3b2b20'],[0.35,'#6b4a2e'],[0.62,'#a06a38'],[0.75,'#c98a45'],[1,'#2a1d14']]);
+  else if(actn===2) g = lg(0,0,0,H,[[0,'#141a1c'],[0.4,'#26302f'],[0.66,'#4a5148'],[0.8,'#6b6350'],[1,'#171310']]);
+  else g = lg(0,0,0,H,[[0,'#1a1418'],[0.38,'#331f24'],[0.64,'#5e2f2c'],[0.78,'#8a4030'],[1,'#150f0d']]);
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+}
+function drawSun(actn){
+  var sx = W*0.72, sy = laneY()-150;
+  ctx.globalAlpha = 0.85;
+  var g = ctx.createRadialGradient(sx,sy,10,sx,sy,180);
+  var c = actn===1 ? '#ffd98a' : actn===2 ? '#cfd6c0' : '#ff9a6a';
+  g.addColorStop(0, c); g.addColorStop(0.25, actn===2?'rgba(190,200,180,.35)':'rgba(255,180,90,.4)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx,sy,180,0,7); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = c; ctx.beginPath(); ctx.arc(sx,sy,34,0,7); ctx.fill();
+}
+function drawMesas(actn){
+  ctx.fillStyle = actn===1 ? 'rgba(70,42,28,.75)' : actn===2 ? 'rgba(38,42,38,.8)' : 'rgba(48,28,26,.85)';
+  var base = laneY()-88;
+  var seed = 7;
+  ctx.beginPath(); ctx.moveTo(0,base);
+  var x = 0;
+  var r2 = mkRng(actn*991+13);
+  while(x < W){
+    var w = 70+r2()*150, h = 30+r2()*90;
+    ctx.lineTo(x, base-h); ctx.lineTo(x+w, base-h*0.9); x += w;
+  }
+  ctx.lineTo(W,base); ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
+  // second, nearer ridge
+  ctx.fillStyle = actn===1 ? 'rgba(48,28,18,.85)' : actn===2 ? 'rgba(26,29,26,.9)' : 'rgba(32,18,18,.9)';
+  ctx.beginPath(); ctx.moveTo(0,base+34);
+  x = -40; var r3 = mkRng(actn*331+5);
+  while(x < W+40){
+    var w2 = 110+r3()*200, h2 = 14+r3()*44;
+    ctx.lineTo(x, base+34-h2); ctx.lineTo(x+w2, base+34-h2*0.7); x += w2;
+  }
+  ctx.lineTo(W,base+40); ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
+}
+function drawRail(){
+  var y = laneY();
+  // ground
+  ctx.fillStyle = 'rgba(28,20,15,.9)';
+  ctx.fillRect(0, y-6, W, 200);
+  var g = lg(0,y-6,0,y+120,[[0,'rgba(70,50,34,.9)'],[1,'rgba(20,14,10,1)']]);
+  ctx.fillStyle = g; ctx.fillRect(0,y-6,W,140);
+  // ties
+  for(var i=-1;i<=LANE;i++){
+    var x = tileX(i);
+    ctx.fillStyle = 'rgba(52,36,24,.95)';
+    ctx.fillRect(x-LSTEP*0.42, y+6, LSTEP*0.84, 13);
+    ctx.fillStyle = 'rgba(24,16,10,.5)';
+    ctx.fillRect(x-LSTEP*0.42, y+17, LSTEP*0.84, 3);
+  }
+  // rails
+  ctx.fillStyle = '#6f5c48'; ctx.fillRect(0, y+2, W, 5);
+  ctx.fillStyle = '#8a745c'; ctx.fillRect(0, y+2, W, 2);
+  ctx.fillStyle = '#5c4a38'; ctx.fillRect(0, y+20, W, 4);
+}
+function drawTiles(){
+  var y = laneY();
+  for(var i=0;i<LANE;i++){
+    var x = tileX(i);
+    // cover markers
+    if(B.cover.indexOf(i)>=0){
+      ctx.fillStyle = 'rgba(120,95,60,.55)';
+      ctx.beginPath();
+      ctx.moveTo(x-40,y+2); ctx.lineTo(x-26,y-26); ctx.lineTo(x+4,y-32); ctx.lineTo(x+28,y-14); ctx.lineTo(x+38,y+2);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle='rgba(200,170,110,.35)'; ctx.lineWidth=2; ctx.stroke();
+      txt('COVER', x, y+38, 'rgba(210,180,120,.6)', 10, 'center');
+    }
+    // tile index dots
+    ctx.fillStyle = 'rgba(255,235,200,.10)';
+    ctx.beginPath(); ctx.arc(x, y+30, 3, 0, 7); ctx.fill();
+  }
+}
+
+/* ------------------------------------------------------------- unit art */
+function shadowEllipse(x,y,w,a){
+  ctx.fillStyle='rgba(0,0,0,'+(a||0.4)+')';
+  ctx.beginPath(); ctx.ellipse(x,y,w,w*0.24,0,0,7); ctx.fill();
+}
+function art_man(x,gy,s,col,face,t){
+  var bob = Math.sin(t*2)*1.5;
+  ctx.save(); ctx.translate(x,gy+bob); ctx.scale(face*s,s);
+  ctx.fillStyle='#1a1210';
+  // legs
+  ctx.fillRect(-9,-30,7,30); ctx.fillRect(4,-30,7,30);
+  // coat
+  ctx.beginPath(); ctx.moveTo(-14,-72); ctx.lineTo(14,-72); ctx.lineTo(17,-24); ctx.lineTo(-16,-24); ctx.closePath();
+  ctx.fillStyle=col; ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(-16,-46,33,5);
+  // arms
+  ctx.fillStyle=col; ctx.fillRect(10,-68,6,26);
+  // head
+  ctx.fillStyle='#2a1e18'; ctx.beginPath(); ctx.arc(2,-80,9,0,7); ctx.fill();
+  // hat
+  ctx.fillStyle='#20160f';
+  ctx.fillRect(-11,-88,26,4);
+  ctx.fillRect(-4,-99,16,12);
+  ctx.restore();
+}
+function art_beast(x,gy,s,col,face,t){
+  var bob = Math.sin(t*3)*2;
+  ctx.save(); ctx.translate(x,gy); ctx.scale(face*s,s);
+  ctx.fillStyle='#1a1210';
+  ctx.fillRect(-20,-22,6,22); ctx.fillRect(-8,-22,6,22); ctx.fillRect(10,-24,6,24); ctx.fillRect(20,-24,6,24);
+  ctx.fillStyle=col;
+  ctx.beginPath(); ctx.ellipse(0,-34+bob*0.3,28,15,0,0,7); ctx.fill();
+  // neck + head
+  ctx.beginPath(); ctx.moveTo(18,-42); ctx.lineTo(38,-52+bob); ctx.lineTo(44,-40+bob); ctx.lineTo(20,-28); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#20160f';
+  ctx.beginPath(); ctx.moveTo(38,-52+bob); ctx.lineTo(34,-62+bob); ctx.lineTo(30,-50+bob); ctx.closePath(); ctx.fill();
+  // tail
+  ctx.strokeStyle=col; ctx.lineWidth=5; ctx.beginPath();
+  ctx.moveTo(-26,-36); ctx.quadraticCurveTo(-42,-40-bob,-40,-20); ctx.stroke();
+  ctx.fillStyle='#f0e0a0'; ctx.beginPath(); ctx.arc(40,-46+bob,2,0,7); ctx.fill();
+  ctx.restore();
+}
+function art_bird(x,gy,s,col,face,t){
+  var fl = Math.sin(t*6)*8;
+  ctx.save(); ctx.translate(x,gy-18); ctx.scale(face*s,s);
+  ctx.fillStyle='#3a2c1e'; ctx.fillRect(-3,-16,3,18); ctx.fillRect(3,-16,3,18);
+  ctx.fillStyle=col;
+  ctx.beginPath(); ctx.ellipse(0,-30,15,20,0,0,7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-4,-40); ctx.lineTo(-26,-46-fl); ctx.lineTo(-8,-26); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.arc(9,-46,9,0,7); ctx.fill();
+  ctx.fillStyle='#c8a24a'; ctx.beginPath(); ctx.moveTo(16,-48); ctx.lineTo(30,-44); ctx.lineTo(16,-41); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#e8d070'; ctx.beginPath(); ctx.arc(12,-50,2,0,7); ctx.fill();
+  ctx.restore();
+}
+function art_snake(x,gy,s,col,face,t){
+  ctx.save(); ctx.translate(x,gy); ctx.scale(face*s,s);
+  ctx.strokeStyle=col; ctx.lineWidth=12; ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(-30,-6);
+  ctx.quadraticCurveTo(-6,-10+Math.sin(t*2)*3, -14,-30);
+  ctx.quadraticCurveTo(-22,-52, 6,-50+Math.sin(t*2.4)*3);
+  ctx.quadraticCurveTo(26,-48, 22,-66);
+  ctx.stroke();
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(24,-72,11,8,0.4,0,7); ctx.fill();
+  ctx.fillStyle='#f0d060'; ctx.beginPath(); ctx.arc(29,-74,2.2,0,7); ctx.fill();
+  ctx.strokeStyle='#e8dcc4'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(-34,-4); ctx.lineTo(-42,-8); ctx.moveTo(-34,-8); ctx.lineTo(-42,-14); ctx.stroke();
+  ctx.lineCap='butt';
+  ctx.restore();
+}
+function art_skel(x,gy,s,col,face,t){
+  var bob = Math.sin(t*1.6)*2;
+  ctx.save(); ctx.translate(x,gy+bob); ctx.scale(face*s,s);
+  ctx.strokeStyle=col; ctx.lineWidth=4; ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(-6,0); ctx.lineTo(-3,-28); ctx.moveTo(7,0); ctx.lineTo(3,-28);
+  ctx.moveTo(0,-28); ctx.lineTo(0,-62);
+  ctx.moveTo(-12,-58); ctx.lineTo(12,-58);
+  ctx.moveTo(-12,-58); ctx.lineTo(-16,-34);
+  ctx.moveTo(12,-58); ctx.lineTo(18,-38);
+  ctx.stroke();
+  for(var i=0;i<4;i++){ ctx.beginPath(); ctx.moveTo(-8,-52+i*7); ctx.lineTo(8,-52+i*7); ctx.stroke(); }
+  ctx.fillStyle=col; ctx.beginPath(); ctx.arc(1,-72,10,0,7); ctx.fill();
+  ctx.fillStyle='#140f0c'; ctx.beginPath(); ctx.arc(-2,-74,3,0,7); ctx.arc(5,-74,3,0,7); ctx.fill();
+  ctx.lineCap='butt';
+  ctx.restore();
+}
+function art_spider(x,gy,s,col,face,t){
+  ctx.save(); ctx.translate(x,gy); ctx.scale(face*s,s);
+  ctx.strokeStyle=col; ctx.lineWidth=4;
+  for(var i=0;i<4;i++){
+    var a = -0.5 - i*0.35, ln = 30+i*4, w = Math.sin(t*3+i)*4;
+    ctx.beginPath(); ctx.moveTo(0,-30);
+    ctx.quadraticCurveTo(Math.cos(a)*ln, -46-w, Math.cos(a)*ln*1.4, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,-30);
+    ctx.quadraticCurveTo(-Math.cos(a)*ln, -46+w, -Math.cos(a)*ln*1.4, 0); ctx.stroke();
+  }
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(-8,-36,20,15,0,0,7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(16,-32,12,10,0,0,7); ctx.fill();
+  ctx.fillStyle='#f0d060';
+  ctx.beginPath(); ctx.arc(20,-36,2.5,0,7); ctx.arc(25,-31,2,0,7); ctx.fill();
+  ctx.restore();
+}
+function art_wraith(x,gy,s,col,face,t){
+  var fl = Math.sin(t*1.7)*5;
+  ctx.save(); ctx.translate(x,gy-10+fl); ctx.scale(face*s,s);
+  ctx.globalAlpha = 0.8;
+  ctx.fillStyle=col;
+  ctx.beginPath();
+  ctx.moveTo(0,-86); ctx.quadraticCurveTo(26,-70,22,-30);
+  ctx.lineTo(16,-6); ctx.lineTo(8,-22); ctx.lineTo(0,-2); ctx.lineTo(-8,-22); ctx.lineTo(-16,-6);
+  ctx.quadraticCurveTo(-26,-70,0,-86);
+  ctx.closePath(); ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#0d0c10'; ctx.beginPath(); ctx.ellipse(0,-70,11,13,0,0,7); ctx.fill();
+  ctx.fillStyle='#cfe0ff'; ctx.beginPath(); ctx.arc(-4,-72,2.5,0,7); ctx.arc(4,-72,2.5,0,7); ctx.fill();
+  ctx.restore();
+}
+function art_machine(x,gy,s,col,face,t){
+  var p = Math.sin(t*4)*3;
+  ctx.save(); ctx.translate(x,gy); ctx.scale(face*s,s);
+  ctx.fillStyle='#221a16'; ctx.fillRect(-16,-22,10,22); ctx.fillRect(6,-22,10,22);
+  ctx.fillStyle=col; ctx.fillRect(-22,-62,44,42);
+  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(-22,-40,44,5);
+  ctx.fillStyle='#2b211c'; ctx.fillRect(16,-58+p,8,20);
+  ctx.fillStyle=col; ctx.fillRect(-14,-74,28,14);
+  ctx.fillStyle='#ff9a4a'; ctx.beginPath(); ctx.arc(4,-67,5,0,7); ctx.fill();
+  ctx.fillStyle='rgba(255,154,74,.25)'; ctx.beginPath(); ctx.arc(4,-67,11,0,7); ctx.fill();
+  ctx.fillStyle='#4a3a30'; ctx.fillRect(-26,-56,6,26);
+  ctx.restore();
+}
+function art_tower(x,gy,s,col,face,t){
+  ctx.save(); ctx.translate(x,gy); ctx.scale(face*s,s);
+  ctx.strokeStyle='#2b211c'; ctx.lineWidth=5;
+  ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(0,-56); ctx.lineTo(16,0); ctx.moveTo(-9,-24); ctx.lineTo(9,-24); ctx.stroke();
+  ctx.fillStyle=col; ctx.fillRect(-14,-96,28,42);
+  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fillRect(-14,-78,28,4);
+  var gl = 0.5+0.5*Math.sin(t*3);
+  ctx.fillStyle='rgba(255,220,120,'+(0.35+gl*0.5)+')';
+  ctx.beginPath(); ctx.arc(0,-84,9,0,7); ctx.fill();
+  ctx.fillStyle='#fff2c0'; ctx.beginPath(); ctx.arc(0,-84,4,0,7); ctx.fill();
+  ctx.restore();
+}
+function art_golem(x,gy,s,col,face,t){
+  var bob=Math.sin(t*1.4)*2;
+  ctx.save(); ctx.translate(x,gy+bob); ctx.scale(face*s,s);
+  ctx.fillStyle='#2a1f18'; ctx.fillRect(-18,-26,14,26); ctx.fillRect(6,-26,14,26);
+  ctx.fillStyle=col;
+  ctx.beginPath(); ctx.moveTo(-26,-72); ctx.lineTo(26,-66); ctx.lineTo(22,-22); ctx.lineTo(-22,-24); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='rgba(255,140,60,.5)';
+  ctx.fillRect(-12,-56,8,8); ctx.fillRect(4,-50,10,6);
+  ctx.fillStyle=col;
+  ctx.fillRect(-38,-64,14,34); ctx.fillRect(24,-60,14,34);
+  ctx.beginPath(); ctx.arc(0,-80,13,0,7); ctx.fill();
+  ctx.fillStyle='#ff8a3a'; ctx.beginPath(); ctx.arc(-4,-82,3,0,7); ctx.arc(5,-82,3,0,7); ctx.fill();
+  ctx.restore();
+}
+function art_loco(x,gy,s,col,face,t){
+  var p = Math.sin(t*3)*4;
+  ctx.save(); ctx.translate(x,gy); ctx.scale(face*s,s);
+  ctx.fillStyle='#191210';
+  for(var i=-1;i<=1;i++){ ctx.beginPath(); ctx.arc(i*22, -14, 13, 0, 7); ctx.fill(); }
+  ctx.fillStyle=col;
+  ctx.fillRect(-44,-58,80,42);
+  ctx.beginPath(); ctx.moveTo(36,-58); ctx.lineTo(54,-40); ctx.lineTo(54,-16); ctx.lineTo(36,-16); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#2a1a14'; ctx.fillRect(-52,-76,26,60);
+  ctx.fillStyle=col; ctx.fillRect(-16,-84,18,28);
+  ctx.beginPath(); ctx.moveTo(-22,-84); ctx.lineTo(4,-84); ctx.lineTo(-2,-96); ctx.lineTo(-16,-96); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='rgba(255,150,60,'+(0.5+0.4*Math.sin(t*5))+')';
+  ctx.beginPath(); ctx.arc(46,-34,9,0,7); ctx.fill();
+  ctx.fillStyle='rgba(220,210,200,.25)';
+  for(var i=0;i<4;i++) { ctx.beginPath(); ctx.arc(-8+Math.sin(t+i)*6, -104-i*16-p, 8+i*4, 0, 7); ctx.fill(); }
+  ctx.fillStyle='#3a2620'; ctx.fillRect(-44,-16,96,6);
+  ctx.restore();
+}
+function art_marshal(x,gy,s,col,face,t){
+  var bob=Math.sin(t*2)*1.5;
+  ctx.save(); ctx.translate(x,gy+bob); ctx.scale(face*s,s);
+  ctx.fillStyle='#241a14'; ctx.fillRect(-10,-32,8,32); ctx.fillRect(3,-32,8,32);
+  ctx.fillStyle='#6b4a30';
+  ctx.beginPath(); ctx.moveTo(-15,-76); ctx.lineTo(15,-76); ctx.lineTo(19,-20); ctx.lineTo(11,-20);
+  ctx.lineTo(8,-46); ctx.lineTo(-8,-46); ctx.lineTo(-11,-20); ctx.lineTo(-19,-20); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#8a6440'; ctx.fillRect(-11,-74,22,30);
+  ctx.fillStyle='#d9a441'; ctx.beginPath(); ctx.arc(-5,-64,3.5,0,7); ctx.fill();
+  ctx.fillStyle='#6b4a30'; ctx.fillRect(11,-72,7,24);
+  ctx.fillStyle='#4a3a2e'; ctx.fillRect(14,-56,16,5);  // revolver
+  ctx.fillStyle='#e0c9a8'; ctx.beginPath(); ctx.arc(1,-86,9.5,0,7); ctx.fill();
+  ctx.fillStyle='#3a2a1e';
+  ctx.beginPath(); ctx.ellipse(1,-94,17,4,0,0,7); ctx.fill();
+  ctx.fillRect(-6,-107,15,14);
+  ctx.restore();
+}
+function art_boiler(x,gy,s,col,face,t){
+  var bob=Math.sin(t*1.8)*1.5, st2=Math.sin(t*4);
+  ctx.save(); ctx.translate(x,gy+bob); ctx.scale(face*s,s);
+  ctx.fillStyle='#241a14'; ctx.fillRect(-12,-30,10,30); ctx.fillRect(4,-30,10,30);
+  ctx.fillStyle='#5a4a3a'; ctx.fillRect(-26,-76,16,40);      // boiler pack
+  ctx.fillStyle='#3a2e24'; ctx.fillRect(-24,-84,6,10);
+  ctx.fillStyle='rgba(220,210,200,.3)';
+  for(var i=0;i<3;i++){ ctx.beginPath(); ctx.arc(-21+Math.sin(t*2+i)*4, -92-i*13, 5+i*3, 0, 7); ctx.fill(); }
+  ctx.fillStyle='#7a5a3a';
+  ctx.beginPath(); ctx.moveTo(-16,-78); ctx.lineTo(18,-78); ctx.lineTo(21,-24); ctx.lineTo(-18,-24); ctx.closePath(); ctx.fill();
+  ctx.fillStyle='#96703f'; ctx.fillRect(-14,-72,28,22);
+  ctx.fillStyle='rgba(255,140,60,'+(0.4+0.3*st2)+')'; ctx.fillRect(-8,-66,16,10);
+  ctx.fillStyle='#7a5a3a'; ctx.fillRect(16,-70,9,28);
+  ctx.fillStyle='#c9b49a'; ctx.beginPath(); ctx.arc(2,-90,10,0,7); ctx.fill();
+  ctx.fillStyle='#2a2018'; ctx.fillRect(-7,-94,20,7);
+  ctx.fillStyle='#8fd0e0'; ctx.beginPath(); ctx.arc(6,-91,3.5,0,7); ctx.fill();
+  ctx.restore();
+}
+var ARTS = {man:art_man, beast:art_beast, bird:art_bird, snake:art_snake, skel:art_skel,
+  spider:art_spider, wraith:art_wraith, machine:art_machine, tower:art_tower, golem:art_golem,
+  loco:art_loco, marshal:art_marshal, boiler:art_boiler};
+
+/* ----------------------------------------------------- unit chrome */
+function drawStatusRow(u, x, y){
+  var keys = [];
+  for(var k in u.st){ if(st(u,k)>0 && k!=='root' || (k==='root'&&st(u,k)>0&&st(u,k)<90)) keys.push(k); }
+  keys.sort();
+  var bw = 30, tot = keys.length*bw;
+  for(var i=0;i<keys.length;i++){
+    var k = keys[i], m = ST[k]; if(!m) continue;
+    var bx = x - tot/2 + i*bw;
+    fillRR(bx, y, bw-3, 20, 4, 'rgba(12,9,7,.85)');
+    strokeRR(bx, y, bw-3, 20, 4, m.c, 1);
+    txtb(m.n.substr(0,1)+st(u,k), bx+(bw-3)/2, y+14, m.c, 12, 'center');
+    hot(bx, y, bw-3, 20, 'status', {k:k,u:u});
+  }
+}
+function drawHpBar(u, x, y, w){
+  var h = 11;
+  fillRR(x-w/2, y, w, h, 3, 'rgba(10,8,6,.9)');
+  var f = clamp(u.hp/u.maxHp,0,1);
+  var col = u===B.p ? '#c8543f' : '#9c3f34';
+  fillRR(x-w/2+1, y+1, Math.max(0,(w-2)*f), h-2, 2, col);
+  strokeRR(x-w/2, y, w, h, 3, 'rgba(0,0,0,.6)', 1);
+  txtb(u.hp+'/'+u.maxHp, x, y+h-1.5, '#f4e8d4', 10, 'center');
+  if(u.block>0){
+    var bx = x-w/2-13;
+    ctx.fillStyle = '#5f8fa8';
+    ctx.beginPath(); ctx.moveTo(bx,y-4); ctx.lineTo(bx+11,y-1); ctx.lineTo(bx+11,y+9); ctx.lineTo(bx+5.5,y+16); ctx.lineTo(bx,y+9); ctx.closePath(); ctx.fill();
+    txtb(u.block, bx+5.5, y+10, '#0e1418', 10, 'center');
+  }
+}
+function intentLabel(m){
+  if(!m) return {icon:'?', s:'', c:P.dim};
+  if(m.kind==='attack') return {icon:'⚔', s:(m.hits>1? m.dmg+'×'+m.hits : ''+m.dmg), c:P.blood};
+  if(m.kind==='defend') return {icon:'▲', s:''+m.block, c:P.sky};
+  if(m.kind==='move')   return {icon:'»', s:'', c:P.dim};
+  return {icon:'✦', s:'', c:P.plum};
+}
+function drawIntent(e, x, y){
+  var m = e.intent; if(!m) return;
+  var L = intentLabel(m);
+  var label = m.name;
+  var w = Math.max(96, measure(label, 13, true)+18);
+  fillRR(x-w/2, y-24, w, 40, 6, 'rgba(14,10,8,.88)');
+  strokeRR(x-w/2, y-24, w, 40, 6, L.c, 1.5);
+  txtb(L.icon+(L.s?' '+L.s:''), x, y-6, L.c, 17, 'center');
+  txt(label, x, y+10, P.dim, 11, 'center');
+  if(m.kind==='attack'){
+    var rr2 = 'rng '+(m.rng[0]===m.rng[1]?m.rng[0]:m.rng[0]+'-'+(m.rng[1]>8?'∞':m.rng[1]));
+    if(m.step) rr2 += ' +'+m.step+'⇢';
+    txt(rr2, x, y+24, P.faint, 10, 'center');
+  }
+  hot(x-w/2, y-24, w, 48, 'intent', e);
+}
+/* threat: paint the tiles the foe's telegraphed attack can hit */
+function drawThreat(){
+  var y = laneY();
+  var live = alive();
+  var threat = {}, soft = {};
+  for(var i=0;i<live.length;i++){
+    var e = live[i], m = e.intent;
+    if(!m || m.kind!=='attack') continue;
+    if(st(e,'stun')>0) continue;
+    var stp = m.step||0;
+    for(var t=0;t<LANE;t++){
+      var d = Math.abs(t-e.pos);
+      if(d>=m.rng[0] && d<=m.rng[1]) threat[t]=1;
+      else {
+        // could it step into range?
+        var reach = false;
+        for(var s2=1;s2<=stp;s2++){
+          var d2 = Math.abs(t-(e.pos+s2)), d3=Math.abs(t-(e.pos-s2));
+          if((d2>=m.rng[0]&&d2<=m.rng[1]) || (d3>=m.rng[0]&&d3<=m.rng[1])) reach=true;
+        }
+        if(reach) soft[t]=1;
+      }
+    }
+  }
+  for(var t=0;t<LANE;t++){
+    var x = tileX(t);
+    if(threat[t]){
+      ctx.fillStyle='rgba(192,72,58,.20)';
+      ctx.fillRect(x-LSTEP/2+2, y-108, LSTEP-4, 112);
+      ctx.fillStyle='rgba(192,72,58,.55)';
+      ctx.fillRect(x-LSTEP/2+2, y+1, LSTEP-4, 4);
+    } else if(soft[t]){
+      ctx.fillStyle='rgba(192,120,58,.09)';
+      ctx.fillRect(x-LSTEP/2+2, y-108, LSTEP-4, 112);
+      ctx.fillStyle='rgba(200,140,70,.35)';
+      for(var d4=0; d4<LSTEP-8; d4+=10) ctx.fillRect(x-LSTEP/2+4+d4, y+1, 5, 3);
+    }
+  }
+  // safe tiles marker
+  for(var t=0;t<LANE;t++){
+    if(!threat[t] && !soft[t]){
+      ctx.fillStyle='rgba(135,164,92,.35)';
+      ctx.fillRect(tileX(t)-LSTEP/2+2, laneY()+1, LSTEP-4, 3);
+    }
+  }
+}
+function drawTargetHint(){
+  if(B.sel<0) return;
+  var c = B.hand[B.sel]; if(!c) return;
+  var d = CD(c);
+  if(d.targets!=='enemy' && d.targets!=='none') return;
+  var y = laneY();
+  if(d.targets==='enemy'){
+    var vt = validTargets(c);
+    for(var i=0;i<vt.length;i++){
+      var x = tileX(vt[i].pos);
+      ctx.strokeStyle='rgba(240,201,107,.9)'; ctx.lineWidth=3;
+      ctx.setLineDash([7,5]);
+      ctx.strokeRect(x-LSTEP/2+4, y-120, LSTEP-8, 126);
+      ctx.setLineDash([]);
+    }
+    var r = cardRange(c);
+    for(var t=0;t<LANE;t++){
+      var dd = Math.abs(t-B.p.pos);
+      if(dd>=r[0] && dd<=r[1] && t!==B.p.pos){
+        ctx.fillStyle='rgba(240,201,107,.13)';
+        ctx.fillRect(tileX(t)-LSTEP/2+2, y-14, LSTEP-4, 16);
+      }
+    }
+  }
+}
+
+/* ==========================================================================
+   CARD RENDERING
+   ========================================================================== */
+var CW = 156, CH = 214;
+function typeColor(t){
+  return t==='attack'?'#8c3a2e' : t==='skill'?'#2f5566' : t==='power'?'#5a3f6b' : '#3a3128';
+}
+function typeEdge(t){
+  return t==='attack'?'#d4694f' : t==='skill'?'#6fa6c0' : t==='power'?'#b18ccc' : '#6b5947';
+}
+function drawCard(c, x, y, w, h, opt){
+  opt = opt||{};
+  var d = CD(c), sc = w/CW;
+  var playable = opt.playable!==false;
+  ctx.save();
+  ctx.translate(x,y);
+  if(opt.rot) ctx.rotate(opt.rot);
+  ctx.translate(-w/2,-h/2);
+  if(opt.glow){ shadowOn(24, typeEdge(d.type)); }
+  else shadowOn(12,'rgba(0,0,0,.8)');
+  fillRR(0,0,w,h,10*sc, '#1d1611');
+  shadowOff();
+  // art band
+  var g = lg(0,0,0,h,[[0,typeColor(d.type)],[0.42,'#241b15'],[1,'#161009']]);
+  fillRR(3*sc,3*sc,w-6*sc,h-6*sc,8*sc,g);
+  // header
+  ctx.save(); rr(3*sc,3*sc,w-6*sc,h-6*sc,8*sc); ctx.clip();
+  ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fillRect(0,h*0.30,w,h*0.06);
+  // decorative silhouette
+  ctx.globalAlpha=0.30;
+  ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.arc(w/2, h*0.30, w*0.28, Math.PI, 0); ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.restore();
+  strokeRR(3*sc,3*sc,w-6*sc,h-6*sc,8*sc, playable?typeEdge(d.type):'#4a3f34', 2*sc);
+
+  // name
+  var nm = cardName(c);
+  var ns = 15*sc;
+  while(measure(nm, ns, true) > w-30*sc && ns>9) ns -= 0.5;
+  txtb(nm, w/2, 24*sc, c.up?P.gold:P.ink, ns, 'center');
+  // type + range line
+  var sub = d.type.toUpperCase();
+  if(d.range && d.type==='attack'){
+    var r = cardRange(c);
+    sub += '  ·  RNG '+(r[0]===r[1]? r[0] : r[0]+'-'+(r[1]>8?'∞':r[1]));
+  } else if(d.targets==='none'){ sub += '  ·  AREA'; }
+  txt(sub, w/2, h*0.315, 'rgba(240,230,210,.55)', 9.5*sc, 'center');
+
+  // text
+  var body = d.text(c);
+  var ty = h*0.44;
+  var lh = 15.5*sc;
+  var lines2 = wrapKeepMarks(body, w-24*sc, 11.5*sc);
+  for(var i=0;i<lines2.length;i++) drawRichLine(lines2[i], w/2, ty+i*lh, 11.5*sc, playable?'#e6d9c2':'#8f8071');
+  // cost orb
+  var cost = B ? cardCost(c) : (c.up && d.u && d.u.cost!==undefined ? d.u.cost : d.cost);
+  ctx.fillStyle = '#120d0a';
+  ctx.beginPath(); ctx.arc(16*sc,16*sc,14*sc,0,7); ctx.fill();
+  ctx.strokeStyle = (B && cost < ((c.up&&d.u&&d.u.cost!==undefined)?d.u.cost:d.cost)) ? P.moss : P.brass;
+  ctx.lineWidth=2*sc; ctx.stroke();
+  txtb(d.unplayable?'—':cost, 16*sc, 21*sc, P.gold, 16*sc, 'center');
+  // ammo pips
+  if(d.ammo){
+    for(var a=0;a<d.ammo;a++){
+      var px = w-14*sc - a*9*sc;
+      ctx.fillStyle = (B && G.cls==='marshal' && chambers()<d.ammo) ? '#5a4030' : '#e0b060';
+      ctx.beginPath(); ctx.arc(px, 16*sc, 3.2*sc, 0, 7); ctx.fill();
+    }
+  }
+  if(d.exhaust) txt('EXHAUST', w/2, h-10*sc, 'rgba(200,120,90,.75)', 9.5*sc, 'center');
+  else if(d.innate) txt('INNATE', w/2, h-10*sc, 'rgba(140,190,140,.7)', 9.5*sc, 'center');
+  else if(d.retain) txt('RETAIN', w/2, h-10*sc, 'rgba(140,170,200,.7)', 9.5*sc, 'center');
+  if(!playable){ ctx.fillStyle='rgba(8,6,5,.5)'; rr(3*sc,3*sc,w-6*sc,h-6*sc,8*sc); ctx.fill(); }
+  ctx.restore();
+}
+/* like wrap() but keeps the * markers attached to their words */
+function wrapKeepMarks(s, maxw, size){
+  var words = String(s).split(' '), lines=[], cur='';
+  ctx.font = size+'px Georgia, serif';
+  function vis(t){ return t.replace(/\*/g,''); }
+  for(var i=0;i<words.length;i++){
+    var t = cur ? cur+' '+words[i] : words[i];
+    if(ctx.measureText(vis(t)).width > maxw && cur){ lines.push(cur); cur = words[i]; }
+    else cur = t;
+  }
+  if(cur) lines.push(cur);
+  // balance stray markers per line
+  for(var i=0;i<lines.length;i++){
+    var n = (lines[i].match(/\*/g)||[]).length;
+    if(n%2===1) lines[i] += '*';
+  }
+  return lines;
+}
+
+/* ==========================================================================
+   BATTLE SCREEN
+   ========================================================================== */
+function handLayout(){
+  var n = B.hand.length;
+  if(n===0) return [];
+  var maxW = 980;
+  var step = Math.min(CW+8, maxW/n);
+  var totalW = step*(n-1);
+  var cx = W/2, baseY = H-96;
+  var out = [];
+  for(var i=0;i<n;i++){
+    var t = n===1?0:(i/(n-1)-0.5);
+    var x = cx + (i-(n-1)/2)*step;
+    var y = baseY + Math.abs(t)*Math.abs(t)*46;
+    var rot = t*0.16;
+    out.push({x:x,y:y,rot:rot,i:i});
+  }
+  return out;
+}
+function drawBattle(){
+  bgSky(G.act); drawSun(G.act); drawMesas(G.act); drawRail();
+  drawTiles();
+  drawThreat();
+  drawTargetHint();
+
+  // units
+  var order = alive().slice();
+  order.push(B.p);
+  order.sort(function(a,b){ return a.pos-b.pos; });
+  for(var i=0;i<order.length;i++){
+    var u = order[i];
+    var x = tileX(u.pos), gy = laneY();
+    var s = (u===B.p?1:u.scale) * 1.0;
+    shadowEllipse(x, gy+4, 34*s, 0.45);
+    var face = u===B.p ? (nearestEnemy()? sign(nearestEnemy().pos-u.pos)||1 : 1) : (sign(B.p.pos-u.pos)||-1);
+    var art = ARTS[u===B.p ? G.cls : u.art] || art_man;
+    var flick = u.hitT>0 ? 1 : 0;
+    if(u.hitT>0){ u.hitT -= 1/60; ctx.save(); ctx.globalAlpha=1; }
+    if(flick){ shadowOn(30, '#ff6a4a'); }
+    art(x, gy, s, u===B.p ? P.brass : u.col, face, TT);
+    if(flick){ shadowOff(); ctx.restore(); }
+    if(u!==B.p){
+      drawHpBar(u, x, gy-118, 74*Math.max(1,u.scale));
+      drawStatusRow(u, x, gy-142);
+      drawIntent(u, x, gy-186);
+      var nmw = measure(u.name, 12, true);
+      txt(u.name, x, gy+34, 'rgba(240,230,210,.65)', 12, 'center');
+      hot(x-LSTEP/2, gy-130, LSTEP, 170, 'foe', u);
+    } else {
+      drawHpBar(u, x, gy-126, 86);
+      drawStatusRow(u, x, gy-150);
+    }
+  }
+  drawFX();
+
+  /* ---- HUD ---- */
+  // top bar
+  ctx.fillStyle='rgba(10,8,6,.72)'; ctx.fillRect(0,0,W,54);
+  ctx.fillStyle='rgba(217,164,65,.25)'; ctx.fillRect(0,54,W,2);
+  txtb('ACT '+G.act, 18, 24, P.brass, 15);
+  txt(B.enc.name||'', 18, 43, P.dim, 13);
+  // hp
+  var hx=190, hy=14;
+  fillRR(hx,hy,190,26,5,'rgba(0,0,0,.6)');
+  fillRR(hx+2,hy+2,Math.max(0,186*clamp(B.p.hp/B.p.maxHp,0,1)),22,4,'#a8402f');
+  txtb(B.p.hp+' / '+B.p.maxHp, hx+95, hy+19, P.ink, 14, 'center');
+  // gold
+  ctx.fillStyle=P.gold; ctx.beginPath(); ctx.arc(410,27,8,0,7); ctx.fill();
+  txtb(G.gold, 425, 33, P.gold, 15);
+  // trinkets
+  var tx = 500;
+  for(var i=0;i<G.trinkets.length;i++){
+    var t = TRINK[G.trinkets[i]];
+    var bx = tx + i*30;
+    fillRR(bx,12,26,30,4,'rgba(40,30,22,.9)');
+    strokeRR(bx,12,26,30,4, t.rar==='boss'?P.plum:t.rar==='rare'?P.gold:t.rar==='uncommon'?P.sky:P.faint,1.5);
+    txtb(t.name.substr(0,1), bx+13, 33, P.ink, 15, 'center');
+    hot(bx,12,26,30,'trinket',t);
+  }
+  // tonics
+  for(var i=0;i<G.maxTonics;i++){
+    var bx = W-40-(G.maxTonics-1-i)*46;
+    fillRR(bx-18,10,38,36,6,'rgba(30,22,16,.9)');
+    var tn = G.tonics[i];
+    strokeRR(bx-18,10,38,36,6, tn?P.moss:'rgba(90,75,60,.6)',1.5);
+    if(tn){
+      ctx.fillStyle=P.moss; ctx.beginPath(); ctx.arc(bx+1,32,7,0,7); ctx.fill();
+      ctx.fillStyle='rgba(180,220,140,.5)'; ctx.fillRect(bx-3,16,8,10);
+      hot(bx-18,10,38,36,'tonic',i);
+    }
+  }
+  txt('TONICS', W-40, 60, P.faint, 10, 'right');
+
+  /* ---- hand ---- */
+  var L = handLayout();
+  var hovIdx = -1;
+  for(var i=0;i<L.length;i++){
+    var p = L[i];
+    var px = MX-p.x, py = MY-p.y;
+    if(Math.abs(px)<CW*0.44 && Math.abs(py)<CH*0.5) hovIdx = i;
+  }
+  if(HOVCARD>=0 && HOVCARD<L.length) hovIdx = HOVCARD;
+  for(var i=0;i<L.length;i++){
+    var p = L[i], c = B.hand[i];
+    var sel = (B.sel===i);
+    var hov = (hovIdx===i) || sel;
+    var can = canPlay(c);
+    var yy = p.y - (hov? 74:0);
+    var w = hov? CW*1.06 : CW, h = hov? CH*1.06 : CH;
+    hot(p.x-CW*0.44, p.y-CH*0.5-(hov?74:0), CW*0.88, CH+ (hov?40:0), 'card', i);
+    drawCard(c, p.x, yy, w, h, {rot: hov?0:p.rot, playable:can, glow:sel});
+  }
+  // draw / discard piles
+  fillRR(24,H-92,74,64,8,'rgba(20,15,11,.85)');
+  strokeRR(24,H-92,74,64,8,'rgba(120,95,70,.7)',1.5);
+  txtb(B.draw.length, 61, H-52, P.ink, 22, 'center'); txt('DRAW', 61, H-36, P.faint, 10, 'center');
+  fillRR(W-98,H-92,74,64,8,'rgba(20,15,11,.85)');
+  strokeRR(W-98,H-92,74,64,8,'rgba(120,95,70,.7)',1.5);
+  txtb(B.discard.length, W-61, H-52, P.ink, 22, 'center'); txt('DISCARD', W-61, H-36, P.faint, 10, 'center');
+  if(B.exhaust.length){ txt('exhausted '+B.exhaust.length, W-61, H-14, P.faint, 10, 'center'); }
+
+  // energy
+  var ex=64, ey=H-190;
+  shadowOn(20,'rgba(240,201,107,.5)');
+  ctx.fillStyle='#3a2a14'; ctx.beginPath(); ctx.arc(ex,ey,38,0,7); ctx.fill();
+  shadowOff();
+  ctx.strokeStyle=P.brass; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(ex,ey,38,0,7); ctx.stroke();
+  txtb(B.energy, ex, ey+4, P.gold, 34, 'center');
+  txt('/'+B.maxEnergy, ex, ey+24, P.dim, 13, 'center');
+
+  // class resource
+  if(G.cls==='marshal'){
+    var cxx = ex, cyy = ey+64;
+    txt('CYLINDER', cxx, cyy-16, P.faint, 10, 'center');
+    var mc = B.p.maxChambers, per = Math.min(9, 74/mc);
+    for(var i=0;i<mc;i++){
+      var ang = -Math.PI/2 + i*(Math.PI*2/mc);
+      var px2 = cxx + Math.cos(ang)*22, py2 = cyy + 14 + Math.sin(ang)*22;
+      ctx.beginPath(); ctx.arc(px2,py2,6,0,7);
+      ctx.fillStyle = i<chambers()? '#e6c070' : '#2e2419'; ctx.fill();
+      ctx.strokeStyle='#5a4530'; ctx.lineWidth=1.5; ctx.stroke();
+    }
+    ctx.strokeStyle='rgba(200,170,110,.5)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(cxx,cyy+14,31,0,7); ctx.stroke();
+    txtb(chambers(), cxx, cyy+20, P.ink, 16, 'center');
+  } else {
+    var hx2 = ex-30, hy2 = ey+42;
+    txt('BOILER', ex, hy2-6, P.faint, 10, 'center');
+    fillRR(hx2, hy2, 60, 74, 6, 'rgba(20,14,10,.9)');
+    var frac = clamp(B.p.heat/12,0,1);
+    var hcol = B.p.heat>heatCap() ? '#e0522a' : B.p.heat>=4 ? '#d98a41' : '#8a6a3a';
+    fillRR(hx2+3, hy2+71-68*frac, 54, 68*frac, 4, hcol);
+    // safe line
+    var sy = hy2+71-68*(heatCap()/12);
+    ctx.strokeStyle='rgba(240,201,107,.85)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(hx2,sy); ctx.lineTo(hx2+60,sy); ctx.stroke();
+    strokeRR(hx2, hy2, 60, 74, 6, 'rgba(140,110,80,.8)', 1.5);
+    txtb(B.p.heat, hx2+30, hy2+46, '#1a120c', 22, 'center');
+    txt('+'+heatBonus()+' dmg', ex, hy2+90, P.dim, 11, 'center');
+  }
+
+  // end turn
+  var etw=176, eth=58, etx=W-etw-26, ety=H-190;
+  var canEnd = B.phase==='player' && !B.over;
+  fillRR(etx,ety,etw,eth,10, canEnd? 'rgba(80,40,28,.95)':'rgba(40,32,26,.8)');
+  strokeRR(etx,ety,etw,eth,10, canEnd?P.brass:'rgba(110,90,70,.5)',2);
+  txtb(canEnd?'END TURN':'…', etx+etw/2, ety+37, canEnd?P.gold:P.faint, 21, 'center');
+  if(canEnd) hot(etx,ety,etw,eth,'endturn');
+  txt('TURN '+B.turn, etx+etw/2, ety-10, P.dim, 12, 'center');
+
+  // deck peek button
+  fillRR(W-98, 66, 74, 26, 5, 'rgba(20,15,11,.8)');
+  txt('DECK', W-61, 84, P.dim, 12, 'center');
+  hot(W-98,66,74,26,'viewdeck');
+
+  if(B.phase!=='player' && !B.over){
+    txtb('…', W/2, 120, P.dim, 20, 'center');
+  }
+}
+
+/* ==========================================================================
+   PANELS / SHARED CHROME
+   ========================================================================== */
+function vignette(){
+  var g = ctx.createRadialGradient(W/2,H/2,H*0.35,W/2,H/2,H*0.95);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,.62)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+}
+function panel(x,y,w,h,title){
+  fillRR(x,y,w,h,12,'rgba(24,18,13,.96)');
+  strokeRR(x,y,w,h,12,'rgba(150,116,74,.75)',2);
+  strokeRR(x+5,y+5,w-10,h-10,9,'rgba(150,116,74,.22)',1);
+  if(title){
+    txtb(title, x+w/2, y+34, P.brass, 22, 'center');
+    ctx.fillStyle='rgba(150,116,74,.4)'; ctx.fillRect(x+30,y+46,w-60,1);
+  }
+}
+function button(x,y,w,h,label,id,data,enabled,col){
+  enabled = enabled!==false;
+  fillRR(x,y,w,h,8, enabled?'rgba(62,42,28,.95)':'rgba(34,28,24,.85)');
+  strokeRR(x,y,w,h,8, enabled?(col||P.brass):'rgba(100,84,66,.4)',2);
+  txtb(label, x+w/2, y+h/2+7, enabled?(col||P.gold):'rgba(150,130,110,.5)', 17, 'center');
+  if(enabled && id) hot(x,y,w,h,id,data);
+  return enabled;
+}
+function backdrop(a){ ctx.fillStyle='rgba(6,4,3,'+(a||0.72)+')'; ctx.fillRect(0,0,W,H); }
+function dustBg(){
+  bgSky(G?G.act:1); drawSun(G?G.act:1); drawMesas(G?G.act:1);
+  ctx.fillStyle='rgba(20,14,10,.55)'; ctx.fillRect(0,0,W,H);
+}
+
+/* ==========================================================================
+   TITLE / CLASS SELECT
+   ========================================================================== */
+var TITLET = 0;
+function drawTitle(){
+  bgSky(1); drawSun(1); drawMesas(1);
+  var y = 470;
+  ctx.fillStyle='rgba(24,17,12,.9)'; ctx.fillRect(0,y-6,W,H-y+6);
+  for(var i=-1;i<=LANE;i++){
+    ctx.fillStyle='rgba(52,36,24,.95)';
+    ctx.fillRect(tileX(i)-50, y+6, 100, 13);
+  }
+  ctx.fillStyle='#6f5c48'; ctx.fillRect(0,y+2,W,5);
+  ctx.fillStyle='#5c4a38'; ctx.fillRect(0,y+20,W,4);
+  art_marshal(300, y, 1.4, P.brass, 1, TITLET);
+  art_beast(980, y, 1.1, '#a8814e', -1, TITLET);
+  ctx.fillStyle='rgba(10,7,5,.55)'; ctx.fillRect(0,120,W,220);
+  shadowOn(30,'rgba(0,0,0,.9)');
+  txtb('DUSTLINE', W/2, 250, P.gold, 116, 'center');
+  shadowOff();
+  txt('a duel along a dead rail', W/2, 292, P.dim, 22, 'center');
+  txt('Distance is the whole argument. Step out of reach and let them swing at nothing.', W/2, 322, P.faint, 15, 'center');
+
+  var sv = loadSave();
+  var by = 560;
+  if(sv){
+    button(W/2-320, by, 300, 62, 'CONTINUE  ·  ACT '+sv.act, 'continue');
+    button(W/2+20, by, 300, 62, 'NEW RUN', 'newrun');
+  } else {
+    button(W/2-150, by, 300, 62, 'NEW RUN', 'newrun');
+  }
+  txt('Runs won: '+META.wins+'   ·   Runs walked: '+META.runs, W/2, by+96, P.faint, 13, 'center');
+  txt('mouse to play  ·  1-9 play card  ·  E end turn  ·  D deck  ·  ESC back', W/2, H-24, P.faint, 12, 'center');
+}
+var CLASSES = [
+  {id:'marshal', name:'THE MARSHAL', hp:72, art:'marshal', col:P.brass,
+   blurb:'Six chambers and a long sight-line. Load, mark, and put holes in things from four tiles out. Runs dry if you are careless.',
+   bullets:['Cylinder: attacks spend chambers, Reload refills them','Strong at range 2-6, weak in a knife fight','Mark stacks make every later shot hurt more']},
+  {id:'boiler', name:'THE BOILERMAN', hp:84, art:'boiler', col:'#c9873f',
+   blurb:'A walking pressure vessel. Every point of Heat is damage, right up until it is your damage. Wants to be close and does not mind being hit.',
+   bullets:['Heat: +1 damage per 3 Heat, vents painfully past 6','Strong at range 1-2, hauls foes in with chains','Barbs and Block turn their turn into yours']}
+];
+function drawSelect(){
+  bgSky(1); drawSun(1); drawMesas(1);
+  ctx.fillStyle='rgba(12,9,6,.72)'; ctx.fillRect(0,0,W,H);
+  txtb('WHO WALKS THE LINE', W/2, 78, P.brass, 34, 'center');
+  for(var i=0;i<2;i++){
+    var x = 140 + i*520, y = 130, w = 460, h = 500;
+    var hov = MX>x&&MX<x+w&&MY>y&&MY<y+h;
+    panel(x,y,w,h);
+    if(hov) strokeRR(x,y,w,h,12,P.gold,3);
+    var C2 = CLASSES[i];
+    ARTS[C2.art](x+w/2, y+250, 1.7, C2.col, 1, TT);
+    txtb(C2.name, x+w/2, y+300, P.gold, 27, 'center');
+    txt(C2.hp+' HP', x+w/2, y+324, P.dim, 15, 'center');
+    wrapDraw(C2.blurb, x+w/2, y+356, w-70, 14, P.ink, 'center', 20);
+    for(var k=0;k<C2.bullets.length;k++)
+      txt('· '+C2.bullets[k], x+34, y+436+k*22, P.dim, 13, 'left');
+    hot(x,y,w,h,'pickclass',C2.id);
+  }
+  button(W/2-90, H-72, 180, 46, 'BACK', 'toTitle');
+}
+
+/* ==========================================================================
+   MAP
+   ========================================================================== */
+var MAPSCROLL = 0;
+function nodeXY(n){
+  var x = W/2 - (COLS-1)*104/2 + n.c*104 + ((n.r%2)?18:-8);
+  var y = H - 118 - n.r*76 + MAPSCROLL;
+  return {x:x,y:y};
+}
+function drawNodeIcon(n, x, y, r, active, done){
+  var col = n.type==='elite'? P.blood : n.type==='boss'? '#e05a3a' : n.type==='shop'? P.gold :
+            n.type==='rest'? '#e08a4a' : n.type==='chest'? P.brass : n.type==='event'? P.plum : P.dim;
+  ctx.fillStyle = done? 'rgba(30,24,18,.9)' : 'rgba(18,13,9,.95)';
+  ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+  ctx.strokeStyle = active? P.gold : (done? 'rgba(120,100,80,.6)': col);
+  ctx.lineWidth = active? 3.5 : 2;
+  if(active){ shadowOn(16,P.gold); }
+  ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.stroke();
+  shadowOff();
+  var ic = n.type;
+  ctx.save(); ctx.translate(x,y);
+  var c2 = done? 'rgba(140,120,100,.7)' : col;
+  if(ic==='easy'||ic==='battle'||ic==='elite'||ic==='boss'){
+    var s = ic==='boss'?1.5:(ic==='elite'?1.25:1);
+    ctx.strokeStyle=c2; ctx.lineWidth=2.4*s;
+    ctx.beginPath(); ctx.moveTo(-7*s,7*s); ctx.lineTo(7*s,-7*s); ctx.moveTo(7*s,7*s); ctx.lineTo(-7*s,-7*s); ctx.stroke();
+    if(ic==='elite'||ic==='boss'){ ctx.fillStyle=c2; ctx.beginPath(); ctx.arc(0,-1,3.4*s,0,7); ctx.fill(); }
+  } else if(ic==='shop'){ txtb('$', 0, 7, c2, 22, 'center'); }
+  else if(ic==='rest'){
+    ctx.fillStyle=c2; ctx.beginPath();
+    ctx.moveTo(0,-10); ctx.quadraticCurveTo(7,-2,4,6); ctx.quadraticCurveTo(0,10,-4,6); ctx.quadraticCurveTo(-7,-2,0,-10); ctx.fill();
+  }
+  else if(ic==='chest'){ ctx.fillStyle=c2; ctx.fillRect(-9,-6,18,13); ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(-2,-6,4,13); }
+  else { txtb('?', 0, 8, c2, 24, 'center'); }
+  ctx.restore();
+}
+function drawMap(){
+  dustBg();
+  var nodes = mapNodes();
+  var avail = availableNodes();
+  // edges
+  for(var i=0;i<nodes.length;i++){
+    var n = nodes[i], a = nodeXY(n);
+    for(var j=0;j<n.to.length;j++){
+      var m = nodes[n.to[j]], b = nodeXY(m);
+      var lit = (G.map.cur===n.id) || (n.done && m.done);
+      ctx.strokeStyle = lit? 'rgba(240,201,107,.55)' : 'rgba(150,120,90,.22)';
+      ctx.lineWidth = lit?3:2;
+      ctx.setLineDash([8,7]);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y-22); ctx.lineTo(b.x, b.y+22); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  for(var i=0;i<nodes.length;i++){
+    var n = nodes[i], p = nodeXY(n);
+    if(p.y < 60 || p.y > H-40) continue;
+    var isAvail = avail.indexOf(n)>=0;
+    var r = n.type==='boss'? 32 : (n.type==='elite'?25:21);
+    drawNodeIcon(n, p.x, p.y, r, isAvail, n.done && !isAvail);
+    if(G.map.cur===n.id){
+      ctx.strokeStyle=P.gold; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(p.x,p.y,r+8,0,7); ctx.stroke();
+    }
+    if(isAvail) hot(p.x-r-6, p.y-r-6, r*2+12, r*2+12, 'node', n);
+  }
+  // header
+  ctx.fillStyle='rgba(10,8,6,.85)'; ctx.fillRect(0,0,W,72);
+  ctx.fillStyle='rgba(217,164,65,.3)'; ctx.fillRect(0,72,W,2);
+  txtb('ACT '+ACTNAME[G.act], 22, 32, P.brass, 22);
+  txt(ACTSUB[G.act], 22, 56, P.dim, 13);
+  // hp / gold
+  fillRR(W-330,14,200,26,5,'rgba(0,0,0,.6)');
+  fillRR(W-328,16,Math.max(0,196*clamp(G.hp/G.maxHp,0,1)),22,4,'#a8402f');
+  txtb(G.hp+' / '+G.maxHp, W-230, 33, P.ink, 14, 'center');
+  ctx.fillStyle=P.gold; ctx.beginPath(); ctx.arc(W-104,27,8,0,7); ctx.fill();
+  txtb(G.gold, W-90, 33, P.gold, 15);
+  // trinkets + tonics strip
+  ctx.fillStyle='rgba(10,8,6,.8)'; ctx.fillRect(0,H-46,W,46);
+  for(var i=0;i<G.trinkets.length;i++){
+    var t = TRINK[G.trinkets[i]], bx = 18+i*32;
+    fillRR(bx,H-40,28,32,4,'rgba(40,30,22,.95)');
+    strokeRR(bx,H-40,28,32,4, t.rar==='boss'?P.plum:t.rar==='rare'?P.gold:t.rar==='uncommon'?P.sky:P.faint,1.5);
+    txtb(t.name.substr(0,1), bx+14, H-18, P.ink, 15, 'center');
+    hot(bx,H-40,28,32,'trinket',t);
+  }
+  for(var i=0;i<G.tonics.length;i++){
+    var bx2 = W-60-i*38;
+    fillRR(bx2,H-40,32,32,5,'rgba(30,40,24,.95)');
+    strokeRR(bx2,H-40,32,32,5,P.moss,1.5);
+    txtb(TONIC[G.tonics[i]].name.substr(0,1), bx2+16, H-18, P.moss, 14, 'center');
+    hot(bx2,H-40,32,32,'tonictip',G.tonics[i]);
+  }
+  button(W-180, 84, 156, 34, 'VIEW DECK ('+G.deck.length+')', 'viewdeck');
+  if(avail.length && G.map.cur<0) txt('Choose where the line takes you.', W/2, H-64, P.dim, 15, 'center');
+}
+
+/* ==========================================================================
+   REWARD / PICKERS
+   ========================================================================== */
+function drawReward(){
+  dustBg(); backdrop(0.55);
+  var w=620, h=440, x=W/2-w/2, y=90;
+  panel(x,y,w,h,'SPOILS');
+  var iy = y+70;
+  for(var i=0;i<REWARD.items.length;i++){
+    var it = REWARD.items[i], taken = REWARD.taken.indexOf(i)>=0;
+    var bh = 62;
+    fillRR(x+30, iy, w-60, bh, 8, taken?'rgba(24,20,16,.8)':'rgba(50,36,24,.9)');
+    strokeRR(x+30, iy, w-60, bh, 8, taken?'rgba(90,76,60,.4)':P.brass, 1.6);
+    var label='', sub='';
+    if(it.k==='gold'){ label = it.v+' GOLD'; sub='Coin, dust, and one tooth.'; }
+    else if(it.k==='cards'){ label='ADD A CARD'; sub='Choose one of three.'; }
+    else if(it.k==='tonic'){ label='TONIC — '+TONIC[it.v].name; sub=TONIC[it.v].desc; }
+    else if(it.k==='trinket'){ label='TRINKET — '+TRINK[it.v].name; sub=TRINK[it.v].desc; }
+    else if(it.k==='trinketChoice'){ label='BOSS TRINKET'; sub='Choose one. Each one costs you something.'; }
+    txtb(taken? '— taken —':label, x+52, iy+28, taken?'rgba(150,130,110,.5)':P.gold, 17);
+    txt(sub, x+52, iy+48, taken?'rgba(120,105,90,.4)':P.dim, 12);
+    if(!taken) hot(x+30, iy, w-60, bh, 'reward', i);
+    iy += bh+14;
+  }
+  button(W/2-110, y+h-70, 220, 48, 'MOVE ON', 'leavereward');
+}
+function drawCardPick(){
+  dustBg(); backdrop(0.7);
+  txtb('TAKE ONE', W/2, 100, P.brass, 32, 'center');
+  var cards = REWARD.items[REWARD.pickIdx].v;
+  for(var i=0;i<cards.length;i++){
+    var x = W/2 + (i-(cards.length-1)/2)*230, y = H/2;
+    var hov = Math.abs(MX-x)<CW*0.6 && Math.abs(MY-y)<CH*0.6;
+    drawCard(cards[i], x, y - (hov?12:0), CW*1.24, CH*1.24, {glow:hov});
+    hot(x-CW*0.62, y-CH*0.62, CW*1.24, CH*1.24, 'takecard', i);
+  }
+  button(W/2-110, H-120, 220, 46, 'SKIP', 'skipcard');
+}
+function drawTrinketPick(){
+  dustBg(); backdrop(0.7);
+  txtb('THE COMPANY OFFERS', W/2, 100, P.brass, 32, 'center');
+  txt('Every one of these is a trade.', W/2, 130, P.dim, 15, 'center');
+  var list = REWARD.items[REWARD.pickIdx].v;
+  for(var i=0;i<list.length;i++){
+    var t = TRINK[list[i]];
+    var w=300,h=250,x=W/2+(i-(list.length-1)/2)*330-w/2, y=H/2-h/2;
+    var hov = MX>x&&MX<x+w&&MY>y&&MY<y+h;
+    panel(x,y,w,h);
+    if(hov) strokeRR(x,y,w,h,12,P.gold,3);
+    ctx.fillStyle='rgba(155,123,181,.18)'; ctx.beginPath(); ctx.arc(x+w/2,y+80,44,0,7); ctx.fill();
+    txtb(t.name.substr(0,1), x+w/2, y+94, P.plum, 44, 'center');
+    txtb(t.name, x+w/2, y+150, P.gold, 19, 'center');
+    wrapDraw(t.desc, x+w/2, y+180, w-46, 14, P.ink, 'center', 19);
+    hot(x,y,w,h,'taketrinket',i);
+  }
+}
+function drawPicker(){
+  dustBg(); backdrop(0.82);
+  txtb(PICK.title, W/2, 62, P.brass, 30, 'center');
+  var cw = CW*0.78, ch = CH*0.78;
+  var per = 7, gap = 14;
+  var startY = 110 - PICK.scroll;
+  for(var i=0;i<PICK.cards.length;i++){
+    var col = i%per, row = Math.floor(i/per);
+    var x = W/2 + (col-(per-1)/2)*(cw+gap);
+    var y = startY + row*(ch+gap) + ch/2;
+    if(y < -ch || y > H+ch) continue;
+    var ok = PICK.filter ? PICK.filter(PICK.cards[i]) : true;
+    var hov = Math.abs(MX-x)<cw/2 && Math.abs(MY-y)<ch/2;
+    drawCard(PICK.cards[i], x, y, cw, ch, {glow:hov&&ok, playable:ok});
+    if(ok) hot(x-cw/2, y-ch/2, cw, ch, 'pick', i);
+  }
+  button(W/2-100, H-62, 200, 44, 'CANCEL', 'pickcancel');
+}
+function drawDeckView(){
+  dustBg(); backdrop(0.86);
+  txtb('YOUR DECK  ·  '+G.deck.length+' CARDS', W/2, 58, P.brass, 28, 'center');
+  var cw = CW*0.72, ch = CH*0.72, per = 8, gap = 12;
+  var startY = 100 - DECKSCROLL;
+  var sorted = G.deck.slice().sort(function(a,b){
+    var A=CD(a),Bc=CD(b);
+    if(A.type!==Bc.type) return A.type<Bc.type?-1:1;
+    return A.name<Bc.name?-1:1;
+  });
+  for(var i=0;i<sorted.length;i++){
+    var col = i%per, row = Math.floor(i/per);
+    var x = W/2 + (col-(per-1)/2)*(cw+gap);
+    var y = startY + row*(ch+gap) + ch/2;
+    if(y < -ch || y > H+ch) continue;
+    drawCard(sorted[i], x, y, cw, ch, {});
+  }
+  txt('scroll to see more', W/2, H-40, P.faint, 12, 'center');
+  button(W-160, 40, 130, 38, 'CLOSE', 'closedeck');
+}
+
+/* ==========================================================================
+   SHOP / REST / CHEST / EVENT
+   ========================================================================== */
+function drawShop(){
+  dustBg(); backdrop(0.5);
+  panel(60, 60, W-120, H-140, "THE PEDDLER'S WAGON");
+  txt('"No refunds, no credit, no questions about the provenance."', W/2, 84, P.dim, 13, 'center');
+  ctx.fillStyle=P.gold; ctx.beginPath(); ctx.arc(W-150,92,9,0,7); ctx.fill();
+  txtb(G.gold, W-132, 99, P.gold, 18);
+  var cw = CW*0.86, ch = CH*0.86;
+  for(var i=0;i<SHOP.cards.length;i++){
+    var x = 160 + i*(cw+26) + cw/2, y = 250;
+    var it = SHOP.cards[i];
+    var hov = Math.abs(MX-x)<cw/2 && Math.abs(MY-y)<ch/2;
+    if(it.sold){ ctx.globalAlpha=0.25; }
+    drawCard(it.c, x, y, cw, ch, {glow:hov && !it.sold && G.gold>=it.p});
+    ctx.globalAlpha=1;
+    var afford = G.gold>=it.p && !it.sold;
+    txtb(it.sold? 'SOLD' : it.p+'g', x, y+ch/2+24, it.sold?P.faint:(afford?P.gold:P.blood), 17, 'center');
+    if(!it.sold) hot(x-cw/2, y-ch/2, cw, ch+30, 'buycard', i);
+  }
+  // trinkets
+  for(var i=0;i<SHOP.trink.length;i++){
+    var t = TRINK[SHOP.trink[i].t], x2=200+i*250, y2=430;
+    var hov2 = MX>x2&&MX<x2+220&&MY>y2&&MY<y2+120;
+    fillRR(x2,y2,220,120,8, SHOP.trink[i].sold?'rgba(24,20,16,.7)':'rgba(44,32,22,.95)');
+    strokeRR(x2,y2,220,120,8, hov2&&!SHOP.trink[i].sold?P.gold:'rgba(150,116,74,.6)',1.6);
+    txtb(t.name, x2+110, y2+26, SHOP.trink[i].sold?P.faint:P.gold, 15, 'center');
+    wrapDraw(t.desc, x2+110, y2+48, 196, 11.5, SHOP.trink[i].sold?'rgba(120,105,90,.4)':P.dim, 'center', 15);
+    txtb(SHOP.trink[i].sold?'SOLD':SHOP.trink[i].p+'g', x2+110, y2+110, SHOP.trink[i].sold?P.faint:(G.gold>=SHOP.trink[i].p?P.gold:P.blood), 15, 'center');
+    if(!SHOP.trink[i].sold) hot(x2,y2,220,120,'buytrink',i);
+  }
+  // tonics
+  for(var i=0;i<SHOP.tonics.length;i++){
+    var tn = TONIC[SHOP.tonics[i].t], x3=760+i*150, y3=430;
+    fillRR(x3,y3,136,120,8, SHOP.tonics[i].sold?'rgba(24,20,16,.7)':'rgba(28,40,24,.95)');
+    strokeRR(x3,y3,136,120,8, SHOP.tonics[i].sold?'rgba(90,90,80,.4)':P.moss,1.6);
+    txtb(tn.name, x3+68, y3+24, SHOP.tonics[i].sold?P.faint:P.moss, 13, 'center');
+    wrapDraw(tn.desc, x3+68, y3+46, 120, 11, P.dim, 'center', 14);
+    txtb(SHOP.tonics[i].sold?'SOLD':SHOP.tonics[i].p+'g', x3+68, y3+110, SHOP.tonics[i].sold?P.faint:(G.gold>=SHOP.tonics[i].p?P.gold:P.blood), 15, 'center');
+    if(!SHOP.tonics[i].sold) hot(x3,y3,136,120,'buytonic',i);
+  }
+  var canRem = !SHOP.removed && G.gold>=SHOP.removePrice && G.deck.length>4;
+  button(W/2-200, H-190, 400, 52, SHOP.removed? 'THE FIRE IS OUT' : 'BURN A CARD — '+SHOP.removePrice+'g', 'removal', null, canRem, P.rust);
+  button(W/2-120, H-124, 240, 48, 'LEAVE', 'leaveshop');
+  button(W-230, 96, 150, 32, 'VIEW DECK', 'viewdeck');
+}
+function drawRest(){
+  dustBg(); backdrop(0.55);
+  // campfire
+  var fx2 = W/2, fy = 470;
+  var fl = 0.6+0.4*Math.sin(TT*8);
+  var g = ctx.createRadialGradient(fx2,fy,10,fx2,fy,260);
+  g.addColorStop(0,'rgba(255,170,70,'+(0.45*fl)+')'); g.addColorStop(1,'rgba(255,120,40,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(fx2,fy,260,0,7); ctx.fill();
+  ctx.fillStyle='#3a2a1c';
+  ctx.save(); ctx.translate(fx2,fy); ctx.rotate(0.4); ctx.fillRect(-46,-6,92,11); ctx.rotate(-0.9); ctx.fillRect(-46,-6,92,11); ctx.restore();
+  for(var i=0;i<5;i++){
+    var h2 = 40+i*8, w2 = 26-i*3;
+    ctx.fillStyle = i<2?'rgba(255,220,120,.9)':'rgba(230,120,50,.6)';
+    ctx.beginPath();
+    ctx.moveTo(fx2, fy-h2*fl-i*4);
+    ctx.quadraticCurveTo(fx2+w2, fy-14, fx2, fy-4);
+    ctx.quadraticCurveTo(fx2-w2, fy-14, fx2, fy-h2*fl-i*4);
+    ctx.fill();
+  }
+  panel(W/2-360, 76, 720, 300, 'A FIRE, AND A FEW HOURS');
+  wrapDraw(REST.msg || 'The rail runs on into the dark either way. Nothing is chasing you tonight — not close enough to matter. What you do with the hours is your business.',
+    W/2, 130, 640, 15, P.ink, 'center', 22);
+  var bw=200, by=250;
+  if(!REST.done){
+    button(W/2-330, by, bw, 64, 'REST  (+'+Math.round(G.maxHp*0.32)+' HP)', 'rest');
+    button(W/2-100, by, bw, 64, 'SHARPEN', 'sharpen');
+    button(W/2+130, by, bw, 64, 'DIG IN', 'digin');
+    txt('heal', W/2-330+bw/2, by+82, P.faint, 12, 'center');
+    txt('upgrade a card', W/2-100+bw/2, by+82, P.faint, 12, 'center');
+    txt('find a tonic', W/2+130+bw/2, by+82, P.faint, 12, 'center');
+  }
+  button(W/2-120, H-110, 240, 50, REST.done?'BREAK CAMP':'MOVE ON', 'leaverest');
+  button(W-190, 96, 150, 34, 'VIEW DECK', 'viewdeck');
+}
+function drawChest(){
+  dustBg(); backdrop(0.6);
+  panel(W/2-420, 70, 840, 200, 'A CACHE UNDER THE TIES');
+  wrapDraw('Somebody buried this and did not come back for it. Rail-company oilcloth, wrapped three times. Take one thing; the rest goes back in the ground.',
+    W/2, 124, 740, 15, P.ink, 'center', 22);
+  for(var i=0;i<CHEST.opts.length;i++){
+    var t = TRINK[CHEST.opts[i]];
+    if(!t) continue;
+    var w=290,h=250,x=W/2+(i-(CHEST.opts.length-1)/2)*320-w/2, y=310;
+    var hov = MX>x&&MX<x+w&&MY>y&&MY<y+h;
+    panel(x,y,w,h);
+    if(hov) strokeRR(x,y,w,h,12,P.gold,3);
+    var rc = t.rar==='rare'?P.gold:t.rar==='uncommon'?P.sky:P.faint;
+    ctx.fillStyle='rgba(217,164,65,.13)'; ctx.beginPath(); ctx.arc(x+w/2,y+78,42,0,7); ctx.fill();
+    txtb(t.name.substr(0,1), x+w/2, y+92, rc, 42, 'center');
+    txtb(t.name, x+w/2, y+148, rc, 18, 'center');
+    txt(t.rar.toUpperCase(), x+w/2, y+166, P.faint, 10, 'center');
+    wrapDraw(t.desc, x+w/2, y+192, w-44, 13.5, P.ink, 'center', 18);
+    hot(x,y,w,h,'takechest',i);
+  }
+  button(W/2-110, H-90, 220, 46, 'LEAVE IT', 'leavechest');
+}
+function drawEvent(){
+  dustBg(); backdrop(0.55);
+  var w=860,x=W/2-w/2;
+  panel(x, 60, w, H-160, EVT.e.name.toUpperCase());
+  var ty = 130;
+  ty += wrapDraw(EVT.e.text, W/2, ty, w-120, 16, P.ink, 'center', 25) + 30;
+  if(EVT.result){
+    ctx.fillStyle='rgba(150,116,74,.3)'; ctx.fillRect(x+80,ty-14,w-160,1);
+    ty += wrapDraw(EVT.result, W/2, ty+16, w-140, 16, P.gold, 'center', 25);
+    button(W/2-120, H-170, 240, 52, 'MOVE ON', 'leaveevent');
+  } else {
+    for(var i=0;i<EVT.e.opts.length;i++){
+      var o = EVT.e.opts[i];
+      var can = !o.avail || o.avail();
+      var bh=64, bx=x+70, by2=ty+i*(bh+16), bw2=w-140;
+      var hov = MX>bx&&MX<bx+bw2&&MY>by2&&MY<by2+bh;
+      fillRR(bx,by2,bw2,bh,8, can? (hov?'rgba(74,52,32,.98)':'rgba(48,34,22,.95)') : 'rgba(30,26,22,.8)');
+      strokeRR(bx,by2,bw2,bh,8, can?(hov?P.gold:'rgba(150,116,74,.6)'):'rgba(90,80,70,.35)',1.8);
+      txtb(o.t, bx+22, by2+27, can?P.gold:'rgba(140,124,108,.5)', 17);
+      txt(o.d, bx+22, by2+48, can?P.dim:'rgba(120,108,94,.4)', 12.5);
+      if(can) hot(bx,by2,bw2,bh,'evtopt',i);
+    }
+  }
+}
+/* ==========================================================================
+   END SCREENS
+   ========================================================================== */
+function drawGameOver(){
+  bgSky(G?G.act:1); drawMesas(G?G.act:1);
+  ctx.fillStyle='rgba(8,5,4,.8)'; ctx.fillRect(0,0,W,H);
+  shadowOn(24,'rgba(0,0,0,.9)');
+  txtb('THE LINE ENDS HERE', W/2, 200, P.blood, 62, 'center');
+  shadowOff();
+  txt('Act '+(G?G.act:1)+'  ·  '+(G?G.kills:0)+' fights won  ·  '+(G?G.elites:0)+' elites put down', W/2, 250, P.dim, 18, 'center');
+  txt('The dust gets everything eventually. It is not personal.', W/2, 290, P.faint, 15, 'center');
+  if(G){
+    var y = 350;
+    txt('DECK — '+G.deck.length+' cards   ·   TRINKETS — '+G.trinkets.length, W/2, y, P.dim, 14, 'center');
+    for(var i=0;i<G.trinkets.length;i++){
+      txt(TRINK[G.trinkets[i]].name, W/2, y+28+i*20, P.faint, 13, 'center');
+    }
+  }
+  button(W/2-160, H-160, 320, 60, 'WALK IT AGAIN', 'toTitle');
+}
+function drawVictory(){
+  bgSky(3); drawSun(3); drawMesas(3);
+  ctx.fillStyle='rgba(8,5,4,.62)'; ctx.fillRect(0,0,W,H);
+  art_marshal(W/2, 560, 2.2, P.gold, 1, TT);
+  shadowOn(30,'rgba(240,201,107,.6)');
+  txtb('THE OX IS COLD', W/2, 160, P.gold, 66, 'center');
+  shadowOff();
+  txt('The boiler ticks as it cools. Behind you the whole line is quiet for the first time in eleven years.', W/2, 212, P.ink, 17, 'center');
+  txt('Act 3 cleared  ·  '+(G?G.kills:0)+' fights won  ·  '+(G?G.elites:0)+' elites  ·  seed '+(G?G.seed:0), W/2, 250, P.dim, 15, 'center');
+  button(W/2-160, H-130, 320, 58, 'WALK IT AGAIN', 'toTitle');
+}
+
+/* ==========================================================================
+   TOOLTIP
+   ========================================================================== */
+function drawTooltip(){
+  var h2 = hitAt(MX,MY);
+  if(!h2) return;
+  var title=null, body=null;
+  if(h2.id==='trinket'){ title = h2.data.name; body = h2.data.desc; }
+  else if(h2.id==='status'){ var m=ST[h2.data.k]; if(m){ title=m.n+' '+st(h2.data.u,h2.data.k); body=m.d; } }
+  else if(h2.id==='tonic'){ var t=TONIC[G.tonics[h2.data]]; if(t){ title=t.name; body=t.desc+'   (click to drink)'; } }
+  else if(h2.id==='tonictip'){ var t2=TONIC[h2.data]; if(t2){ title=t2.name; body=t2.desc; } }
+  else if(h2.id==='intent'){
+    var e = h2.data, m2 = e.intent;
+    title = e.name+' — '+(m2?m2.name:'?');
+    if(m2 && m2.kind==='attack'){
+      body = 'Attacks for '+m2.dmg+(m2.hits>1?' ×'+m2.hits:'')+' at range '+m2.rng[0]+'-'+(m2.rng[1]>8?'∞':m2.rng[1])+
+             (m2.step? '. Steps up to '+m2.step+' tiles first.' : '. Cannot move to reach you.');
+    } else if(m2 && m2.kind==='defend') body = 'Gains '+m2.block+' Block.';
+    else body = 'Something other than an attack.';
+  }
+  else if(h2.id==='node'){
+    var n=h2.data;
+    title = n.type==='elite'?'ELITE':n.type==='boss'?'BOSS':n.type==='rest'?'CAMPFIRE':
+            n.type==='shop'?'WAGON':n.type==='chest'?'CACHE':n.type==='event'?'SOMETHING ON THE LINE':'FIGHT';
+    body = n.type==='elite'?'Hard fight. Better spoils, and a trinket.':
+           n.type==='boss'?'The end of this act.':
+           n.type==='rest'?'Heal, sharpen a card, or turn out your pack.':
+           n.type==='shop'?'Buy cards, trinkets, tonics. Burn a card.':
+           n.type==='chest'?'One trinket of three.':
+           n.type==='event'?'No telling.':'A fight for gold and a card.';
+  }
+  if(!title) return;
+  var tw = 300;
+  var lines = wrap(body||'', tw-28, 13);
+  var th = 40 + lines.length*18;
+  var tx2 = clamp(MX+18, 8, W-tw-8), ty2 = clamp(MY-th-12, 8, H-th-8);
+  fillRR(tx2,ty2,tw,th,8,'rgba(14,10,8,.97)');
+  strokeRR(tx2,ty2,tw,th,8,P.brass,1.5);
+  txtb(title, tx2+14, ty2+24, P.gold, 15);
+  for(var i=0;i<lines.length;i++) txt(lines[i], tx2+14, ty2+44+i*18, P.ink, 13);
+}
+
+/* ==========================================================================
+   INPUT
+   ========================================================================== */
+var MX = -999, MY = -999, HOVCARD = -1, DECKSCROLL = 0, PREVSCREEN = 'map';
+function canvasPos(ev){
+  var r = cv.getBoundingClientRect();
+  return { x:(ev.clientX-r.left)*(W/r.width), y:(ev.clientY-r.top)*(H/r.height) };
+}
+function onMove(ev){
+  var p = canvasPos(ev); MX = p.x; MY = p.y;
+}
+function scrollFor(dy){
+  if(SCREEN==='map'){ MAPSCROLL = clamp(MAPSCROLL + dy, 0, Math.max(0, ROWS*76 - (H-200))); }
+  else if(SCREEN==='deckview'){ DECKSCROLL = clamp(DECKSCROLL + dy, 0, Math.max(0, Math.ceil(G.deck.length/8)*(CH*0.72+12) - (H-220))); }
+  else if(SCREEN==='picker'){ PICK.scroll = clamp(PICK.scroll + dy, 0, Math.max(0, Math.ceil(PICK.cards.length/7)*(CH*0.78+14) - (H-220))); }
+}
+function onClick(ev){
+  var p = canvasPos(ev); MX=p.x; MY=p.y;
+  var h2 = hitAt(MX,MY);
+  var id = h2 ? h2.id : null, d = h2 ? h2.data : null;
+
+  if(SCREEN==='title'){
+    if(id==='newrun'){ SCREEN='select'; }
+    else if(id==='continue'){
+      var g = loadSave();
+      if(g){ G=g; rng=mkRng((G.seed+G.kills*77+G.map.cur*13)>>>0); SCREEN='map'; MAPSCROLL=clamp(G.map.row*76-200,0,ROWS*76-(H-200)); }
+    }
+    return;
+  }
+  if(SCREEN==='select'){
+    if(id==='pickclass'){ META.runs++; saveMeta(); newRun(d); MAPSCROLL=0; }
+    else if(id==='toTitle') SCREEN='title';
+    return;
+  }
+  if(SCREEN==='deckview'){ if(id==='closedeck'||!h2) SCREEN=PREVSCREEN; return; }
+  if(id==='viewdeck'){ PREVSCREEN=SCREEN; DECKSCROLL=0; SCREEN='deckview'; return; }
+
+  if(SCREEN==='map'){
+    if(id==='node'){ MAPSCROLL = clamp(MAPSCROLL, 0, ROWS*76); enterNode(d); }
+    return;
+  }
+  if(SCREEN==='battle'){
+    if(B.over || B.phase!=='player') return;
+    if(id==='endturn'){ B.sel=-1; endPlayerTurn(); return; }
+    if(id==='tonic'){ useTonic(d); return; }
+    if(id==='card'){
+      var c = B.hand[d];
+      if(!c) return;
+      if(B.sel===d){ B.sel=-1; return; }
+      if(!canPlay(c)){ B.sel=-1; fxText(W/2, H-330, 'CANNOT PLAY', P.rust, 20); return; }
+      var cd = CD(c);
+      if(cd.targets==='enemy'){
+        var vt = validTargets(c);
+        if(vt.length===1){ playCard(d, vt[0]); B.sel=-1; }
+        else B.sel = d;
+      } else { playCard(d, null); B.sel=-1; }
+      return;
+    }
+    if(id==='foe'){
+      if(B.sel>=0){
+        var c2 = B.hand[B.sel];
+        if(c2 && canPlay(c2) && validTargets(c2).indexOf(d)>=0){ playCard(B.sel, d); }
+        B.sel=-1;
+      }
+      return;
+    }
+    if(!h2) B.sel = -1;
+    return;
+  }
+  if(SCREEN==='reward'){
+    if(id==='reward') takeReward(d);
+    else if(id==='leavereward') leaveReward();
+    return;
+  }
+  if(SCREEN==='cardpick'){
+    if(id==='takecard'){
+      var cs = REWARD.items[REWARD.pickIdx].v;
+      G.deck.push(cs[d]);
+      REWARD.taken.push(REWARD.pickIdx); SCREEN='reward'; save();
+    } else if(id==='skipcard'){ REWARD.taken.push(REWARD.pickIdx); SCREEN='reward'; }
+    return;
+  }
+  if(SCREEN==='trinketpick'){
+    if(id==='taketrinket'){
+      giveTrinket(REWARD.items[REWARD.pickIdx].v[d]);
+      REWARD.taken.push(REWARD.pickIdx); SCREEN='reward'; save();
+    }
+    return;
+  }
+  if(SCREEN==='shop'){
+    if(id==='buycard') buyCard(d);
+    else if(id==='buytrink') buyTrink(d);
+    else if(id==='buytonic') buyTonic(d);
+    else if(id==='removal') buyRemoval();
+    else if(id==='leaveshop'){ SHOP=null; SCREEN='map'; save(); }
+    return;
+  }
+  if(SCREEN==='rest'){
+    if(id==='rest') doRest();
+    else if(id==='sharpen') doSharpen();
+    else if(id==='digin') doDigIn();
+    else if(id==='leaverest') leaveRest();
+    return;
+  }
+  if(SCREEN==='chest'){
+    if(id==='takechest'){ giveTrinket(CHEST.opts[d]); CHEST=null; SCREEN='map'; save(); }
+    else if(id==='leavechest'){ CHEST=null; SCREEN='map'; save(); }
+    return;
+  }
+  if(SCREEN==='event'){
+    if(id==='evtopt') chooseEventOpt(d);
+    else if(id==='leaveevent') leaveEvent();
+    return;
+  }
+  if(SCREEN==='picker'){
+    if(id==='pick'){ var r = PICK.cb(d); if(r!==false) PICK=null; }
+    else if(id==='pickcancel'){ var cb=PICK.cancel; PICK=null; if(cb) cb(); }
+    return;
+  }
+  if(SCREEN==='gameover' || SCREEN==='victory'){
+    if(id==='toTitle'){
+      if(SCREEN==='victory'){ META.wins++; saveMeta(); }
+      clearSave(); G=null; B=null; SCREEN='title';
+    }
+    return;
+  }
+}
+function onKey(ev){
+  var k = ev.key;
+  if(SCREEN==='battle' && B && !B.over && B.phase==='player'){
+    if(k>='1' && k<='9'){
+      var i = parseInt(k,10)-1;
+      var c = B.hand[i];
+      if(c && canPlay(c)){
+        var cd = CD(c);
+        if(cd.targets==='enemy'){
+          var vt = validTargets(c);
+          if(vt.length) playCard(i, vt[0]);
+        } else playCard(i, null);
+        B.sel=-1;
+      }
+      ev.preventDefault(); return;
+    }
+    if(k==='e'||k==='E'||k===' '){ B.sel=-1; endPlayerTurn(); ev.preventDefault(); return; }
+    if(k==='Escape'){ B.sel=-1; return; }
+    if(k==='d'||k==='D'){ PREVSCREEN=SCREEN; DECKSCROLL=0; SCREEN='deckview'; return; }
+    if(k>='a'&&k<='c' && false) return;
+  }
+  if(SCREEN==='deckview' && (k==='Escape'||k==='d'||k==='D')) SCREEN=PREVSCREEN;
+  else if(SCREEN==='map' && (k==='d'||k==='D')){ PREVSCREEN=SCREEN; DECKSCROLL=0; SCREEN='deckview'; }
+  if(k==='ArrowUp') scrollFor(-60);
+  if(k==='ArrowDown') scrollFor(60);
+}
+
+/* ==========================================================================
+   MAIN LOOP
+   ========================================================================== */
+function drawFrame(dt){
+  HOT.length = 0;
+  TT += dt; TITLET += dt;
+  updFX(dt);
+  if(SCREEN==='battle' && B) updQ(dt);
+
+  ctx.save();
+  if(SHAKE>0.2){
+    ctx.translate((Math.random()-0.5)*SHAKE, (Math.random()-0.5)*SHAKE);
+  }
+  switch(SCREEN){
+    case 'title': drawTitle(); break;
+    case 'select': drawSelect(); break;
+    case 'map': drawMap(); break;
+    case 'battle': if(B) drawBattle(); break;
+    case 'reward': drawReward(); break;
+    case 'cardpick': drawCardPick(); break;
+    case 'trinketpick': drawTrinketPick(); break;
+    case 'shop': drawShop(); break;
+    case 'rest': drawRest(); break;
+    case 'chest': drawChest(); break;
+    case 'event': drawEvent(); break;
+    case 'picker': drawPicker(); break;
+    case 'deckview': drawDeckView(); break;
+    case 'gameover': drawGameOver(); break;
+    case 'victory': drawVictory(); break;
+    default: drawTitle();
+  }
+  ctx.restore();
+  if(SCREEN!=='title' && SCREEN!=='select') vignette();
+  drawTooltip();
+  var hh = hitAt(MX,MY);
+  HOVCARD = (hh && hh.id==='card') ? hh.data : -1;
+  cv.style.cursor = hh ? 'pointer' : 'default';
+}
+var lastT = 0;
+function loop(t){
+  var dt = lastT ? Math.min(0.05, (t-lastT)/1000) : 0.016;
+  lastT = t;
+  drawFrame(dt);
+  requestAnimationFrame(loop);
+}
+function resize(){
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var s = Math.min(vw/W, vh/H);
+  cv.style.width = Math.floor(W*s)+'px';
+  cv.style.height = Math.floor(H*s)+'px';
+}
+
+/* ==========================================================================
+   BOOT
+   ========================================================================== */
+function boot(){
+  loadMeta();
+  resize();
+  window.addEventListener('resize', resize);
+  cv.addEventListener('mousemove', onMove);
+  cv.addEventListener('mousedown', onClick);
+  cv.addEventListener('wheel', function(e){ scrollFor(e.deltaY>0?60:-60); e.preventDefault(); }, {passive:false});
+  window.addEventListener('keydown', onKey);
+  cv.addEventListener('contextmenu', function(e){ e.preventDefault(); if(B && SCREEN==='battle') B.sel=-1; });
+  SCREEN = 'title';
+  requestAnimationFrame(loop);
+}
+if(typeof HEADLESS === 'undefined') boot();
+
+</script>
+</body>
+</html>

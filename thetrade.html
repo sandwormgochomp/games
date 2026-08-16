@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>THE TRADE</title>
+<style>
+  html,body{margin:0;padding:0;background:#0d0a08;color:#efe3d0;
+    font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;overflow:hidden}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{image-rendering:auto;box-shadow:0 0 60px #000;cursor:default;
+    max-width:100vw;max-height:100vh;width:auto;height:auto}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c" width="1200" height="760"></canvas></div>
+<script>
+"use strict";
+/* ===========================================================================
+   THE TRADE
+   A market town where you are the only one who can see what things are truly
+   worth. Buy, haggle, sell, undercut rivals -- but every deal shifts prices
+   for everyone, and going too far gets you run out of town.
+
+   Canvas 2D only. No WebGL, no external assets, single file.
+   =========================================================================== */
+
+const W = 1200, H = 760;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+/* ---------------------------------------------------------------- seeded rng */
+let _seed = 1337;
+function srand(s){ _seed = (s>>>0) || 1; }
+function rnd(){ // mulberry32
+  _seed |= 0; _seed = (_seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(_seed ^ (_seed >>> 15), 1 | _seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+function rr(a,b){ return a + rnd()*(b-a); }
+function ri(a,b){ return Math.floor(rr(a,b+1)); }
+function pick(arr){ return arr[Math.floor(rnd()*arr.length)]; }
+function clamp(v,a,b){ return v<a?a:v>b?b:v; }
+
+/* ------------------------------------------------------------------- balance */
+const DAYS         = 30;    // days before the Guild sells the deed to someone else
+const DEED_PRICE   = 9500;  // what it costs to buy your father's shop back
+const HOURS        = 6;     // actions per day
+const SUSPICION_MAX= 100;   // hit this and you are run out of town
+const START_CROWNS = 200;   // enough that day one is not six sacks of grain
+const CART_BASE    = 20;
+const CART_UPGRADES= [ {cap:32, cost:500}, {cap:48, cost:1400} ];
+
+/* --------------------------------------------------------------------- goods */
+// worth: the honest value in crowns. Only YOU can see it.
+// vol:   how wildly the true worth swings day to day.
+const GOODS = [
+  { name:'Grain',   worth: 12,  vol:0.10, tag:'sack'   },
+  { name:'Salt',    worth: 30,  vol:0.14, tag:'block'  },
+  { name:'Wool',    worth: 45,  vol:0.12, tag:'bale'   },
+  { name:'Iron',    worth: 70,  vol:0.16, tag:'ingot'  },
+  { name:'Wine',    worth: 110, vol:0.20, tag:'cask'   },
+  { name:'Silk',    worth: 180, vol:0.22, tag:'bolt'   },
+  { name:'Amber',   worth: 260, vol:0.26, tag:'piece'  },
+  { name:'Sea Ink', worth: 400, vol:0.30, tag:'flask'  },
+];
+const NG = GOODS.length;
+// how many of a thing a stall keeps: sacks of grain by the wagon, ink by the flask
+const BULK = [ 3.2, 2.4, 1.8, 1.4, 1.1, 0.85, 0.7, 0.55 ];
+
+/* -------------------------------------------------------------------- stalls */
+// bias:  per-good price multiplier applied on top of true worth
+// spread:how far ask sits above bid (their cut)
+// heat:  how much suspicion a squeezed deal generates here
+// stockM:how much they carry
+const STALLS = [
+  { name:'The Long Row',  blurb:'Everything, honestly priced.',
+    bias:[ 1.00,1.00,1.00,1.00,1.00,1.00,1.00,1.00 ], spread:0.16, heat:1.0, stockM:1.0 },
+  { name:'The Green',     blurb:'Farmers. Cheap crops, no luxuries.',
+    bias:[ 0.86,0.94,0.89,1.03,1.01,1.16,1.19,1.22 ], spread:0.13, heat:0.8, stockM:1.4 },
+  { name:'Dockside',      blurb:'Off the boats. Cheap imports, dear bread.',
+    bias:[ 1.15,0.90,1.03,0.96,0.93,0.88,0.90,0.87 ], spread:0.19, heat:0.9, stockM:1.2 },
+  { name:'The Guildhall', blurb:'Fair prices. They watch everything.',
+    bias:[ 1.06,1.04,1.04,1.02,1.06,1.05,1.04,1.08 ], spread:0.09, heat:1.9, stockM:0.9 },
+  { name:'Ash Lane',      blurb:'No questions, no ledgers, and no bargains either.',
+    bias:[ 1.00,1.00,1.00,1.00,1.00,1.00,1.00,1.00 ], spread:0.34, heat:0.30,stockM:0.6 },
+];
+const NS = STALLS.length;
+
+/* -------------------------------------------------------------------- rivals */
+const RIVALS = [
+  { name:'Hessen Vole',  style:'hoards', desc:'buys deep and waits' },
+  { name:'Marda Quill',  style:'floods', desc:'dumps stock to break a price' },
+  { name:'The Cobbler',  style:'shadows',desc:'trades whatever you traded' },
+];
+
+/* -------------------------------------------------------------------- events */
+// Each shifts the TRUE worth of a good -- the thing only you can see coming.
+const EVENTS = [
+  { txt:'A grain caravan is unloading at the north gate.',        g:0, mul:0.68 },
+  { txt:'Blight in the river fields. The bread lines are long.',  g:0, mul:1.55 },
+  { txt:'The salt road is washed out past the ford.',             g:1, mul:1.50 },
+  { txt:'Two salt barges came in on the same tide.',              g:1, mul:0.70 },
+  { txt:'Shearing week. Wool everywhere you look.',               g:2, mul:0.66 },
+  { txt:'A cold snap. Everyone wants a blanket tonight.',         g:2, mul:1.48 },
+  { txt:'The garrison is buying iron for the levy.',              g:3, mul:1.60 },
+  { txt:'A foundry failed. Its stock is being sold off cheap.',   g:3, mul:0.65 },
+  { txt:'Festival of the Lamp begins at dusk.',                   g:4, mul:1.52 },
+  { txt:'A vintner is dead and his cellar is on the street.',     g:4, mul:0.64 },
+  { txt:'The silk convoy is three weeks late.',                   g:5, mul:1.62 },
+  { txt:'A house in mourning is selling its finery.',             g:5, mul:0.66 },
+  { txt:'A lady of the court has taken to amber.',                g:6, mul:1.58 },
+  { txt:'Amber washed up all along the grey beach.',              g:6, mul:0.62 },
+  { txt:'The scriveners have a commission from the Crown.',       g:7, mul:1.65 },
+  { txt:'Ink spoiled in the warehouse damp. It goes cheap.',      g:7, mul:0.60 },
+];
+
+/* ==========================================================================
+   STATE
+   ========================================================================== */
+const G = {
+  screen : 'title',   // title | market | haggle | dayend | ending | help
+  day    : 1,
+  hour   : HOURS,
+  crowns : START_CROWNS,
+  susp   : 0,
+  cart   : CART_BASE,
+  cartLvl: 0,
+  hold   : new Array(NG).fill(0),   // units you are carrying
+  cost   : new Array(NG).fill(0),   // total crowns paid for what you hold
+  worth  : GOODS.map(g=>g.worth),   // today's TRUE worth
+  tomorrow:GOODS.map(g=>g.worth),   // tomorrow's, hidden unless you have a rumour
+  rumour : new Array(NG).fill(false),
+  press  : new Array(NG).fill(0),   // your market pressure per good (moves prices)
+  undercut:new Array(NG).fill(0),   // days of rival undercutting left
+  stalls : [],                      // per-day generated stock/prices
+  sel    : 0,                       // selected good index
+  selS   : 0,                       // selected stall index
+  qty    : 1,
+  news   : [],
+  log    : [],
+  ending : null,
+  deed   : false,
+  profitToday : 0,
+  bestDeal    : 0,
+  dealsMade   : 0,
+  walkouts    : 0,
+  honest      : true,               // never squeezed a deal into the green
+  confirmNew : false,               // title screen: NEW MONTH asked once already
+  hag    : null,                    // haggle sub-state
+  flash  : null,
+  t      : 0,
+};
+
+/* ==========================================================================
+   MARKET
+   ========================================================================== */
+function rollWorth(){
+  // tomorrow becomes today; roll a new tomorrow
+  G.worth = G.tomorrow.slice();
+  G.tomorrow = GOODS.map((g,i)=>{
+    let base = G.worth[i];
+    // mean-revert toward the honest value so prices never run away
+    base = base*0.72 + g.worth*0.28;
+    let v = base * (1 + rr(-g.vol, g.vol));
+    return clamp(v, g.worth*0.45, g.worth*2.1);
+  });
+  G.rumour = new Array(NG).fill(false);
+}
+
+function fireEvent(){
+  const e = pick(EVENTS);
+  G.tomorrow[e.g] = clamp(G.tomorrow[e.g]*e.mul, GOODS[e.g].worth*0.4, GOODS[e.g].worth*2.4);
+  return e.txt;
+}
+
+function genStalls(){
+  G.stalls = STALLS.map((s,si)=>{
+    const px = [], stock = [], demand = [];
+    for(let i=0;i<NG;i++){
+      // what the town THINKS it is worth -- honest worth, blurred by ignorance
+      const blur = 1 + rr(-0.085, 0.085) + G.press[i]*0.5;
+      const mid  = G.worth[i] * s.bias[i] * blur;
+      px.push(mid);
+      // Cheap goods move by the wagonload, dear ones by the piece. Without this,
+      // filling a cart with grain takes six separate purchases -- a whole day of
+      // buying grain, which is exactly as dull as it sounds.
+      const bulk = BULK[i];
+      stock.push(Math.max(1, Math.round(rr(3,13) * s.stockM * bulk)));
+      demand.push(Math.max(1, Math.round(rr(3,12) * s.stockM * bulk)));
+    }
+    return { px, stock, demand, closed:new Array(NG).fill(false) };
+  });
+}
+
+function askPrice(si,gi){  // what they will sell to you for
+  const s = G.stalls[si];
+  return s.px[gi] * (1 + STALLS[si].spread*0.5);
+}
+function bidPrice(si,gi){  // what they will pay you
+  const s = G.stalls[si];
+  let b = s.px[gi] * (1 - STALLS[si].spread*0.5);
+  if(G.undercut[gi] > 0) b *= 0.85;   // a rival is breaking your price
+  return b;
+}
+
+/* the whole point: your read on whether a price is honest */
+function edge(si,gi,side){
+  const t = G.worth[gi];
+  if(side==='buy')  return (t - askPrice(si,gi)) / t;   // >0 means underpriced
+  return (bidPrice(si,gi) - t) / t;                     // >0 means they overpay
+}
+
+/* ==========================================================================
+   TRADING  (the minigame calls this; the tests call it directly)
+   side: 'buy'|'sell'   frac: 1.0 = the posted price, <1 = you squeezed them
+   ========================================================================== */
+function doTrade(si, gi, qty, side, frac){
+  const st = G.stalls[si];
+  if(qty <= 0) return {ok:false, why:'nothing'};
+  let unit, total;
+
+  if(side === 'buy'){
+    if(qty > st.stock[gi]) return {ok:false, why:'stock'};
+    if(held() + qty > G.cart) return {ok:false, why:'cart'};
+    unit  = askPrice(si,gi) * frac;
+    total = unit*qty;
+    if(total > G.crowns) return {ok:false, why:'crowns'};
+    G.crowns -= total;
+    G.hold[gi] += qty;
+    G.cost[gi] += total;
+    st.stock[gi] -= qty;
+    // buying pressure lifts the price for everyone
+    st.px[gi] *= 1 + 0.030*qty/Math.max(2,st.stock[gi]+qty);
+    G.press[gi] += 0.020*qty;
+  } else {
+    if(qty > G.hold[gi]) return {ok:false, why:'hold'};
+    if(qty > st.demand[gi]) return {ok:false, why:'demand'};
+    unit  = bidPrice(si,gi) * frac;
+    total = unit*qty;
+    const avg = G.hold[gi] > 0 ? G.cost[gi]/G.hold[gi] : 0;
+    G.crowns += total;
+    G.cost[gi] -= avg*qty;
+    G.hold[gi] -= qty;
+    if(G.hold[gi] <= 0){ G.hold[gi]=0; G.cost[gi]=0; }
+    st.demand[gi] -= qty;
+    // dumping stock drops the price for everyone
+    st.px[gi] *= 1 - 0.030*qty/Math.max(2,st.demand[gi]+qty);
+    G.press[gi] -= 0.020*qty;
+    G.profitToday += total - avg*qty;
+    G.bestDeal = Math.max(G.bestDeal, total - avg*qty);
+  }
+
+  // ---- suspicion: squeezing is what gets noticed, not trading
+  const squeeze = side==='buy' ? (1-frac) : (frac-1);
+  if(squeeze > 0.005){
+    G.honest = false;
+    // one wagonload squeezed is one sin, not twenty -- keep the size term sublinear
+    const s = (squeeze*19 + Math.sqrt(qty)*0.35) * STALLS[si].heat;
+    G.susp = clamp(G.susp + s, 0, SUSPICION_MAX);
+  } else {
+    // paying fair buys you goodwill
+    G.susp = clamp(G.susp - 1.4*STALLS[si].heat, 0, SUSPICION_MAX);
+  }
+  // trading the same good in the same stall over and over draws eyes
+  G.press[gi] = clamp(G.press[gi], -0.9, 0.9);
+
+  G.dealsMade++;
+  G.stalls[si].closed[gi] = false;
+  if(G.susp >= SUSPICION_MAX) endGame('run');
+  saveGame();
+  return {ok:true, unit, total};
+}
+
+function held(){ return G.hold.reduce((a,b)=>a+b,0); }
+function holdValue(){ return G.hold.reduce((a,q,i)=>a+q*G.worth[i], 0); }
+function netWorth(){ return G.crowns + holdValue(); }
+
+/* ==========================================================================
+   HAGGLE MINIGAME
+   A needle sweeps a price bar. Red = they walk. Green = you squeezed them.
+   Past green = an honest price, which they take happily.
+   ========================================================================== */
+function bandWidth(){ return Math.max(0.055, 0.125 - 0.0022*G.day); }
+
+function startHaggle(si, gi, qty, side){
+  const posted = side==='buy' ? askPrice(si,gi) : bidPrice(si,gi);
+  const lo = side==='buy' ? posted*0.58 : posted*0.92;
+  const hi = side==='buy' ? posted*1.08 : posted*1.46;
+  // their true limit, hidden from nobody -- the bar shows it. The skill is the timing.
+  const limitFrac = side==='buy' ? rr(0.30,0.46) : rr(0.52,0.70);
+  G.hag = {
+    si, gi, qty, side, lo, hi, posted,
+    limit: limitFrac,
+    band : bandWidth(),
+    t    : rnd(),
+    dir  : rnd()<0.5 ? -1 : 1,
+    speed: 0.62 + 0.035*G.day + (gi*0.035),
+    tries: 2,
+    msg  : '',
+    done : false,
+    result: null,
+  };
+  G.screen = 'haggle';
+  return G.hag;
+}
+
+// t = 0..1 along the bar. Returns 'red' | 'green' | 'fair'
+function zoneAt(h, t){
+  if(h.side === 'buy'){
+    if(t < h.limit) return 'red';
+    if(t < h.limit + h.band) return 'green';
+    return 'fair';
+  } else {
+    if(t > h.limit) return 'red';
+    if(t > h.limit - h.band) return 'green';
+    return 'fair';
+  }
+}
+
+function lockHaggle(){
+  const h = G.hag; if(!h || h.done) return null;
+  const z = zoneAt(h, h.t);
+  const price = h.lo + h.t*(h.hi - h.lo);
+  const frac  = price / h.posted;
+
+  if(z === 'red'){
+    h.tries--;
+    G.susp = clamp(G.susp + 3.0*STALLS[h.si].heat, 0, SUSPICION_MAX);
+    if(h.tries <= 0){
+      h.done = true; h.result = 'walk';
+      h.msg  = 'They turn their back. That good is closed to you today.';
+      G.stalls[h.si].closed[h.gi] = true;
+      G.walkouts++;
+      G.susp = clamp(G.susp + 4.0*STALLS[h.si].heat, 0, SUSPICION_MAX);
+      spend(1);
+      if(G.susp >= SUSPICION_MAX) endGame('run');
+    } else {
+      h.msg = h.side==='buy' ? 'An insult. They wait for a real offer.'
+                             : 'They laugh. Nobody pays that.';
+      h.speed *= 1.14;
+    }
+    return h;
+  }
+
+  const res = doTrade(h.si, h.gi, h.qty, h.side, frac);
+  h.done = true;
+  if(!res.ok){
+    h.result = 'fail';
+    h.msg = ({stock:'They have not got that many.', cart:'Your cart will not hold it.',
+              crowns:'You cannot cover that.', hold:'You are not carrying that many.',
+              demand:'They do not want that many.', nothing:'Nothing to trade.'})[res.why] || 'No deal.';
+    return h;
+  }
+  h.result = z;
+  h.unit = res.unit; h.total = res.total;
+  const verb = h.side==='buy' ? 'Bought' : 'Sold';
+  h.msg = z === 'green'
+    ? verb + ' ' + h.qty + ' at ' + money(res.unit) + ' each. You squeezed them, and they know it.'
+    : verb + ' ' + h.qty + ' at ' + money(res.unit) + ' each. An honest price.';
+  logLine(verb + ' ' + h.qty + ' ' + GOODS[h.gi].name + ' — ' + money(res.total));
+  spend(1);
+  beep(z==='green' ? 660 : 440);
+  return h;
+}
+
+/* ==========================================================================
+   DAY CYCLE
+   ========================================================================== */
+function spend(n){
+  G.hour -= n;
+  if(G.hour <= 0){ G.hour = 0; }
+}
+
+function layLow(){
+  G.susp = clamp(G.susp - 9 - G.hour*2.5, 0, SUSPICION_MAX);
+  logLine('You kept off the square for the rest of the day.');
+  G.hour = 0;
+  endDay();
+}
+
+function listen(){
+  if(G.hour <= 0) return false;
+  // learn what a good will be worth tomorrow
+  const unknown = [];
+  for(let i=0;i<NG;i++) if(!G.rumour[i]) unknown.push(i);
+  if(!unknown.length) return false;
+  // weight toward goods about to move hardest -- gossip follows shock
+  unknown.sort((a,b)=>Math.abs(G.tomorrow[b]/G.worth[b]-1) - Math.abs(G.tomorrow[a]/G.worth[a]-1));
+  const gi = unknown[Math.min(unknown.length-1, ri(0,1))];
+  G.rumour[gi] = true;
+  const up = G.tomorrow[gi] > G.worth[gi];
+  G.news.unshift('“' + GOODS[gi].name + ' will be ' + (up?'dear':'cheap') +
+                 ' tomorrow, mark me.”');
+  logLine('You listened. Word on ' + GOODS[gi].name + '.');
+  spend(1);
+  saveGame();
+  return true;
+}
+
+function rivalsAct(){
+  // Rivals trade the same market you do, and it moves under you.
+  for(const r of RIVALS){
+    if(r.style === 'hoards'){
+      // buys whatever is most underpriced, lifting it
+      let best=-1, bv=-9;
+      for(let i=0;i<NG;i++){ const e = edge(0,i,'buy'); if(e>bv){bv=e;best=i;} }
+      if(best>=0 && bv>0.05){
+        for(const s of G.stalls) s.px[best] *= 1.05;
+        G.news.unshift(RIVALS[0].name + ' has been buying ' + GOODS[best].name + ' all morning.');
+      }
+    } else if(r.style === 'floods'){
+      let best=-1, bv=-9;
+      for(let i=0;i<NG;i++){ const e = edge(0,i,'sell'); if(e>bv){bv=e;best=i;} }
+      if(best>=0 && bv>0.05){
+        for(const s of G.stalls) s.px[best] *= 0.95;
+        G.news.unshift(RIVALS[1].name + ' dumped a wagon of ' + GOODS[best].name + ' on the Row.');
+      }
+    } else {
+      // the Cobbler copies whatever you leaned on, and undercuts it
+      let best=-1, bv=0.25;
+      for(let i=0;i<NG;i++){ if(Math.abs(G.press[i]) > bv){ bv=Math.abs(G.press[i]); best=i; } }
+      if(best>=0){
+        G.undercut[best] = 2;
+        G.news.unshift(RIVALS[2].name + ' is undercutting you on ' + GOODS[best].name + '.');
+      }
+    }
+  }
+}
+
+function endDay(){
+  if(G.ending) return;
+  saveGame();
+  G.log.unshift('— Day ' + G.day + ': ' + (G.profitToday>=0?'+':'') + money(G.profitToday) +
+                ', worth ' + money(netWorth()) + ' —');
+  G.screen = 'dayend';
+}
+
+function nextDay(){
+  if(G.ending) return;
+  G.day++;
+  if(G.day > DAYS){ endGame(G.deed ? 'bought' : 'late'); return; }
+  G.hour = HOURS;
+  G.profitToday = 0;
+  G.susp = clamp(G.susp - 8, 0, SUSPICION_MAX);
+  for(let i=0;i<NG;i++){
+    G.press[i] *= 0.55;
+    if(G.undercut[i] > 0) G.undercut[i]--;
+  }
+  rollWorth();
+  G.news = [ fireEvent() ];
+  rivalsAct();
+  genStalls();
+  G.screen = 'market';
+  saveGame();
+}
+
+function buyDeed(){
+  if(G.crowns < DEED_PRICE) return false;
+  G.crowns -= DEED_PRICE;
+  G.deed = true;
+  endGame('bought');
+  return true;
+}
+
+function endGame(kind){
+  if(G.ending) return;
+  G.ending = kind;
+  G.screen = 'ending';
+  clearSave();   // a finished month must never be resumable
+}
+
+function logLine(s){ G.log.unshift(s); if(G.log.length>9) G.log.pop(); }
+
+function reset(seed){
+  srand(seed === undefined ? (0x9E37 ^ (G.day*2654435761)) >>> 0 : seed);
+  G.day=1; G.hour=HOURS; G.crowns=START_CROWNS; G.susp=0;
+  G.cart=CART_BASE; G.cartLvl=0;
+  G.hold=new Array(NG).fill(0); G.cost=new Array(NG).fill(0);
+  G.worth=GOODS.map(g=>g.worth*rr(0.9,1.1));
+  G.tomorrow=G.worth.slice();
+  rollWorth();
+  G.rumour=new Array(NG).fill(false);
+  G.press=new Array(NG).fill(0); G.undercut=new Array(NG).fill(0);
+  G.sel=0; G.selS=0; G.qty=1; G.log=[]; G.ending=null; G.deed=false;
+  G.profitToday=0; G.bestDeal=0; G.dealsMade=0; G.walkouts=0; G.honest=true;
+  G.hag=null; G.flash=null;
+  G.news=[ fireEvent() ];
+  genStalls();
+  G.screen='market';
+  saveGame();
+}
+
+/* ==========================================================================
+   SAVE / RESUME
+   A month is a long run and this machine loses power without warning, so the
+   whole state goes to localStorage after every action. Never fatal: if storage
+   is unavailable (file:// quirks, private mode, the Node test harness) the game
+   simply plays on without a save.
+   ========================================================================== */
+const SAVE_KEY = 'thetrade.save.v1';
+const SAVE_FIELDS = ['day','hour','crowns','susp','cart','cartLvl','hold','cost',
+  'worth','tomorrow','rumour','press','undercut','stalls','sel','selS','qty',
+  'news','log','deed','profitToday','bestDeal','dealsMade','walkouts','honest'];
+
+function saveGame(){
+  if(G.ending) return clearSave();   // a finished month is not worth resuming
+  try{
+    const o = { v:1, seed:_seed };
+    for(const k of SAVE_FIELDS) o[k] = G[k];
+    localStorage.setItem(SAVE_KEY, JSON.stringify(o));
+    return true;
+  }catch(e){ return false; }
+}
+function hasSave(){
+  try{
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return null;
+    const o = JSON.parse(raw);
+    return (o && o.v === 1 && typeof o.day === 'number' && Array.isArray(o.stalls)) ? o : null;
+  }catch(e){ return null; }
+}
+function loadGame(){
+  const o = hasSave();
+  if(!o) return false;
+  for(const k of SAVE_FIELDS) if(o[k] !== undefined) G[k] = o[k];
+  if(typeof o.seed === 'number') srand(o.seed);
+  // anything not saved is derived or transient
+  G.ending = null; G.hag = null; G.flash = null;
+  G.screen = 'market';
+  return true;
+}
+function clearSave(){
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+}
+
+/* ==========================================================================
+   SOUND  (tiny, optional, never fatal)
+   ========================================================================== */
+let AC = null;
+function beep(f, len){
+  try{
+    if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type='triangle'; o.frequency.value=f;
+    g.gain.value=0.05; o.connect(g); g.connect(AC.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime+(len||0.13));
+    o.stop(AC.currentTime+(len||0.14));
+  }catch(e){}
+}
+
+/* ==========================================================================
+   FORMAT HELPERS
+   ========================================================================== */
+function money(v){
+  const n = Math.round(v);
+  return (n<0?'-':'') + '¤' + Math.abs(n).toLocaleString('en-US');
+}
+function pct(v){ return (v>=0?'+':'') + Math.round(v*100) + '%'; }
+
+/* ==========================================================================
+   RENDER
+   ========================================================================== */
+const COL = {
+  bg:'#14100c', panel:'#221b15', panel2:'#2b231b', line:'#3d3226',
+  text:'#efe3d0', dim:'#a2907a', gold:'#d8a54a',
+  good:'#6fbf73', bad:'#c4553f', warn:'#d9a03c', ghost:'#6f7fa8',
+};
+let HOT = [];   // clickable rects rebuilt each frame
+function hot(x,y,w,h,id,data){ HOT.push({x,y,w,h,id,data}); }
+function inRect(r,x,y){ return x>=r.x && x<=r.x+r.w && y>=r.y && y<=r.y+r.h; }
+
+let mouse = {x:-1,y:-1,down:false};
+
+function panel(x,y,w,h,fill){
+  ctx.fillStyle = fill || COL.panel;
+  ctx.fillRect(x,y,w,h);
+  ctx.strokeStyle = COL.line; ctx.lineWidth = 1;
+  ctx.strokeRect(x+0.5,y+0.5,w-1,h-1);
+}
+function txt(s,x,y,size,col,align,weight){
+  ctx.font = (weight||'') + ' ' + (size||16) + 'px "Iowan Old Style","Palatino Linotype",Georgia,serif';
+  ctx.fillStyle = col || COL.text;
+  ctx.textAlign = align || 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(s, x, y);
+  ctx.textAlign = 'left';
+}
+function bar(x,y,w,h,frac,col,back){
+  ctx.fillStyle = back || '#000';
+  ctx.fillRect(x,y,w,h);
+  ctx.fillStyle = col;
+  ctx.fillRect(x,y,Math.max(0,Math.min(1,frac))*w,h);
+  ctx.strokeStyle = COL.line; ctx.strokeRect(x+0.5,y+0.5,w-1,h-1);
+}
+function button(x,y,w,h,label,id,enabled,tone){
+  const over = enabled && mouse.x>=x && mouse.x<=x+w && mouse.y>=y && mouse.y<=y+h;
+  ctx.fillStyle = !enabled ? '#1b1610' : over ? (tone||'#4a3a25') : (tone? shade(tone,-0.25):'#33281c');
+  ctx.fillRect(x,y,w,h);
+  ctx.strokeStyle = enabled ? (over?COL.gold:COL.line) : '#2a231c';
+  ctx.lineWidth=1; ctx.strokeRect(x+0.5,y+0.5,w-1,h-1);
+  txt(label, x+w/2, y+h/2+6, 17, enabled?COL.text:'#5c5044', 'center');
+  if(enabled) hot(x,y,w,h,id);
+}
+function shade(hex,amt){
+  if(typeof hex !== 'string' || hex[0] !== '#') return hex;
+  const n = parseInt(hex.slice(1),16);
+  let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+  r=clamp(Math.round(r*(1+amt)),0,255); g=clamp(Math.round(g*(1+amt)),0,255); b=clamp(Math.round(b*(1+amt)),0,255);
+  return 'rgb('+r+','+g+','+b+')';
+}
+
+/* --------------------------------------------------------------- backdrop */
+function drawBack(){
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#191309'); g.addColorStop(1,'#0c0907');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // faint rooftops
+  ctx.fillStyle='rgba(255,220,170,0.030)';
+  for(let i=0;i<26;i++){
+    const x = (i*61 + 13) % (W+80) - 40;
+    const w = 44 + ((i*37)%40);
+    const h = 60 + ((i*53)%110);
+    ctx.fillRect(x, H-h-40, w, h);
+    ctx.beginPath(); ctx.moveTo(x-6,H-h-40); ctx.lineTo(x+w/2,H-h-70); ctx.lineTo(x+w+6,H-h-40);
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+/* ------------------------------------------------------------------- title */
+function drawTitle(){
+  drawBack();
+  txt('THE TRADE', W/2, 210, 78, COL.gold, 'center');
+  txt('a market town where only you can see what a thing is truly worth', W/2, 252, 20, COL.dim, 'center');
+
+  const lines = [
+    'The Guild took your father’s shop the week he died, and priced the deed at ' + money(DEED_PRICE) + '.',
+    'They will sell it to somebody else in ' + DAYS + ' days.',
+    'You have ' + money(START_CROWNS) + ', a cart, and the one thing your father left you:',
+    'you can look at anything and know what it is honestly worth.',
+    '',
+    'Buy under. Sell over. Squeeze too hard and the square starts talking,',
+    'and somebody they are all talking about does not get to stay.',
+  ];
+  lines.forEach((l,i)=> txt(l, W/2, 330+i*29, 19, i>=5?COL.dim:COL.text, 'center'));
+
+  const sv = hasSave();
+  if(sv){
+    button(W/2-290, 590, 180, 54, 'CONTINUE', 'continue', true, '#3f5230');
+    // starting over throws away a month of work, so it asks once
+    button(W/2-100, 590, 180, 54, G.confirmNew ? 'SURE?' : 'NEW MONTH',
+           G.confirmNew ? 'begin' : 'confirmnew', true, G.confirmNew ? '#5c3226' : '#4a3a25');
+    button(W/2+90,  590, 180, 54, 'HOW TO PLAY', 'help', true);
+    txt(G.confirmNew
+        ? 'this throws away day ' + sv.day + ' and everything in the purse'
+        : 'a month is already under way — day ' + sv.day + ' of ' + DAYS +
+          ', ' + money(sv.crowns) + ' in your purse',
+        W/2, 676, 16, G.confirmNew ? COL.bad : COL.dim, 'center');
+  } else {
+    button(W/2-190, 590, 180, 54, 'BEGIN', 'begin', true, '#4a3a25');
+    button(W/2+10,  590, 180, 54, 'HOW TO PLAY', 'help', true);
+    txt('click, or press any key', W/2, 676, 15, '#6d5f50', 'center');
+  }
+}
+
+/* -------------------------------------------------------------------- help */
+function drawHelp(){
+  drawBack();
+  panel(140, 60, W-280, H-120);
+  txt('HOW TO PLAY', W/2, 120, 40, COL.gold, 'center');
+  const L = [
+    ['The gift', 'Every good shows its TRUE WORTH in gold. Nobody else can see it. A stall’s'],
+    ['',         'ASK and BID are guesses — the gap between their guess and the truth is your money.'],
+    ['',         'The % beside a price is your edge. Green means the deal favours you.'],
+    ['Haggling', 'Pick a stall, pick a good, set a quantity, then BUY or SELL.'],
+    ['',         'A needle sweeps the price bar. SPACE or click to stop it.'],
+    ['',         'RED  — they walk. Two refusals and that good is closed to you for the day.'],
+    ['',         'GREEN — you squeezed them. Best price, and the square notices.'],
+    ['',         'PALE — an honest price. Less profit, no suspicion, a little goodwill.'],
+    ['Suspicion','Squeezed deals, insulting offers and walkouts all raise it.'],
+    ['',         'At ' + SUSPICION_MAX + ' you are run out of town and it is over. LAY LOW ends the day and cools it.'],
+    ['The town', 'Every deal you make moves that price for everyone — buying lifts it, dumping'],
+    ['',         'sinks it. Three rivals trade against you and one of them copies whatever you lean on.'],
+    ['Tomorrow', 'LISTEN to buy a rumour: it reveals what a good will be worth tomorrow.'],
+    ['',         'Events shift true worth overnight. Knowing first is the whole trade.'],
+    ['Keys',     '1-5 stalls  •  ↑↓ good  •  ←→ quantity  •  B buy  •  S sell  •  L listen  •  SPACE lock  •  ESC back'],
+  ];
+  L.forEach((r,i)=>{
+    txt(r[0], 200, 190+i*32, 19, COL.gold);
+    txt(r[1], 330, 190+i*32, 18, COL.text);
+  });
+  button(W/2-90, H-120, 180, 48, 'BACK', 'back', true);
+}
+
+/* ------------------------------------------------------------------ market */
+function drawMarket(){
+  drawBack();
+
+  /* ---- top bar */
+  panel(0,0,W,66, COL.panel2);
+  txt('Day ' + G.day + ' / ' + DAYS, 20, 42, 26, COL.text);
+  txt(money(G.crowns), 190, 42, 26, COL.gold);
+  txt('purse', 190 + ctx.measureText(money(G.crowns)).width + 10, 42, 15, COL.dim);
+
+  const hv = holdValue();
+  txt('cart ' + held() + '/' + G.cart, 400, 30, 16, COL.dim);
+  txt('worth ' + money(hv), 400, 52, 17, hv>0?COL.text:COL.dim);
+
+  if(G.crowns >= DEED_PRICE && !G.ending){
+    // the progress bar becomes the button the moment you can afford it
+    const pulse = 0.5 + 0.5*Math.sin(G.t*4);
+    button(556, 8, 240, 50, 'BUY BACK THE SHOP', 'deed', true,
+           'rgb(' + Math.round(74+40*pulse) + ',' + Math.round(56+26*pulse) + ',26)');
+  } else {
+    txt('deed ' + money(DEED_PRICE), 560, 30, 16, COL.dim);
+    bar(560, 38, 190, 14, G.crowns/DEED_PRICE, COL.gold, '#100c08');
+  }
+
+  txt('SUSPICION', 800, 30, 16, G.susp>65?COL.bad:COL.dim);
+  bar(800, 38, 250, 14, G.susp/SUSPICION_MAX,
+      G.susp>75?COL.bad:G.susp>45?COL.warn:'#6f6350', '#100c08');
+
+  // hours
+  for(let i=0;i<HOURS;i++){
+    ctx.fillStyle = i < G.hour ? COL.gold : '#332a20';
+    ctx.beginPath(); ctx.arc(1078+i*20, 44, 6, 0, 7); ctx.fill();
+  }
+  txt('hours', 1078, 26, 14, COL.dim);
+
+  /* ---- goods table */
+  const GX=16, GY=80, GW=560;
+  panel(GX,GY,GW,548);
+  txt('GOODS', GX+16, GY+30, 22, COL.gold);
+  txt(G.stalls.length? STALLS[G.selS].name : '', GX+GW-16, GY+30, 18, COL.dim, 'right');
+
+  const cols = [GX+16, GX+150, GX+250, GX+350, GX+450, GX+520];
+  txt('true worth', cols[1], GY+56, 14, COL.dim);
+  txt('they ask',   cols[2], GY+56, 14, COL.dim);
+  txt('they bid',   cols[3], GY+56, 14, COL.dim);
+  txt('your edge',  cols[4], GY+56, 14, COL.dim);
+  txt('held',       cols[5], GY+56, 14, COL.dim);
+
+  for(let i=0;i<NG;i++){
+    const y = GY+72 + i*58;
+    const selRow = i===G.sel;
+    if(selRow){ ctx.fillStyle='#33281c'; ctx.fillRect(GX+6,y,GW-12,54); }
+    ctx.strokeStyle='#2c241c'; ctx.beginPath(); ctx.moveTo(GX+10,y+54.5); ctx.lineTo(GX+GW-10,y+54.5); ctx.stroke();
+    hot(GX+6,y,GW-12,54,'good',i);
+
+    txt(GOODS[i].name, cols[0], y+26, 21, selRow?COL.text:'#d3c4ae');
+    // rumour marker
+    if(G.rumour[i]){
+      const up = G.tomorrow[i] > G.worth[i];
+      txt(up?'▲ dearer tomorrow':'▼ cheaper tomorrow', cols[0], y+45, 13,
+          up?COL.good:COL.bad);
+    } else {
+      txt('per ' + GOODS[i].tag, cols[0], y+45, 13, '#7b6d5c');
+    }
+
+    txt(money(G.worth[i]), cols[1], y+30, 19, COL.gold);
+    const closed = G.stalls[G.selS].closed[i];
+    const a = askPrice(G.selS,i), b = bidPrice(G.selS,i);
+    const st = G.stalls[G.selS];
+    if(closed){
+      txt('closed', cols[2], y+30, 17, COL.bad);
+    } else {
+      txt(money(a), cols[2], y+30, 18, st.stock[i]>0?COL.text:'#5f5446');
+      txt(st.stock[i] + ' left', cols[2], y+46, 12, '#7b6d5c');
+      txt(money(b), cols[3], y+30, 18, st.demand[i]>0?COL.text:'#5f5446');
+      txt('wants ' + st.demand[i], cols[3], y+46, 12, '#7b6d5c');
+      const eb = edge(G.selS,i,'buy');
+      txt('buy ' + pct(eb), cols[4], y+26, 15, eb>0.04?COL.good:eb<-0.04?COL.bad:COL.dim);
+      if(G.hold[i] > 0){
+        // what matters once you hold it is the price you PAID, not the honest worth
+        const avg = G.cost[i]/G.hold[i];
+        const m = (bidPrice(G.selS,i) - avg) / Math.max(1,avg);
+        txt('profit ' + pct(m), cols[4], y+46, 15, m>0.02?COL.good:m<-0.02?COL.bad:COL.dim);
+      } else {
+        const es = edge(G.selS,i,'sell');
+        txt('sell ' + pct(es), cols[4], y+46, 15, es>0.04?COL.good:es<-0.04?COL.bad:COL.dim);
+      }
+    }
+    if(G.undercut[i]>0) txt('undercut', cols[3], y+12, 12, COL.bad);
+    txt(String(G.hold[i]), cols[5], y+30, 20, G.hold[i]>0?COL.text:'#514639');
+  }
+
+  /* ---- stalls */
+  const SX=592, SY=80, SW=300;
+  panel(SX,SY,SW,548);
+  txt('THE SQUARE', SX+16, SY+30, 22, COL.gold);
+  for(let i=0;i<NS;i++){
+    const y = SY+52 + i*98;
+    const on = i===G.selS;
+    ctx.fillStyle = on ? '#3a2d1e' : '#251e17';
+    ctx.fillRect(SX+10,y,SW-20,88);
+    ctx.strokeStyle = on ? COL.gold : COL.line; ctx.strokeRect(SX+10.5,y+0.5,SW-21,87);
+    hot(SX+10,y,SW-20,88,'stall',i);
+    txt((i+1) + '. ' + STALLS[i].name, SX+24, y+28, 20, on?COL.text:'#c8b99f');
+    wrap(STALLS[i].blurb, SX+24, y+50, SW-48, 15, '#8d7f6c', 17);
+    // heat pips
+    const heat = STALLS[i].heat;
+    txt(heat>1.5?'watched':heat<0.5?'quiet':'ordinary', SX+SW-24, y+80, 13,
+        heat>1.5?COL.bad:heat<0.5?COL.good:COL.dim, 'right');
+  }
+
+  /* ---- news + ledger */
+  const NX=908, NY=80, NW=276;
+  panel(NX,NY,NW,300);
+  txt('THE SQUARE TALKS', NX+16, NY+28, 18, COL.gold);
+  let ny = NY+56;
+  for(const n of G.news.slice(0,4)){
+    if(ny > NY+280) break;
+    ny = wrap(n, NX+16, ny, NW-32, 15, COL.text, 19) + 26;
+  }
+  if(!G.news.length) txt('Nothing yet today.', NX+16, ny, 15, COL.dim);
+
+  panel(NX, NY+312, NW, 316);
+  txt('LEDGER', NX+16, NY+340, 18, COL.gold);
+  let ly = NY+368;
+  for(const l of G.log.slice(0,10)){
+    if(ly > NY+600) break;
+    ly = wrap(l, NX+16, ly, NW-32, 14, '#b5a68f', 17) + 24;
+  }
+
+  /* ---- action bar */
+  const AY = 640;
+  panel(0,AY,W,H-AY, COL.panel2);
+  const g = GOODS[G.sel], st = G.stalls[G.selS];
+  const closed = st.closed[G.sel];
+  const maxBuy = Math.min(st.stock[G.sel], G.cart-held(),
+                          Math.floor(G.crowns / Math.max(1, askPrice(G.selS,G.sel))));
+  const maxSell= Math.min(G.hold[G.sel], st.demand[G.sel]);
+  G.qty = clamp(G.qty, 1, Math.max(1, Math.max(maxBuy, maxSell)));
+
+  txt(g.name + ' at ' + STALLS[G.selS].name, 20, AY+34, 22, COL.text);
+  txt('true worth ' + money(G.worth[G.sel]) + '  •  you can buy ' + maxBuy +
+      ', sell ' + maxSell, 20, AY+60, 16, COL.dim);
+
+  // quantity
+  txt('qty', 380, AY+30, 15, COL.dim);
+  button(380, AY+38, 34, 40, '−', 'qminus', G.qty>1);
+  ctx.fillStyle='#181310'; ctx.fillRect(416,AY+38,58,40);
+  ctx.strokeStyle=COL.line; ctx.strokeRect(416.5,AY+38.5,57,39);
+  txt(String(G.qty), 445, AY+65, 24, COL.text, 'center');
+  button(476, AY+38, 34, 40, '+', 'qplus', true);
+  button(516, AY+38, 46, 40, 'max', 'qmax', true);
+
+  const canBuy  = G.hour>0 && !closed && maxBuy  >= G.qty && !G.ending;
+  const canSell = G.hour>0 && !closed && maxSell >= G.qty && !G.ending;
+  button(580, AY+30, 114, 56, 'BUY',  'buy',  canBuy,  '#3f5230');
+  button(702, AY+30, 114, 56, 'SELL', 'sell', canSell, '#523f30');
+  button(824, AY+30, 102, 56, 'LISTEN','listen', G.hour>0 && !G.ending);
+  const up = CART_UPGRADES[G.cartLvl];
+  if(up && G.crowns >= up.cost)
+    button(934, AY+30, 120, 56, 'CART ' + up.cap, 'cart', true, '#39445c');
+  button(1062,AY+30, 122, 56, G.hour>0?'LAY LOW':'END DAY', 'endday', !G.ending);
+}
+
+function wrap(s, x, y, w, size, col, lh){
+  ctx.font = size + 'px "Iowan Old Style","Palatino Linotype",Georgia,serif';
+  ctx.fillStyle = col;
+  const words = String(s).split(' ');
+  let line = '', yy = y;
+  for(const wd of words){
+    const t = line ? line+' '+wd : wd;
+    if(ctx.measureText(t).width > w && line){ ctx.fillText(line,x,yy); yy += lh; line = wd; }
+    else line = t;
+  }
+  if(line) ctx.fillText(line,x,yy);
+  return yy;
+}
+
+/* ------------------------------------------------------------------ haggle */
+function drawHaggle(){
+  drawMarket();
+  ctx.fillStyle='rgba(6,4,3,0.80)'; ctx.fillRect(0,0,W,H);
+  const h = G.hag;
+  const BX=250, BY=210, BW=700, BH=360;
+  panel(BX,BY,BW,BH,'#241d16');
+  ctx.strokeStyle=COL.gold; ctx.strokeRect(BX+0.5,BY+0.5,BW-1,BH-1);
+
+  const g = GOODS[h.gi];
+  txt((h.side==='buy'?'BUYING ':'SELLING ') + h.qty + ' × ' + g.name, BX+BW/2, BY+50, 30, COL.gold, 'center');
+  txt(STALLS[h.si].name + '  —  their price ' + money(h.posted) +
+      '  •  true worth ' + money(G.worth[h.gi]), BX+BW/2, BY+78, 17, COL.dim, 'center');
+
+  // the bar
+  const bx=BX+50, by=BY+130, bw=BW-100, bh=46;
+  ctx.fillStyle='#120e0a'; ctx.fillRect(bx,by,bw,bh);
+  const paint=(t0,t1,col)=>{ ctx.fillStyle=col; ctx.fillRect(bx+t0*bw, by, (t1-t0)*bw, bh); };
+  if(h.side==='buy'){
+    paint(0, h.limit, 'rgba(196,85,63,0.55)');
+    paint(h.limit, h.limit+h.band, 'rgba(111,191,115,0.60)');
+    paint(h.limit+h.band, 1, 'rgba(150,135,110,0.30)');
+  } else {
+    paint(0, h.limit-h.band, 'rgba(150,135,110,0.30)');
+    paint(h.limit-h.band, h.limit, 'rgba(111,191,115,0.60)');
+    paint(h.limit, 1, 'rgba(196,85,63,0.55)');
+  }
+  ctx.strokeStyle=COL.line; ctx.strokeRect(bx+0.5,by+0.5,bw-1,bh-1);
+
+  // true worth marker -- your gift, drawn on the bar
+  const tw = (G.worth[h.gi]*h.qty) / h.qty;
+  const twT = (tw - h.lo)/(h.hi - h.lo);
+  if(twT>=0 && twT<=1){
+    ctx.strokeStyle=COL.gold; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(bx+twT*bw, by-12); ctx.lineTo(bx+twT*bw, by+bh+12); ctx.stroke();
+    ctx.lineWidth=1;
+    txt('true worth', bx+twT*bw, by-18, 13, COL.gold, 'center');
+  }
+
+  // needle
+  const nx = bx + h.t*bw;
+  ctx.fillStyle = h.done ? '#fff' : COL.text;
+  ctx.fillRect(nx-2, by-8, 4, bh+16);
+  const price = h.lo + h.t*(h.hi-h.lo);
+  const lx = clamp(nx, bx+96, bx+bw-96);   // keep the readout clear of the end labels
+  txt(money(price) + ' each', lx, by+bh+42, 20, COL.text, 'center');
+  txt(money(price*h.qty) + ' total', lx, by+bh+64, 15, COL.dim, 'center');
+
+  txt(h.side==='buy' ? 'an insult' : 'a giveaway', bx, by-18, 14, COL.dim);
+  txt(h.side==='buy' ? 'generous'  : 'daylight robbery', bx+bw, by-18, 14, COL.dim, 'right');
+
+  if(!h.done){
+    txt('SPACE or CLICK to make the offer', BX+BW/2, BY+BH-64, 20, COL.text, 'center');
+    txt('refusals left: ' + h.tries, BX+BW/2, BY+BH-36, 16, h.tries<2?COL.bad:COL.dim, 'center');
+    if(h.msg) txt(h.msg, BX+BW/2, BY+BH-92, 17, COL.bad, 'center');
+    hot(0,0,W,H,'lock');
+  } else {
+    const col = h.result==='green'?COL.good : h.result==='fair'?COL.text : COL.bad;
+    wrap(h.msg, BX+60, BY+BH-96, BW-120, 19, col, 24);
+    button(BX+BW/2-90, BY+BH-58, 180, 44, 'CONTINUE', 'hagdone', true);
+  }
+}
+
+/* ------------------------------------------------------------------ day end */
+function drawDayEnd(){
+  drawBack();
+  panel(280, 150, 640, 460);
+  txt('Day ' + G.day + ' closes', W/2, 210, 40, COL.gold, 'center');
+  const rows = [
+    ['Purse',        money(G.crowns)],
+    ['Goods in cart',money(holdValue()) + '  (' + held() + '/' + G.cart + ')'],
+    ['Net worth',    money(netWorth())],
+    ['Today',        (G.profitToday>=0?'+':'') + money(G.profitToday)],
+    ['Toward the deed', Math.floor(100*G.crowns/DEED_PRICE) + '%'],
+    ['Suspicion',    Math.round(G.susp) + ' / ' + SUSPICION_MAX],
+  ];
+  rows.forEach((r,i)=>{
+    txt(r[0], 340, 270+i*44, 20, COL.dim);
+    txt(r[1], 860, 270+i*44, 22, i===3 ? (G.profitToday>=0?COL.good:COL.bad) : COL.text, 'right');
+  });
+  const left = DAYS - G.day;
+  txt(left>0 ? left + ' days until the Guild sells the deed.' : 'The Guild sells the deed tomorrow.',
+      W/2, 552, 18, left<=5?COL.bad:COL.dim, 'center');
+  button(W/2-110, 640, 220, 56, 'NEXT DAY', 'nextday', true, '#4a3a25');
+}
+
+/* ------------------------------------------------------------------ ending */
+const ENDINGS = {
+  bought: { title:'THE SHOP', col:'#d8a54a', lines:[
+    'You put the crowns on the Guild table in one stack and they counted it twice.',
+    'The key was smaller than you remembered.',
+    'Your father’s shelves are still up. The chalk marks where he wrote his prices',
+    'are still under the varnish, and every one of them was honest, and every one of',
+    'them was wrong.',
+    '',
+    'You open on the first of the month. You price things at what they are worth.',
+  ]},
+  honest: { title:'THE SHOP, CLEAN', col:'#6fbf73', lines:[
+    'You put the crowns on the Guild table and nobody in the square could say',
+    'you had taken a penny that was not offered.',
+    'You never squeezed a soul for it. You just saw further than they did,',
+    'and that turns out to be enough.',
+    '',
+    'They still come to you to ask what a thing is worth. You still tell them.',
+  ]},
+  run:   { title:'RUN OUT', col:'#c4553f', lines:[
+    'It is never one thing. It is a look at the Green, a door not opened at Dockside,',
+    'a boy sent to fetch someone when you turn up on the Row.',
+    'By the end of the week nobody will meet your price because nobody will meet you.',
+    '',
+    'You take the cart out past the north gate. The deed stays where it is.',
+  ]},
+  late:  { title:'TOO LATE', col:'#8d7f6c', lines:[
+    'The Guild sells the deed on a wet Tuesday to a man from the coast',
+    'who has never sold anything in his life and does not need to.',
+    'You watch them carry your father’s shelves out into the road.',
+    '',
+    'You still know what everything in that pile is worth. Every single thing.',
+  ]},
+};
+function drawEnding(){
+  drawBack();
+  ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(0,0,W,H);
+  let key = G.ending;
+  if(key==='bought' && G.honest && G.susp < 25) key='honest';
+  const e = ENDINGS[key] || ENDINGS.late;
+  txt(e.title, W/2, 190, 68, e.col, 'center');
+  e.lines.forEach((l,i)=> txt(l, W/2, 270+i*32, 19, i>=5?COL.dim:COL.text, 'center'));
+  const st = [
+    'Days traded: ' + Math.min(G.day, DAYS),
+    'Deals: ' + G.dealsMade + '   walkouts: ' + G.walkouts,
+    'Best single deal: ' + money(G.bestDeal),
+    'Net worth: ' + money(netWorth()),
+  ];
+  st.forEach((s,i)=> txt(s, W/2, 560+i*26, 16, COL.dim, 'center'));
+  button(W/2-110, 682, 220, 50, 'TRADE AGAIN', 'again', true, '#4a3a25');
+}
+
+/* ==========================================================================
+   LOOP
+   ========================================================================== */
+let last = 0;
+function frame(ts){
+  const dt = Math.min(0.05, (ts - last)/1000 || 0); last = ts;
+  G.t += dt;
+  if(G.screen === 'haggle' && G.hag && !G.hag.done){
+    const h = G.hag;
+    h.t += h.dir * h.speed * dt;
+    if(h.t > 1){ h.t = 1; h.dir = -1; }
+    if(h.t < 0){ h.t = 0; h.dir = 1; }
+  }
+  HOT = [];
+  ctx.clearRect(0,0,W,H);
+  if(G.screen==='title')       drawTitle();
+  else if(G.screen==='help')   drawHelp();
+  else if(G.screen==='market') drawMarket();
+  else if(G.screen==='haggle') drawHaggle();
+  else if(G.screen==='dayend') drawDayEnd();
+  else if(G.screen==='ending') drawEnding();
+  requestAnimationFrame(frame);
+}
+
+/* ==========================================================================
+   INPUT
+   ========================================================================== */
+function act(id, data){
+  switch(id){
+    case 'begin': G.confirmNew=false; reset(); beep(520); break;
+    case 'confirmnew': G.confirmNew = true; return;   // ask before wiping a month
+    case 'continue': G.confirmNew=false; if(loadGame()) beep(520); else reset(); break;
+    case 'help':  G.screen='help'; break;
+    case 'back':  G.screen = G.ending ? 'ending' : (G.day? 'title':'title'); break;
+    case 'good':  G.sel = data; G.qty = 1; break;
+    case 'stall': G.selS = data; G.qty = 1; break;
+    case 'qminus':G.qty = Math.max(1, G.qty-1); break;
+    case 'qplus': G.qty = G.qty+1; break;
+    case 'qmax':  G.qty = maxQty(); break;
+    case 'buy':   startHaggle(G.selS, G.sel, G.qty, 'buy'); break;
+    case 'sell':  startHaggle(G.selS, G.sel, G.qty, 'sell'); break;
+    case 'listen':listen(); break;
+    case 'endday':layLow(); break;
+    case 'deed':  buyDeed(); break;
+    case 'cart':  {
+      const u = CART_UPGRADES[G.cartLvl];
+      if(u && G.crowns >= u.cost){ G.crowns -= u.cost; G.cart = u.cap; G.cartLvl++;
+        logLine('You bought a bigger cart.'); }
+      break;
+    }
+    case 'lock':  lockHaggle(); break;
+    case 'hagdone':
+      G.hag = null;
+      if(G.ending) G.screen='ending';
+      else if(G.hour<=0) endDay();
+      else G.screen='market';
+      break;
+    case 'nextday': nextDay(); break;
+    case 'again': G.screen='title'; break;
+  }
+  if(G.screen !== 'title' && G.screen !== 'help') saveGame();
+}
+function maxQty(){
+  const st = G.stalls[G.selS];
+  const b = Math.min(st.stock[G.sel], G.cart-held(),
+                     Math.floor(G.crowns/Math.max(1,askPrice(G.selS,G.sel))));
+  const s = Math.min(G.hold[G.sel], st.demand[G.sel]);
+  return Math.max(1, Math.max(b,s));
+}
+
+cv.addEventListener('mousemove', e=>{
+  const r = cv.getBoundingClientRect();
+  mouse.x = (e.clientX-r.left) * (W/r.width);
+  mouse.y = (e.clientY-r.top)  * (H/r.height);
+});
+cv.addEventListener('mousedown', e=>{
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX-r.left)*(W/r.width), y = (e.clientY-r.top)*(H/r.height);
+  // clicking bare title canvas resumes rather than wiping a month in progress
+  if(G.screen==='title' && !HOT.some(h=>inRect(h,x,y))){ act(hasSave()?'continue':'begin'); return; }
+  for(let i=HOT.length-1;i>=0;i--){ if(inRect(HOT[i],x,y)){ act(HOT[i].id, HOT[i].data); return; } }
+});
+window.addEventListener('keydown', e=>{
+  const k = e.key;
+  if(G.screen==='title'){
+    // never let a stray keypress destroy a month in progress
+    act(k==='h' ? 'help' : k==='n' ? 'confirmnew' : hasSave() ? 'continue' : 'begin');
+    return;
+  }
+  if(G.screen==='help'){ act('back'); return; }
+  if(G.screen==='haggle'){
+    if(k===' ' || k==='Enter'){ e.preventDefault(); if(G.hag && G.hag.done) act('hagdone'); else act('lock'); }
+    if(k==='Escape' && G.hag && G.hag.done) act('hagdone');
+    return;
+  }
+  if(G.screen==='dayend'){ if(k===' '||k==='Enter') act('nextday'); return; }
+  if(G.screen==='ending'){ if(k===' '||k==='Enter') act('again'); return; }
+  // market
+  if(k>='1' && k<='5') act('stall', +k-1);
+  else if(k==='ArrowUp')   { G.sel = (G.sel+NG-1)%NG; G.qty=1; }
+  else if(k==='ArrowDown') { G.sel = (G.sel+1)%NG; G.qty=1; }
+  else if(k==='ArrowLeft') act('qminus');
+  else if(k==='ArrowRight')act('qplus');
+  else if(k==='b'||k==='B') act('buy');
+  else if(k==='s'||k==='S') act('sell');
+  else if(k==='l'||k==='L') act('listen');
+  else if(k==='m'||k==='M') act('qmax');
+  else if(k==='Enter')      act('endday');
+  else if(k==='?'||k==='h') G.screen='help';
+  if(k===' ') e.preventDefault();
+});
+
+/* ==========================================================================
+   TEST HOOKS
+   ========================================================================== */
+if(typeof globalThis !== 'undefined'){
+  globalThis.__TRADE = {
+    G, GOODS, STALLS, RIVALS, EVENTS, CART_UPGRADES,
+    DAYS, DEED_PRICE, HOURS, SUSPICION_MAX, START_CROWNS, CART_BASE,
+    reset, doTrade, startHaggle, lockHaggle, zoneAt, bandWidth,
+    saveGame, loadGame, hasSave, clearSave, SAVE_KEY, SAVE_FIELDS,
+    nextDay, endDay, layLow, listen, buyDeed, rivalsAct, genStalls, rollWorth,
+    askPrice, bidPrice, edge, held, holdValue, netWorth, money, act, maxQty,
+    srand, ENDINGS,
+  };
+}
+
+srand(20260814);
+G.worth = GOODS.map(g=>g.worth);
+G.tomorrow = GOODS.map(g=>g.worth);
+genStalls();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
