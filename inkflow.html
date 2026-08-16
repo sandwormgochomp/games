@@ -1,0 +1,2507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>INKFLOW — smooth 2D paint &amp; animation studio</title>
+<style>
+:root{
+  --bg:#1a1b21; --panel:#22242c; --panel2:#2a2d37; --line:#383c49;
+  --ink:#e9eaf1; --dim:#98a0b2; --accent:#8b7bff; --accent2:#f6c65b;
+  --danger:#ff6b60;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg); color:var(--ink); overflow:hidden;
+  font:13px/1.4 "Segoe UI",system-ui,sans-serif; user-select:none;
+}
+button,select,input{font:inherit;color:inherit}
+button{
+  background:var(--panel2); border:1px solid var(--line); border-radius:6px;
+  padding:5px 9px; cursor:pointer;
+}
+button:hover{background:#343846}
+button:active{transform:translateY(1px)}
+button.on{background:var(--accent);border-color:var(--accent);color:#0d0a20;font-weight:600}
+button:disabled{opacity:.4;cursor:default}
+button:disabled:hover{background:var(--panel2)}
+select,input[type=number],input[type=text]{
+  background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 6px;
+}
+input[type=range]{width:100%;accent-color:var(--accent)}
+/* minmax(0,1fr): a plain 1fr track takes its automatic minimum from min-content, so a long
+   frame strip would widen the column and shove the right panel off screen instead of scrolling */
+.app{display:grid;grid-template-columns:60px 216px minmax(0,1fr) 244px;
+  grid-template-rows:44px minmax(0,1fr) 168px;height:100%;overflow:hidden}
+#topbar{grid-column:1/5;display:flex;align-items:center;gap:7px;padding:0 10px;
+  background:var(--panel);border-bottom:1px solid var(--line)}
+#logo{font-weight:800;letter-spacing:2.5px;color:var(--accent2);margin-right:4px;white-space:nowrap}
+#logo small{color:var(--dim);font-weight:400;letter-spacing:0;margin-left:6px}
+.sep{width:1px;height:24px;background:var(--line);margin:0 3px;flex:0 0 auto}
+.spacer{flex:1}
+#tools{grid-row:2/4;background:var(--panel);border-right:1px solid var(--line);
+  padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:3px;overflow:auto}
+.tool{width:46px;height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:1px;border-radius:8px;border:1px solid transparent;background:transparent;cursor:pointer;padding:0}
+.tool:hover{background:var(--panel2)}
+.tool.on{background:var(--accent);color:#0d0a20}
+.tool svg{width:19px;height:19px}
+.tool span{font-size:8px;letter-spacing:.3px;text-transform:uppercase}
+#left{grid-row:2/4;background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:10px}
+#right{grid-row:2/4;background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:10px}
+.sect{margin-bottom:14px}
+.sect>h3{margin:0 0 6px;font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim)}
+.row{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.row label{color:var(--dim);min-width:54px;font-size:11px}
+.val{min-width:36px;text-align:right;color:var(--accent2);font-variant-numeric:tabular-nums;font-size:11px}
+.hidden{display:none!important}
+#stagewrap{position:relative;overflow:hidden;background:#131419;grid-row:2/3;touch-action:none}
+#stage{position:absolute;left:0;top:0;display:block}
+#hud{position:absolute;left:10px;bottom:8px;color:var(--dim);font-size:11px;
+  background:#000a;padding:3px 8px;border-radius:5px;pointer-events:none}
+#zoomhud{position:absolute;right:10px;bottom:8px;color:var(--dim);font-size:11px;
+  background:#000a;padding:3px 8px;border-radius:5px;pointer-events:none}
+#timeline{grid-column:3/4;grid-row:3/4;background:var(--panel);border-top:1px solid var(--line);
+  display:flex;flex-direction:column;padding:8px;gap:7px;min-width:0;overflow:hidden}
+#tlbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+#frames{position:relative;flex:1 1 0;min-width:0;min-height:0;display:flex;gap:6px;
+  overflow-x:auto;overflow-y:hidden;align-items:center;padding-bottom:4px}
+#frames::-webkit-scrollbar{height:8px}
+#frames::-webkit-scrollbar-thumb{background:#4b5266;border-radius:4px}
+#frames::-webkit-scrollbar-thumb:hover{background:#646e8a}
+#frames::-webkit-scrollbar-track{background:transparent}
+.frame{position:relative;flex:0 0 auto;border:2px solid var(--line);border-radius:6px;background:#0d0e12;
+  padding:2px;cursor:pointer}
+.frame.on{border-color:var(--accent)}
+.frame.drop{border-color:var(--accent2)}
+.frame canvas{display:block;width:84px;height:63px;border-radius:3px;background:
+  repeating-conic-gradient(#2a2d34 0 25%,#232630 0 50%) 0 0/10px 10px}
+.frame .n{position:absolute;left:4px;top:2px;font-size:9px;color:#fff;text-shadow:0 0 3px #000,0 0 3px #000}
+.frame .hold{position:absolute;right:4px;top:2px;font-size:9px;color:var(--accent2);
+  text-shadow:0 0 3px #000,0 0 3px #000}
+#addFrame{flex:0 0 auto;width:52px;height:69px;font-size:20px}
+#swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:3px}
+.sw{aspect-ratio:1;border-radius:4px;border:1px solid #0006;cursor:pointer}
+.sw.on{outline:2px solid #fff;outline-offset:-2px}
+#layers{display:flex;flex-direction:column-reverse;gap:4px;margin-bottom:6px}
+.layer{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);
+  border-radius:6px;padding:4px 6px;cursor:pointer}
+.layer.on{background:#332f4d;border-color:var(--accent)}
+.layer .nm{flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.layer .nm input{width:100%;padding:1px 3px;font-size:11px}
+.eye{width:16px;text-align:center;opacity:.9;cursor:pointer;font-size:12px}
+.eye.off{opacity:.22}
+#colorArea{display:flex;gap:8px;align-items:stretch;margin-bottom:8px}
+#sv{width:100%;height:96px;border-radius:6px;cursor:crosshair;border:1px solid var(--line)}
+#hue{width:18px;height:96px;border-radius:6px;cursor:pointer;border:1px solid var(--line)}
+#curCol{flex:1;height:26px;border-radius:6px;border:1px solid var(--line);
+  background:repeating-conic-gradient(#3a3f4b 0 25%,#2b2f39 0 50%) 0 0/8px 8px;position:relative;overflow:hidden}
+#curCol i{position:absolute;inset:0;display:block}
+.mini{font-size:11px;padding:3px 6px}
+.preset{display:flex;flex-direction:column;align-items:center;gap:2px;padding:5px 2px;font-size:9px;
+  text-transform:uppercase;letter-spacing:.3px;flex:1}
+.preset canvas{width:34px;height:16px}
+#presets{display:flex;gap:4px;margin-bottom:8px}
+#toast{position:fixed;left:50%;top:56px;transform:translateX(-50%);background:#000d;color:#fff;
+  padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:80}
+#toast.show{opacity:1}
+kbd{background:#0006;border:1px solid var(--line);border-radius:3px;padding:0 3px;font-size:10px}
+.modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:70}
+.modal.show{display:flex}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 24px;
+  max-width:680px;max-height:82vh;overflow:auto}
+.box h2{margin:0 0 10px;color:var(--accent2);font-size:17px}
+.box td{padding:2px 10px 2px 0;font-size:12px;vertical-align:top}
+.box .cols{display:flex;gap:26px}
+#newBox .row label{min-width:74px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div id="topbar">
+    <div id="logo">INKFLOW<small>paint &amp; animate</small></div>
+    <button id="btnUndo" class="mini" title="Undo (Ctrl+Z)">↶</button>
+    <button id="btnRedo" class="mini" title="Redo (Ctrl+Y)">↷</button>
+    <div class="sep"></div>
+    <button id="btnNew" class="mini">New</button>
+    <button id="btnOpen" class="mini">Open</button>
+    <button id="btnSave" class="mini">Save</button>
+    <input type="file" id="fileIn" accept=".json,application/json" class="hidden">
+    <div class="sep"></div>
+    <button id="btnFit" class="mini" title="Fit to window (0)">Fit</button>
+    <button id="btnOne" class="mini" title="100% (1)">1:1</button>
+    <button id="btnBg" class="mini" title="Cycle canvas backdrop">Checker</button>
+    <div class="spacer"></div>
+    <span id="projName" style="color:var(--dim);font-size:11px"></span>
+    <div class="sep"></div>
+    <button id="btnPng" class="mini">PNG</button>
+    <button id="btnSheet" class="mini">Sheet</button>
+    <button id="btnWebm" class="mini">WebM</button>
+    <button id="btnGif" class="mini" style="background:var(--accent2);color:#20180a;border-color:var(--accent2);font-weight:700">Export GIF</button>
+    <button id="btnHelp" class="mini" title="Help (?)">?</button>
+  </div>
+
+  <div id="tools"></div>
+
+  <div id="left">
+    <div class="sect">
+      <h3>Brush</h3>
+      <div id="presets"></div>
+      <div class="row"><label>Size</label><input type="range" id="rgSize" min="1" max="300" value="18"><span class="val" id="vSize">18</span></div>
+      <div class="row"><label>Hardness</label><input type="range" id="rgHard" min="0" max="100" value="55"><span class="val" id="vHard">55</span></div>
+      <div class="row"><label>Opacity</label><input type="range" id="rgOpac" min="1" max="100" value="100"><span class="val" id="vOpac">100</span></div>
+      <div class="row"><label>Flow</label><input type="range" id="rgFlow" min="1" max="100" value="100"><span class="val" id="vFlow">100</span></div>
+      <div class="row"><label>Spacing</label><input type="range" id="rgSpace" min="1" max="60" value="8"><span class="val" id="vSpace">8</span></div>
+      <div class="row"><label>Smooth</label><input type="range" id="rgSmooth" min="0" max="95" value="45"><span class="val" id="vSmooth">45</span></div>
+      <div class="row">
+        <button id="btnDynSize" class="mini on" style="flex:1" title="Thin the stroke when the pen presses lightly or the mouse moves fast">Size ← speed/pen</button>
+      </div>
+      <div class="row">
+        <button id="btnDynFlow" class="mini" style="flex:1" title="Fade the stroke when the pen presses lightly or the mouse moves fast">Flow ← speed/pen</button>
+      </div>
+    </div>
+
+    <div class="sect" id="rowSmudge">
+      <h3>Smudge</h3>
+      <div class="row"><label>Strength</label><input type="range" id="rgSmudge" min="1" max="100" value="60"><span class="val" id="vSmudge">60</span></div>
+    </div>
+
+    <div class="sect" id="rowFill">
+      <h3>Fill</h3>
+      <div class="row"><label>Tolerance</label><input type="range" id="rgTol" min="0" max="255" value="32"><span class="val" id="vTol">32</span></div>
+      <div class="row"><label>Grow</label><input type="range" id="rgGrow" min="0" max="8" value="2"><span class="val" id="vGrow">2</span></div>
+      <div class="row"><button id="btnContig" class="mini on" style="flex:1">Contiguous</button></div>
+      <div class="row"><button id="btnSampleAll" class="mini" style="flex:1" title="Find the edges using every visible layer, but pour the paint into the current one">Sample all layers</button></div>
+    </div>
+
+    <div class="sect" id="rowShape">
+      <h3>Shape</h3>
+      <div class="row"><button id="btnShapeFill" class="mini" style="flex:1">Filled</button></div>
+    </div>
+
+    <div class="sect">
+      <h3>Symmetry</h3>
+      <div class="row">
+        <button id="btnMirX" class="mini" style="flex:1">Mirror X</button>
+        <button id="btnMirY" class="mini" style="flex:1">Mirror Y</button>
+      </div>
+    </div>
+
+    <div class="sect">
+      <h3>Selection</h3>
+      <div class="row">
+        <button id="btnSelAll" class="mini" style="flex:1">All</button>
+        <button id="btnSelNone" class="mini" style="flex:1">None</button>
+      </div>
+      <div class="row">
+        <button id="btnCut" class="mini" style="flex:1">Cut</button>
+        <button id="btnCopy" class="mini" style="flex:1">Copy</button>
+        <button id="btnPaste" class="mini" style="flex:1">Paste</button>
+      </div>
+      <div class="row">
+        <button id="btnFlipH" class="mini" style="flex:1">Flip H</button>
+        <button id="btnFlipV" class="mini" style="flex:1">Flip V</button>
+      </div>
+      <div class="row"><button id="btnClearLayer" class="mini" style="flex:1">Clear layer</button></div>
+    </div>
+  </div>
+
+  <div id="stagewrap">
+    <canvas id="stage"></canvas>
+    <div id="hud"></div>
+    <div id="zoomhud"></div>
+  </div>
+
+  <div id="right">
+    <div class="sect">
+      <h3>Color</h3>
+      <div id="colorArea">
+        <div style="flex:1"><canvas id="sv" width="180" height="96"></canvas></div>
+        <canvas id="hue" width="18" height="96"></canvas>
+      </div>
+      <div class="row">
+        <div id="curCol"><i></i></div>
+        <button id="btnSwap" class="mini" title="Swap with secondary (X)">⇄</button>
+        <div id="altCol" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--line)"></div>
+      </div>
+      <div class="row">
+        <label style="min-width:26px">Hex</label>
+        <input type="text" id="hex" value="#000000" style="flex:1;min-width:0">
+      </div>
+      <div class="row"><label>Alpha</label><input type="range" id="rgAlpha" min="0" max="100" value="100"><span class="val" id="vAlpha">100</span></div>
+      <div id="swatches"></div>
+      <div class="row" style="margin-top:6px">
+        <button id="btnAddSw" class="mini" style="flex:1">+ Swatch</button>
+        <button id="btnDelSw" class="mini" style="flex:1">− Swatch</button>
+      </div>
+    </div>
+
+    <div class="sect">
+      <h3>Layers</h3>
+      <div id="layers"></div>
+      <div class="row">
+        <button id="btnLayAdd" class="mini" style="flex:1">+</button>
+        <button id="btnLayDup" class="mini" style="flex:1">Dup</button>
+        <button id="btnLayDel" class="mini" style="flex:1">−</button>
+      </div>
+      <div class="row">
+        <button id="btnLayUp" class="mini" style="flex:1">▲</button>
+        <button id="btnLayDown" class="mini" style="flex:1">▼</button>
+        <button id="btnLayMerge" class="mini" style="flex:1" title="Merge down">⤓</button>
+      </div>
+      <div class="row"><label>Opacity</label><input type="range" id="rgLayOpac" min="0" max="100" value="100"><span class="val" id="vLayOpac">100</span></div>
+      <div class="row">
+        <label>Blend</label>
+        <select id="selBlend" style="flex:1;min-width:0"></select>
+      </div>
+    </div>
+
+    <div class="sect">
+      <h3>Onion skin</h3>
+      <div class="row"><button id="btnOnion" class="mini on" style="flex:1">Onion on</button></div>
+      <div class="row"><label>Before</label><input type="range" id="rgOnBefore" min="0" max="4" value="1"><span class="val" id="vOnBefore">1</span></div>
+      <div class="row"><label>After</label><input type="range" id="rgOnAfter" min="0" max="4" value="1"><span class="val" id="vOnAfter">1</span></div>
+      <div class="row"><label>Strength</label><input type="range" id="rgOnOpac" min="5" max="90" value="35"><span class="val" id="vOnOpac">35</span></div>
+    </div>
+  </div>
+
+  <div id="timeline">
+    <div id="tlbar">
+      <button id="btnPlay" title="Play / stop (Enter)">▶ Play</button>
+      <button id="btnPrev" class="mini" title="Previous frame (,)">◀</button>
+      <button id="btnNext" class="mini" title="Next frame (.)">▶</button>
+      <div class="sep"></div>
+      <label style="color:var(--dim);font-size:11px">FPS</label>
+      <input type="number" id="numFps" min="1" max="60" value="12" style="width:52px">
+      <select id="selLoop" class="mini">
+        <option value="loop">Loop</option>
+        <option value="pingpong">Ping-pong</option>
+        <option value="once">Once</option>
+      </select>
+      <div class="sep"></div>
+      <button id="btnFrAdd" class="mini">+ Frame</button>
+      <button id="btnFrDup" class="mini">Duplicate</button>
+      <button id="btnFrDel" class="mini">Delete</button>
+      <div class="sep"></div>
+      <label style="color:var(--dim);font-size:11px">Hold</label>
+      <button id="btnHoldDn" class="mini">−</button>
+      <span class="val" id="vHold">1</span>
+      <button id="btnHoldUp" class="mini">+</button>
+      <div class="spacer"></div>
+      <span id="tlInfo" style="color:var(--dim);font-size:11px"></span>
+    </div>
+    <div id="frames"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div class="modal" id="help"><div class="box">
+  <h2>INKFLOW</h2>
+  <p style="color:var(--dim);margin:0 0 12px">
+    Paint smooth, anti-aliased artwork frame by frame, then play it back and export it.
+    Every layer is a real canvas, so brushes blend and feather the way paint does — this is not a pixel editor.
+  </p>
+  <div class="cols">
+    <table>
+      <tr><td><b>Tools</b></td><td></td></tr>
+      <tr><td><kbd>B</kbd></td><td>Brush</td></tr>
+      <tr><td><kbd>E</kbd></td><td>Eraser</td></tr>
+      <tr><td><kbd>S</kbd></td><td>Smudge</td></tr>
+      <tr><td><kbd>G</kbd></td><td>Fill</td></tr>
+      <tr><td><kbd>L</kbd> <kbd>R</kbd> <kbd>O</kbd></td><td>Line / Rect / Ellipse</td></tr>
+      <tr><td><kbd>I</kbd></td><td>Eyedropper</td></tr>
+      <tr><td><kbd>V</kbd></td><td>Move layer</td></tr>
+      <tr><td><kbd>M</kbd></td><td>Select box</td></tr>
+      <tr><td><kbd>Q</kbd></td><td>Lasso</td></tr>
+      <tr><td><kbd>H</kbd> / <kbd>Space</kbd></td><td>Pan</td></tr>
+      <tr><td><kbd>Alt</kbd>+drag</td><td>Pick colour with any tool</td></tr>
+    </table>
+    <table>
+      <tr><td><b>Everything else</b></td><td></td></tr>
+      <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Brush size</td></tr>
+      <tr><td><kbd>,</kbd> <kbd>.</kbd></td><td>Previous / next frame</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>Play / stop</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd></td><td>Undo / redo</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> <kbd>X</kbd> <kbd>V</kbd></td><td>Copy / cut / paste</td></tr>
+      <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Deselect</td></tr>
+      <tr><td><kbd>Delete</kbd></td><td>Clear selection</td></tr>
+      <tr><td><kbd>X</kbd></td><td>Swap colours</td></tr>
+      <tr><td><kbd>0</kbd> / <kbd>1</kbd></td><td>Fit / 100%</td></tr>
+      <tr><td>Wheel</td><td>Zoom · <kbd>Shift</kbd>+wheel = brush size</td></tr>
+      <tr><td>Middle-drag</td><td>Pan</td></tr>
+    </table>
+  </div>
+  <p style="color:var(--dim);font-size:12px;margin:12px 0 0">
+    <b>Opacity vs Flow.</b> Flow is how much paint each dab lays down — low flow builds up as you scrub back and forth.
+    Opacity caps the whole stroke, so a 40% stroke stays 40% no matter how many times you cross it.
+  </p>
+  <p style="color:var(--dim);font-size:12px;margin:8px 0 0">
+    <b>Hold</b> makes one drawing sit on screen for several playback frames, so you can time an animation without redrawing it.
+  </p>
+  <p style="color:var(--dim);font-size:12px;margin:8px 0 0">
+    <b>Onion skin</b> ghosts the neighbouring frames of <i>the layer you are drawing on</i> — red behind, green ahead —
+    and slips them in underneath your live artwork. That way a painted background never hides them. Keep your animation
+    on its own layer and your backdrop on another.
+  </p>
+  <div style="text-align:right;margin-top:14px"><button id="btnHelpClose">Close</button></div>
+</div></div>
+
+<div class="modal" id="newModal"><div class="box" id="newBox" style="width:340px">
+  <h2>New animation</h2>
+  <div class="row"><label>Preset</label><select id="newPreset" style="flex:1"></select></div>
+  <div class="row"><label>Width</label><input type="number" id="newW" min="16" max="2048" value="800" style="flex:1"></div>
+  <div class="row"><label>Height</label><input type="number" id="newH" min="16" max="2048" value="600" style="flex:1"></div>
+  <div class="row"><label>Backdrop</label><select id="newBg" style="flex:1">
+    <option value="white">White paper</option>
+    <option value="none">Transparent</option>
+  </select></div>
+  <p style="color:var(--dim);font-size:11px;margin:4px 0 0">This clears the current animation.</p>
+  <div style="text-align:right;margin-top:14px">
+    <button id="btnNewCancel">Cancel</button>
+    <button id="btnNewGo" class="on">Create</button>
+  </div>
+</div></div>
+
+<script>
+"use strict";
+/* ============================================================================
+   INKFLOW — a smooth (non-pixel) 2D paint and animation studio in one file.
+
+   Model
+     A project is a list of FRAMES; every frame holds one canvas per LAYER, and
+     the layer list is shared project-wide so layer 2 means the same thing on
+     every frame. A layer canvas is allocated lazily: an untouched layer is null
+     and costs nothing, which is what keeps a 60-frame project affordable.
+
+   Painting
+     Strokes are dabbed into a full-size SCRATCH canvas, never straight onto the
+     layer. That is what lets Flow (per-dab alpha, builds up) and Opacity
+     (stroke-level cap, does not build up) both exist, and it makes the eraser
+     just a different composite op at commit time.
+   ========================================================================== */
+
+/* ---------- tiny helpers ---------- */
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp = (a,b,t) => a+(b-a)*t;
+const nowMs = () => (typeof performance!=='undefined' ? performance.now() : Date.now());
+
+function mkCanvas(w,h){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
+}
+function ctxOf(c){ return c.getContext('2d',{willReadFrequently:false}); }
+
+let toastTimer = null;
+function toast(msg){
+  const t = $('toast');
+  if(!t) return;
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* ---------- colour ---------- */
+function hsv2rgb(h,s,v){
+  h = ((h%360)+360)%360;
+  const c = v*s, x = c*(1-Math.abs((h/60)%2-1)), m = v-c;
+  let r=0,g=0,b=0;
+  if(h<60){r=c;g=x;} else if(h<120){r=x;g=c;} else if(h<180){g=c;b=x;}
+  else if(h<240){g=x;b=c;} else if(h<300){r=x;b=c;} else {r=c;b=x;}
+  return [Math.round((r+m)*255),Math.round((g+m)*255),Math.round((b+m)*255)];
+}
+function rgb2hsv(r,g,b){
+  r/=255; g/=255; b/=255;
+  const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn;
+  let h = 0;
+  if(d){
+    if(mx===r) h = 60*(((g-b)/d)%6);
+    else if(mx===g) h = 60*((b-r)/d+2);
+    else h = 60*((r-g)/d+4);
+  }
+  return [((h%360)+360)%360, mx?d/mx:0, mx];
+}
+const hx2 = n => n.toString(16).padStart(2,'0');
+function hexOfRGB(r,g,b){ return '#'+hx2(r)+hx2(g)+hx2(b); }
+function parseHex(s){
+  s = String(s||'').trim().replace(/^#/,'');
+  if(/^[0-9a-fA-F]{3}$/.test(s)) s = s.split('').map(c=>c+c).join('');
+  if(!/^[0-9a-fA-F]{6}$/.test(s)) return null;
+  return [parseInt(s.slice(0,2),16),parseInt(s.slice(2,4),16),parseInt(s.slice(4,6),16)];
+}
+
+/* ---------- state ---------- */
+const BLENDS = ['normal','multiply','screen','overlay','darken','lighten',
+                'color-dodge','color-burn','hard-light','soft-light','difference','luminosity'];
+const MAX_UNDO = 26;
+const SIZE_PRESETS = [
+  ['Square 480',480,480],['Landscape 640×480',640,480],['Paper 800×600',800,600],
+  ['Wide 960×540',960,540],['HD 1280×720',1280,720]
+];
+const BRUSH_PRESETS = {
+  soft: {size:34, hardness:0,   flow:70,  opacity:100, spacing:5,  smooth:55, dynSize:true,  dynFlow:true },
+  hard: {size:18, hardness:100, flow:100, opacity:100, spacing:8,  smooth:45, dynSize:true,  dynFlow:false},
+  ink:  {size:9,  hardness:92,  flow:100, opacity:100, spacing:4,  smooth:70, dynSize:true,  dynFlow:false},
+  air:  {size:64, hardness:0,   flow:8,   opacity:100, spacing:3,  smooth:35, dynSize:false, dynFlow:true }
+};
+
+const S = {
+  W:800, H:600,
+  frames: [],
+  layerMeta: [],
+  cf:0, cl:0,
+  fps:12, playing:false, loop:'loop', pingDir:1,
+  bg:'white',                       // 'white' | 'checker' | 'black'
+  onion:{on:true, before:1, after:1, opacity:35},
+  color:{h:250,s:0,v:0,a:1},
+  alt:'#ffffff',
+  swatches:[],
+  swIndex:0,
+  tool:'brush',
+  brush:{size:18, hardness:55, opacity:100, flow:100, spacing:8, smooth:45, dynSize:true, dynFlow:false},
+  smudgeStrength:60,
+  fill:{tol:32, grow:2, contiguous:true, sampleAll:false},
+  shapeFill:false,
+  mirX:false, mirY:false,
+  view:{zoom:1, px:0, py:0},
+  sel:null,                          // {path:Path2D, box:{x,y,w,h}} in artwork px
+  clip:null,                         // clipboard canvas
+  projName:'',
+  rev:0
+};
+
+/* Undo entries are one of:
+     {t:'pixels', fi, li, before:canvas|null}   — restore one layer canvas
+     {t:'struct', snap}                          — restore project structure
+   Structure snapshots keep live canvas references. Deleting is the only op that
+   can orphan pixels, and it stores the removed canvases, so nothing is lost. */
+let undoStack = [], redoStack = [];
+
+/* ---------- layer access ---------- */
+function nFrames(){ return S.frames.length; }
+function nLayers(){ return S.layerMeta.length; }
+function curFrame(){ return S.frames[S.cf]; }
+function layerAt(fi,li){
+  const f = S.frames[fi];
+  return f ? (f.layers[li] || null) : null;
+}
+/* Materialise a layer canvas on first paint. Untouched layers stay null. */
+function ensureLayer(fi,li){
+  const f = S.frames[fi];
+  if(!f.layers[li]) f.layers[li] = mkCanvas(S.W,S.H);
+  return f.layers[li];
+}
+function newFrame(){
+  const layers = new Array(nLayers()).fill(null);
+  return {layers, hold:1, rev:0, thumbRev:-1, thumb:null};
+}
+function touch(fi){
+  const f = S.frames[fi==null?S.cf:fi];
+  if(f) f.rev++;
+  S.rev++;
+}
+
+/* ---------- project ---------- */
+function newProject(w,h,backdrop){
+  S.W = w; S.H = h;
+  S.layerMeta = [
+    {name:'Background', visible:true, opacity:100, blend:'normal', locked:false},
+    {name:'Layer 1',    visible:true, opacity:100, blend:'normal', locked:false}
+  ];
+  S.frames = [newFrame()];
+  S.cf = 0; S.cl = 1;
+  S.sel = null; S.clip = null;
+  undoStack = []; redoStack = [];
+  S.projName = '';
+  if(backdrop === 'white'){
+    const c = ensureLayer(0,0), g = ctxOf(c);
+    g.fillStyle = '#ffffff'; g.fillRect(0,0,S.W,S.H);
+  }
+  S.bg = backdrop === 'white' ? 'white' : 'checker';
+  allocScratch();
+  frameCache.clear();
+  fitView();
+}
+
+/* ---------- scratch + compositing buffers ---------- */
+let scratch=null, sctx=null, compose=null, cctx=null, tint=null, tctx=null;
+function allocScratch(){
+  scratch = mkCanvas(S.W,S.H); sctx = ctxOf(scratch);
+  compose = mkCanvas(S.W,S.H); cctx = ctxOf(compose);
+  tint    = mkCanvas(S.W,S.H); tctx = ctxOf(tint);
+}
+
+/* Composite one frame's visible layers into `out` (a 2d context sized W×H).
+   `liveScratch` overlays the in-progress stroke on the current layer. */
+function compositeInto(out, fi, opts){
+  opts = opts || {};
+  out.save();
+  out.setTransform(1,0,0,1,0,0);
+  out.globalCompositeOperation = 'source-over';
+  out.globalAlpha = 1;
+  out.clearRect(0,0,S.W,S.H);
+  const f = S.frames[fi];
+  if(!f){ out.restore(); return; }
+  for(let li=0; li<nLayers(); li++){
+    const meta = S.layerMeta[li];
+    if(!meta.visible) continue;
+    const lc = f.layers[li];
+    const live = opts.liveScratch && li===S.cl && fi===S.cf;
+
+    /* Ghosts go directly under the layer being drawn on, not behind the whole
+       frame: painted backdrops are opaque, and an onion skin hidden behind the
+       sky is an onion skin nobody can use. */
+    if(opts.onion && li===S.cl && fi===S.cf){
+      const a = S.onion.opacity/100;
+      for(let k=S.onion.before; k>=1; k--)
+        if(S.cf-k >= 0) drawGhostLayer(out, li, meta, S.cf-k, '#ff4d6d', a*(1-(k-1)*0.3));
+      for(let k=S.onion.after; k>=1; k--)
+        if(S.cf+k < nFrames()) drawGhostLayer(out, li, meta, S.cf+k, '#25d69a', a*(1-(k-1)*0.3));
+    }
+    if(!lc && !live) continue;
+
+    if(live){
+      /* The stroke has to merge with its own layer BEFORE that layer's opacity
+         and blend mode apply, or a 30%-opacity layer would show the wet stroke
+         at full strength and then jump when it commits. */
+      tctx.setTransform(1,0,0,1,0,0);
+      tctx.globalCompositeOperation = 'source-over';
+      tctx.globalAlpha = 1;
+      tctx.clearRect(0,0,S.W,S.H);
+      if(lc) tctx.drawImage(lc,0,0);
+      paintScratchOnto(tctx);
+      out.globalAlpha = meta.opacity/100;
+      out.globalCompositeOperation = meta.blend==='normal' ? 'source-over' : meta.blend;
+      out.drawImage(tint,0,0);
+    } else {
+      out.globalAlpha = meta.opacity/100;
+      out.globalCompositeOperation = meta.blend==='normal' ? 'source-over' : meta.blend;
+      out.drawImage(lc,0,0);
+    }
+  }
+  out.restore();
+}
+
+/* One neighbouring frame's copy of a layer, tinted and faded. */
+function drawGhostLayer(out, li, meta, fi, colour, alpha){
+  if(alpha <= 0.01) return;
+  const src = layerAt(fi,li);
+  if(!src) return;
+  tctx.setTransform(1,0,0,1,0,0);
+  tctx.globalCompositeOperation = 'source-over';
+  tctx.globalAlpha = 1;
+  tctx.clearRect(0,0,S.W,S.H);
+  tctx.drawImage(src,0,0);
+  /* source-atop paints the tint only where the drawing already is, so a ghost
+     stays a coloured shape rather than a coloured rectangle. */
+  tctx.globalCompositeOperation = 'source-atop';
+  tctx.globalAlpha = 0.7;
+  tctx.fillStyle = colour;
+  tctx.fillRect(0,0,S.W,S.H);
+  tctx.globalCompositeOperation = 'source-over';
+  tctx.globalAlpha = 1;
+  out.globalAlpha = clamp(alpha,0,1) * (meta.opacity/100);
+  out.globalCompositeOperation = 'source-over';
+  out.drawImage(tint,0,0);
+}
+
+/* Lay the wet stroke onto a context using the stroke's opacity and mode. */
+function paintScratchOnto(g){
+  const erasing = (S.tool==='eraser') || strokeErasing;
+  g.save();
+  g.globalAlpha = S.brush.opacity/100;
+  g.globalCompositeOperation = erasing ? 'destination-out' : 'source-over';
+  g.drawImage(scratch,0,0);
+  g.restore();
+}
+
+/* Cache of fully composited frames, for thumbnails, onion skins and export.
+   The key includes the layer settings themselves rather than a revision counter
+   the callers have to remember to bump — get that wrong anywhere and the app
+   silently shows, exports and saves a stale picture. */
+const frameCache = new Map();
+function metaSig(){
+  let s = S.W+'x'+S.H;
+  for(const m of S.layerMeta) s += '|'+(m.visible?1:0)+','+m.opacity+','+m.blend;
+  return s;
+}
+function compositedFrame(fi){
+  const f = S.frames[fi];
+  let e = frameCache.get(fi);
+  if(!e){ e = {canvas:mkCanvas(S.W,S.H), rev:-1, meta:''}; frameCache.set(fi,e); }
+  if(e.canvas.width!==S.W || e.canvas.height!==S.H){
+    e.canvas = mkCanvas(S.W,S.H); e.rev = -1;
+  }
+  const ms = metaSig();
+  if(e.rev !== f.rev || e.meta !== ms){
+    compositeInto(ctxOf(e.canvas), fi, {});
+    e.rev = f.rev; e.meta = ms;
+  }
+  return e.canvas;
+}
+
+/* ---------- undo ---------- */
+function cloneCanvas(c){
+  if(!c) return null;
+  const d = mkCanvas(c.width,c.height);
+  ctxOf(d).drawImage(c,0,0);
+  return d;
+}
+function pushPixelUndo(fi,li){
+  undoStack.push({t:'pixels', fi, li, before:cloneCanvas(layerAt(fi,li))});
+  if(undoStack.length>MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+}
+function structSnap(){
+  return {
+    W:S.W, H:S.H, cf:S.cf, cl:S.cl,
+    layerMeta: S.layerMeta.map(m=>Object.assign({},m)),
+    frames: S.frames.map(f=>({layers:f.layers.slice(), hold:f.hold, rev:f.rev}))
+  };
+}
+function pushStructUndo(){
+  undoStack.push({t:'struct', snap:structSnap()});
+  if(undoStack.length>MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+}
+function applyStruct(snap){
+  S.W = snap.W; S.H = snap.H;
+  S.layerMeta = snap.layerMeta.map(m=>Object.assign({},m));
+  S.frames = snap.frames.map(f=>({layers:f.layers.slice(), hold:f.hold, rev:(f.rev||0)+1, thumbRev:-1, thumb:null}));
+  S.cf = clamp(snap.cf,0,S.frames.length-1);
+  S.cl = clamp(snap.cl,0,S.layerMeta.length-1);
+  S.rev++;
+  frameCache.clear();
+}
+function invert(entry){
+  if(entry.t==='pixels') return {t:'pixels', fi:entry.fi, li:entry.li, before:cloneCanvas(layerAt(entry.fi,entry.li))};
+  return {t:'struct', snap:structSnap()};
+}
+function applyEntry(entry){
+  if(entry.t==='pixels'){
+    const f = S.frames[entry.fi];
+    if(!f) return;
+    f.layers[entry.li] = entry.before ? cloneCanvas(entry.before) : null;
+    f.rev++; S.rev++;
+    if(entry.fi!==S.cf) S.cf = clamp(entry.fi,0,nFrames()-1);
+    S.cl = clamp(entry.li,0,nLayers()-1);
+  } else {
+    applyStruct(entry.snap);
+  }
+}
+function doUndo(){
+  if(!undoStack.length){ toast('Nothing to undo'); return; }
+  const e = undoStack.pop();
+  redoStack.push(invert(e));
+  applyEntry(e);
+  fullRefresh();
+}
+function doRedo(){
+  if(!redoStack.length){ toast('Nothing to redo'); return; }
+  const e = redoStack.pop();
+  undoStack.push(invert(e));
+  applyEntry(e);
+  fullRefresh();
+}
+
+/* ---------- brush tips ---------- */
+const tipCache = new Map();
+function brushTip(size, hardness, css){
+  const d = Math.max(1, Math.ceil(size));
+  const key = d+'|'+Math.round(hardness)+'|'+css;
+  let t = tipCache.get(key);
+  if(t) return t;
+  const c = mkCanvas(d+2, d+2), g = ctxOf(c);
+  const r = d/2, cx = (d+2)/2, cy = (d+2)/2;
+  const h = clamp(hardness/100, 0, 1);
+  if(h >= 0.995 || d <= 2){
+    /* A plain filled arc — the browser's own anti-aliasing gives the one-pixel
+       soft rim that a gradient with r0===r1 cannot produce. */
+    g.fillStyle = css;
+    g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.fill();
+  } else {
+    const inner = r*h;
+    const grad = g.createRadialGradient(cx,cy,Math.min(inner, r*0.999), cx,cy, r);
+    grad.addColorStop(0, css);
+    /* Two extra stops bend the falloff toward the middle so a 0%-hardness tip
+       reads as a soft airbrush instead of a flat cone. */
+    grad.addColorStop(0.55, withAlpha(css, 0.45));
+    grad.addColorStop(0.82, withAlpha(css, 0.12));
+    grad.addColorStop(1, withAlpha(css, 0));
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(cx,cy,r,0,Math.PI*2); g.fill();
+  }
+  if(tipCache.size > 160) tipCache.clear();
+  tipCache.set(key,c);
+  return c;
+}
+function withAlpha(css, mul){
+  const m = /^rgba?\(([^)]+)\)$/.exec(css);
+  if(m){
+    const p = m[1].split(',').map(s=>parseFloat(s));
+    const a = p.length>3 ? p[3] : 1;
+    return 'rgba('+p[0]+','+p[1]+','+p[2]+','+(a*mul)+')';
+  }
+  const rgb = parseHex(css) || [0,0,0];
+  return 'rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+','+mul+')';
+}
+function currentCSS(){
+  const [r,g,b] = hsv2rgb(S.color.h, S.color.s, S.color.v);
+  return 'rgba('+r+','+g+','+b+','+S.color.a+')';
+}
+function currentHex(){
+  const [r,g,b] = hsv2rgb(S.color.h, S.color.s, S.color.v);
+  return hexOfRGB(r,g,b);
+}
+
+/* ---------- stroke ---------- */
+let stroke = null;          // live stroke state
+let strokeErasing = false;
+
+function beginStroke(pt, e){
+  const b = S.brush;
+  sctx.setTransform(1,0,0,1,0,0);
+  sctx.globalCompositeOperation = 'source-over';
+  sctx.globalAlpha = 1;
+  sctx.clearRect(0,0,S.W,S.H);
+  strokeErasing = (S.tool==='eraser');
+  stroke = {
+    sm:{x:pt.x, y:pt.y},
+    last:{x:pt.x, y:pt.y},
+    carry:0,
+    press: pressureOf(e, 0),
+    speed:0,
+    tStamp: nowMs(),
+    css: strokeErasing ? 'rgba(0,0,0,1)' : currentCSS(),
+    dabs:0,
+    box:{x0:pt.x, y0:pt.y, x1:pt.x, y1:pt.y}
+  };
+  dabAt(pt.x, pt.y, stroke.press);
+}
+function pressureOf(e, speed){
+  if(e && e.pointerType==='pen' && e.pressure>0) return clamp(e.pressure,0.02,1);
+  /* Mouse and trackpad have no pressure, so speed stands in for it: fast strokes
+     thin out, which is what makes a mouse line look drawn rather than plotted. */
+  return clamp(1 - speed/55, 0.25, 1);
+}
+function strokeTo(pt, e){
+  if(!stroke) return;
+  const b = S.brush;
+  const k = clamp(b.smooth/100, 0, 0.95);
+  stroke.sm.x = lerp(pt.x, stroke.sm.x, k);
+  stroke.sm.y = lerp(pt.y, stroke.sm.y, k);
+  const x = stroke.sm.x, y = stroke.sm.y;
+
+  const t = nowMs();
+  const dt = Math.max(1, t - stroke.tStamp);
+  const inst = Math.hypot(x-stroke.last.x, y-stroke.last.y) / dt * 16;
+  stroke.speed = lerp(stroke.speed, inst, 0.35);
+  stroke.tStamp = t;
+  const press = lerp(stroke.press, pressureOf(e, stroke.speed), 0.5);
+  stroke.press = press;
+
+  const step = Math.max(0.6, b.size * (b.spacing/100) * (b.dynSize ? Math.max(0.35,press) : 1));
+  let dx = x-stroke.last.x, dy = y-stroke.last.y;
+  let dist = Math.hypot(dx,dy);
+  if(dist < 1e-6){ return; }
+  let travelled = stroke.carry;
+  const ux = dx/dist, uy = dy/dist;
+  let d = step - travelled;
+  while(d <= dist){
+    const px = stroke.last.x + ux*d, py = stroke.last.y + uy*d;
+    dabAt(px, py, press);
+    d += step;
+  }
+  stroke.carry = (travelled + dist) % step;
+  stroke.last.x = x; stroke.last.y = y;
+}
+/* Airbrush keeps depositing while the pointer is parked. */
+function strokeIdle(){
+  if(!stroke) return;
+  if(S.brush.flow >= 45) return;
+  dabAt(stroke.last.x, stroke.last.y, stroke.press);
+}
+function dabAt(x,y,press){
+  const b = S.brush;
+  const size = Math.max(1, b.size * (b.dynSize ? lerp(0.12,1,press) : 1));
+  const alpha = (b.flow/100) * (b.dynFlow ? lerp(0.1,1,press) : 1);
+  const tip = brushTip(size, b.hardness, stroke.css);
+  sctx.save();
+  clipToSelection(sctx);
+  sctx.globalAlpha = clamp(alpha,0,1);
+  sctx.globalCompositeOperation = 'source-over';
+  const half = tip.width/2;
+  sctx.drawImage(tip, x-half, y-half);
+  if(S.mirX) sctx.drawImage(tip, (S.W-x)-half, y-half);
+  if(S.mirY) sctx.drawImage(tip, x-half, (S.H-y)-half);
+  if(S.mirX && S.mirY) sctx.drawImage(tip, (S.W-x)-half, (S.H-y)-half);
+  sctx.restore();
+  stroke.dabs++;
+  const bx = stroke.box;
+  bx.x0 = Math.min(bx.x0,x); bx.y0 = Math.min(bx.y0,y);
+  bx.x1 = Math.max(bx.x1,x); bx.y1 = Math.max(bx.y1,y);
+}
+function endStroke(){
+  if(!stroke) return;
+  const drew = stroke.dabs>0;
+  stroke = null;
+  if(!drew){ strokeErasing=false; return; }
+  commitScratch();
+  strokeErasing = false;
+}
+function commitScratch(){
+  const meta = S.layerMeta[S.cl];
+  if(meta.locked){ toast('Layer is locked'); return; }
+  pushPixelUndo(S.cf, S.cl);
+  const lc = ensureLayer(S.cf, S.cl);
+  paintScratchOnto(ctxOf(lc));
+  sctx.setTransform(1,0,0,1,0,0);
+  sctx.globalCompositeOperation='source-over'; sctx.globalAlpha=1;
+  sctx.clearRect(0,0,S.W,S.H);
+  touch(S.cf);
+  afterEdit();
+}
+function clipToSelection(g){
+  if(S.sel) g.clip(S.sel.path);
+}
+
+/* ---------- shapes ---------- */
+let shapeStart = null;
+function shapePreview(a,b,shiftKey){
+  sctx.setTransform(1,0,0,1,0,0);
+  sctx.globalCompositeOperation='source-over'; sctx.globalAlpha=1;
+  sctx.clearRect(0,0,S.W,S.H);
+  sctx.save();
+  clipToSelection(sctx);
+  const css = currentCSS();
+  sctx.strokeStyle = css; sctx.fillStyle = css;
+  sctx.lineWidth = Math.max(1, S.brush.size*0.5);
+  sctx.lineCap = 'round'; sctx.lineJoin = 'round';
+  sctx.globalAlpha = S.brush.flow/100;
+  let x0=a.x, y0=a.y, x1=b.x, y1=b.y;
+  if(S.tool==='line'){
+    if(shiftKey){
+      const ang = Math.round(Math.atan2(y1-y0,x1-x0)/(Math.PI/4))*(Math.PI/4);
+      const r = Math.hypot(x1-x0,y1-y0);
+      x1 = x0+Math.cos(ang)*r; y1 = y0+Math.sin(ang)*r;
+    }
+    sctx.beginPath(); sctx.moveTo(x0,y0); sctx.lineTo(x1,y1); sctx.stroke();
+  } else {
+    if(shiftKey){
+      const s = Math.max(Math.abs(x1-x0),Math.abs(y1-y0));
+      x1 = x0 + Math.sign(x1-x0||1)*s; y1 = y0 + Math.sign(y1-y0||1)*s;
+    }
+    const rx = Math.abs(x1-x0), ry = Math.abs(y1-y0);
+    sctx.beginPath();
+    if(S.tool==='rect') sctx.rect(Math.min(x0,x1),Math.min(y0,y1),rx,ry);
+    else sctx.ellipse((x0+x1)/2,(y0+y1)/2, rx/2, ry/2, 0, 0, Math.PI*2);
+    if(S.shapeFill) sctx.fill(); else sctx.stroke();
+  }
+  sctx.restore();
+}
+
+/* ---------- flood fill ---------- */
+function floodFill(px,py){
+  const meta = S.layerMeta[S.cl];
+  if(meta.locked){ toast('Layer is locked'); return; }
+  const x0 = Math.floor(px), y0 = Math.floor(py);
+  if(x0<0||y0<0||x0>=S.W||y0>=S.H) return;
+
+  /* Read the edges from whichever surface the user chose, but always pour the
+     paint into the current layer — that is how you colour under line art. */
+  const srcCanvas = S.fill.sampleAll ? compositedFrame(S.cf) : layerAt(S.cf,S.cl);
+  let src;
+  if(srcCanvas){
+    src = srcCanvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,S.W,S.H).data;
+  } else {
+    src = new Uint8ClampedArray(S.W*S.H*4);
+  }
+  const W=S.W, H=S.H;
+  const si = (y0*W+x0)*4;
+  const sr=src[si], sg=src[si+1], sb=src[si+2], sa=src[si+3];
+  const tol = S.fill.tol;
+  const mask = new Uint8Array(W*H);
+
+  const match = i => {
+    const i4 = i*4;
+    const da = src[i4+3]-sa;
+    if(sa===0) return src[i4+3] <= tol;
+    if(src[i4+3]===0) return sa <= tol;
+    const dr=src[i4]-sr, dg=src[i4+1]-sg, db=src[i4+2]-sb;
+    return (Math.abs(dr)+Math.abs(dg)+Math.abs(db)+Math.abs(da))/4 <= tol;
+  };
+
+  if(S.fill.contiguous){
+    const stack = [y0*W+x0];
+    mask[y0*W+x0] = 1;
+    while(stack.length){
+      const i = stack.pop();
+      const x = i%W, y = (i-x)/W;
+      if(x>0   && !mask[i-1] && match(i-1)){ mask[i-1]=1; stack.push(i-1); }
+      if(x<W-1 && !mask[i+1] && match(i+1)){ mask[i+1]=1; stack.push(i+1); }
+      if(y>0   && !mask[i-W] && match(i-W)){ mask[i-W]=1; stack.push(i-W); }
+      if(y<H-1 && !mask[i+W] && match(i+W)){ mask[i+W]=1; stack.push(i+W); }
+    }
+  } else {
+    for(let i=0;i<W*H;i++) if(match(i)) mask[i]=1;
+  }
+
+  /* Grow the mask a little. Anti-aliased line art leaves a half-transparent
+     fringe that no tolerance setting fills cleanly; without this the fill stops
+     short and leaves a pale halo along every stroke. */
+  for(let pass=0; pass<S.fill.grow; pass++){
+    const next = mask.slice();
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      const i = y*W+x;
+      if(mask[i]) continue;
+      if((x>0&&mask[i-1])||(x<W-1&&mask[i+1])||(y>0&&mask[i-W])||(y<H-1&&mask[i+W])) next[i]=1;
+    }
+    mask.set(next);
+  }
+
+  const [r,g,b] = hsv2rgb(S.color.h,S.color.s,S.color.v);
+  const a = Math.round(S.color.a*255);
+  const out = new ImageData(W,H);
+  const od = out.data;
+  let filled = 0;
+  for(let i=0;i<W*H;i++){
+    if(!mask[i]) continue;
+    filled++;
+    const i4=i*4;
+    od[i4]=r; od[i4+1]=g; od[i4+2]=b; od[i4+3]=a;
+  }
+  if(!filled){ toast('Nothing to fill there'); return; }
+
+  pushPixelUndo(S.cf,S.cl);
+  const patch = mkCanvas(W,H);
+  ctxOf(patch).putImageData(out,0,0);
+  const lg = ctxOf(ensureLayer(S.cf,S.cl));
+  lg.save();
+  clipToSelection(lg);
+  lg.globalCompositeOperation='source-over';
+  lg.globalAlpha = S.brush.opacity/100;
+  lg.drawImage(patch,0,0);
+  lg.restore();
+  touch(S.cf);
+  afterEdit();
+}
+
+/* ---------- smudge ---------- */
+let smudge = null;
+function beginSmudge(pt){
+  const meta = S.layerMeta[S.cl];
+  if(meta.locked){ toast('Layer is locked'); return; }
+  pushPixelUndo(S.cf,S.cl);
+  const d = Math.max(2, Math.round(S.brush.size));
+  const buf = mkCanvas(d,d);
+  const lc = ensureLayer(S.cf,S.cl);
+  ctxOf(buf).drawImage(lc, pt.x-d/2, pt.y-d/2, d, d, 0, 0, d, d);
+  smudge = {d, buf, last:{x:pt.x,y:pt.y}, carry:0, moved:false, tmp:mkCanvas(d,d)};
+}
+function smudgeTo(pt){
+  if(!smudge) return;
+  const d = smudge.d;
+  const step = Math.max(1, d*0.18);
+  let dx = pt.x-smudge.last.x, dy = pt.y-smudge.last.y;
+  let dist = Math.hypot(dx,dy);
+  if(dist < step) return;
+  const ux=dx/dist, uy=dy/dist;
+  const lc = ensureLayer(S.cf,S.cl);
+  const lg = ctxOf(lc);
+  const mask = brushTip(d, S.brush.hardness, 'rgba(0,0,0,1)');
+  const tg = ctxOf(smudge.tmp);
+  for(let t=step; t<=dist; t+=step){
+    const x = smudge.last.x+ux*t, y = smudge.last.y+uy*t;
+    /* Carry the pigment forward, mask it to the brush shape, drop it, then
+       re-pick whatever is now underneath — that trailing re-pick is what makes
+       a smudge smear rather than clone. */
+    tg.setTransform(1,0,0,1,0,0);
+    tg.globalCompositeOperation='source-over'; tg.globalAlpha=1;
+    tg.clearRect(0,0,d,d);
+    tg.drawImage(smudge.buf,0,0);
+    tg.globalCompositeOperation='destination-in';
+    tg.drawImage(mask, (d-mask.width)/2, (d-mask.height)/2);
+    lg.save();
+    clipToSelection(lg);
+    lg.globalAlpha = clamp(S.smudgeStrength/100,0,1);
+    lg.globalCompositeOperation='source-over';
+    lg.drawImage(smudge.tmp, x-d/2, y-d/2);
+    lg.restore();
+    const bg = ctxOf(smudge.buf);
+    bg.setTransform(1,0,0,1,0,0);
+    bg.globalCompositeOperation='source-over'; bg.globalAlpha=1;
+    bg.clearRect(0,0,d,d);
+    bg.drawImage(lc, x-d/2, y-d/2, d, d, 0, 0, d, d);
+    smudge.moved = true;
+  }
+  smudge.last.x = pt.x; smudge.last.y = pt.y;
+  touch(S.cf);
+}
+function endSmudge(){
+  if(!smudge) return;
+  const moved = smudge.moved;
+  smudge = null;
+  if(!moved) undoStack.pop();   // a click that smeared nothing should not cost an undo step
+  else afterEdit();
+}
+
+/* ---------- move / selection ---------- */
+let moveOp = null;
+function beginMove(pt){
+  const meta = S.layerMeta[S.cl];
+  if(meta.locked){ toast('Layer is locked'); return; }
+  pushPixelUndo(S.cf,S.cl);
+  moveOp = {start:pt, base:cloneCanvas(layerAt(S.cf,S.cl)), dx:0, dy:0, moved:false};
+}
+function moveTo(pt){
+  if(!moveOp) return;
+  moveOp.dx = Math.round(pt.x-moveOp.start.x);
+  moveOp.dy = Math.round(pt.y-moveOp.start.y);
+  if(moveOp.dx||moveOp.dy) moveOp.moved = true;
+  const lc = ensureLayer(S.cf,S.cl);
+  const g = ctxOf(lc);
+  g.setTransform(1,0,0,1,0,0);
+  g.globalCompositeOperation='source-over'; g.globalAlpha=1;
+  g.clearRect(0,0,S.W,S.H);
+  if(!moveOp.base){ touch(S.cf); return; }
+  if(S.sel){
+    /* With a selection live, only the selected pixels travel; the rest stay put. */
+    g.save(); g.beginPath();
+    g.rect(0,0,S.W,S.H);
+    g.clip(S.sel.path,'evenodd');
+    g.drawImage(moveOp.base,0,0);
+    g.restore();
+    g.save(); g.clip(S.sel.path);
+    g.translate(moveOp.dx,moveOp.dy);
+    g.drawImage(moveOp.base,0,0);
+    g.restore();
+  } else {
+    g.drawImage(moveOp.base, moveOp.dx, moveOp.dy);
+  }
+  touch(S.cf);
+}
+function endMove(){
+  if(!moveOp) return;
+  const moved = moveOp.moved;
+  moveOp = null;
+  if(!moved) undoStack.pop();
+  else afterEdit();
+}
+
+function setSelRect(x0,y0,x1,y1){
+  const x = Math.min(x0,x1), y = Math.min(y0,y1);
+  const w = Math.abs(x1-x0), h = Math.abs(y1-y0);
+  if(w<2||h<2){ S.sel = null; return; }
+  const p = new Path2D(); p.rect(x,y,w,h);
+  S.sel = {path:p, box:{x,y,w,h}, pts:null};
+}
+function setSelLasso(pts){
+  if(pts.length<3){ S.sel=null; return; }
+  const p = new Path2D();
+  p.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++) p.lineTo(pts[i].x,pts[i].y);
+  p.closePath();
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const q of pts){ x0=Math.min(x0,q.x); y0=Math.min(y0,q.y); x1=Math.max(x1,q.x); y1=Math.max(y1,q.y); }
+  if(x1-x0<2||y1-y0<2){ S.sel=null; return; }
+  S.sel = {path:p, box:{x:x0,y:y0,w:x1-x0,h:y1-y0}, pts:pts.slice()};
+}
+function selectAll(){
+  const p = new Path2D(); p.rect(0,0,S.W,S.H);
+  S.sel = {path:p, box:{x:0,y:0,w:S.W,h:S.H}, pts:null};
+  fullRefresh();
+}
+function selectNone(){ S.sel = null; fullRefresh(); }
+
+function selBoxOrFull(){ return S.sel ? S.sel.box : {x:0,y:0,w:S.W,h:S.H}; }
+function doCopy(){
+  const lc = layerAt(S.cf,S.cl);
+  if(!lc){ toast('Layer is empty'); return; }
+  const b = selBoxOrFull();
+  const c = mkCanvas(Math.max(1,Math.round(b.w)), Math.max(1,Math.round(b.h)));
+  const g = ctxOf(c);
+  if(S.sel){
+    g.save(); g.translate(-b.x,-b.y); g.clip(S.sel.path);
+    g.drawImage(lc,0,0); g.restore();
+  } else {
+    g.drawImage(lc,0,0);
+  }
+  S.clip = c;
+  toast('Copied '+c.width+'×'+c.height);
+}
+function doClearSel(){
+  const meta = S.layerMeta[S.cl];
+  if(meta.locked){ toast('Layer is locked'); return; }
+  const lc = layerAt(S.cf,S.cl);
+  if(!lc) return;
+  pushPixelUndo(S.cf,S.cl);
+  const g = ctxOf(lc);
+  g.save();
+  if(S.sel){ g.clip(S.sel.path); g.clearRect(0,0,S.W,S.H); }
+  else g.clearRect(0,0,S.W,S.H);
+  g.restore();
+  touch(S.cf);
+  afterEdit();
+}
+function doCut(){ doCopy(); doClearSel(); }
+function doPaste(){
+  if(!S.clip){ toast('Clipboard is empty'); return; }
+  const meta = S.layerMeta[S.cl];
+  if(meta.locked){ toast('Layer is locked'); return; }
+  pushPixelUndo(S.cf,S.cl);
+  const b = selBoxOrFull();
+  const g = ctxOf(ensureLayer(S.cf,S.cl));
+  g.save();
+  g.globalCompositeOperation='source-over'; g.globalAlpha=1;
+  g.drawImage(S.clip, Math.round(b.x), Math.round(b.y));
+  g.restore();
+  touch(S.cf);
+  afterEdit();
+  toast('Pasted');
+}
+function flipSel(horizontal){
+  const meta = S.layerMeta[S.cl];
+  if(meta.locked){ toast('Layer is locked'); return; }
+  const lc = layerAt(S.cf,S.cl);
+  if(!lc){ toast('Layer is empty'); return; }
+  pushPixelUndo(S.cf,S.cl);
+  const b = selBoxOrFull();
+  const bw = Math.max(1,Math.round(b.w)), bh = Math.max(1,Math.round(b.h));
+  const tmp = mkCanvas(bw,bh);
+  const tg = ctxOf(tmp);
+  tg.translate(horizontal?bw:0, horizontal?0:bh);
+  tg.scale(horizontal?-1:1, horizontal?1:-1);
+  tg.drawImage(lc, b.x, b.y, bw, bh, 0, 0, bw, bh);
+  const g = ctxOf(lc);
+  g.save();
+  if(S.sel) g.clip(S.sel.path);
+  g.clearRect(b.x,b.y,bw,bh);
+  g.drawImage(tmp, b.x, b.y);
+  g.restore();
+  touch(S.cf);
+  afterEdit();
+}
+function clearLayer(){
+  const meta = S.layerMeta[S.cl];
+  if(meta.locked){ toast('Layer is locked'); return; }
+  pushPixelUndo(S.cf,S.cl);
+  curFrame().layers[S.cl] = null;
+  touch(S.cf);
+  afterEdit();
+  toast('Layer cleared');
+}
+
+/* ---------- view ---------- */
+function stageSize(){
+  const w = $('stagewrap').clientWidth, h = $('stagewrap').clientHeight;
+  return {w:Math.max(1,w), h:Math.max(1,h)};
+}
+function fitView(){
+  const {w,h} = stageSize();
+  const z = Math.min((w-40)/S.W, (h-40)/S.H);
+  S.view.zoom = clamp(z, 0.02, 32);
+  centreView();
+}
+function centreView(){
+  const {w,h} = stageSize();
+  S.view.px = Math.round((w - S.W*S.view.zoom)/2);
+  S.view.py = Math.round((h - S.H*S.view.zoom)/2);
+}
+function zoomAt(cx,cy,factor){
+  const z0 = S.view.zoom;
+  const z1 = clamp(z0*factor, 0.02, 32);
+  if(z1===z0) return;
+  S.view.px = cx - (cx - S.view.px)*(z1/z0);
+  S.view.py = cy - (cy - S.view.py)*(z1/z0);
+  S.view.zoom = z1;
+}
+function toArt(cx,cy){
+  return {x:(cx - S.view.px)/S.view.zoom, y:(cy - S.view.py)/S.view.zoom};
+}
+
+/* ---------- render ---------- */
+let stage, stx, checkerPat = null;
+let needsRender = true;
+function invalidate(){ needsRender = true; }
+
+function makeChecker(){
+  const c = mkCanvas(20,20), g = ctxOf(c);
+  g.fillStyle = '#2f3340'; g.fillRect(0,0,20,20);
+  g.fillStyle = '#262a35'; g.fillRect(0,0,10,10); g.fillRect(10,10,10,10);
+  checkerPat = stx.createPattern(c,'repeat');
+}
+
+function resizeStage(){
+  const {w,h} = stageSize();
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  stage.width = Math.round(w*dpr);
+  stage.height = Math.round(h*dpr);
+  stage.style.width = w+'px';
+  stage.style.height = h+'px';
+  stx.setTransform(dpr,0,0,dpr,0,0);
+  makeChecker();
+  invalidate();
+}
+
+let antsPhase = 0;
+function render(){
+  const {w,h} = stageSize();
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  stx.setTransform(dpr,0,0,dpr,0,0);
+  stx.clearRect(0,0,w,h);
+  stx.fillStyle = '#131419';
+  stx.fillRect(0,0,w,h);
+
+  const z = S.view.zoom, px = S.view.px, py = S.view.py;
+  const dw = S.W*z, dh = S.H*z;
+
+  /* backdrop under the artwork */
+  stx.save();
+  stx.beginPath(); stx.rect(px,py,dw,dh); stx.clip();
+  if(S.bg==='checker'){
+    stx.save(); stx.translate(px,py); stx.fillStyle = checkerPat;
+    stx.fillRect(0,0,dw,dh); stx.restore();
+  } else {
+    stx.fillStyle = S.bg==='black' ? '#000000' : '#ffffff';
+    stx.fillRect(px,py,dw,dh);
+  }
+  stx.restore();
+
+  stx.imageSmoothingEnabled = z < 3.5;
+  stx.imageSmoothingQuality = 'high';
+
+  /* the live frame: onion ghosts, the layer stack, and the wet stroke */
+  compositeInto(cctx, S.cf, {liveScratch:true, onion: S.onion.on && !S.playing});
+  stx.globalAlpha = 1;
+  stx.globalCompositeOperation = 'source-over';
+  stx.drawImage(compose, px, py, dw, dh);
+
+  /* canvas border */
+  stx.imageSmoothingEnabled = true;
+  stx.strokeStyle = '#000';
+  stx.lineWidth = 1;
+  stx.strokeRect(px-0.5, py-0.5, dw+1, dh+1);
+
+  /* selection marching ants */
+  if(S.sel){
+    stx.save();
+    stx.translate(px,py); stx.scale(z,z);
+    stx.lineWidth = 1/z;
+    stx.setLineDash([5/z,4/z]);
+    stx.lineDashOffset = -antsPhase/z;
+    stx.strokeStyle = '#000'; stx.stroke(S.sel.path);
+    stx.setLineDash([]);
+    stx.lineDashOffset = 0;
+    stx.strokeStyle = '#fff';
+    stx.setLineDash([5/z,4/z]);
+    stx.lineDashOffset = (-antsPhase+5)/z;
+    stx.stroke(S.sel.path);
+    stx.restore();
+  }
+
+  /* brush ring */
+  if(hoverPt && !S.playing && ['brush','eraser','smudge'].includes(S.tool)){
+    const r = Math.max(2, S.brush.size*z/2);
+    stx.save();
+    stx.globalCompositeOperation='difference';
+    stx.strokeStyle = '#ffffff';
+    stx.lineWidth = 1;
+    stx.beginPath();
+    stx.arc(px+hoverPt.x*z, py+hoverPt.y*z, r, 0, Math.PI*2);
+    stx.stroke();
+    stx.restore();
+  }
+  setZoomHud();
+  needsRender = false;
+}
+/* ---------- playback ---------- */
+let playAcc = 0, lastTick = 0;
+function frameSlots(){
+  let n = 0;
+  for(const f of S.frames) n += Math.max(1,f.hold);
+  return n;
+}
+function setPlaying(on){
+  S.playing = !!on;
+  playAcc = 0; lastTick = nowMs();
+  S.pingDir = 1;
+  $('btnPlay').textContent = S.playing ? '■ Stop' : '▶ Play';
+  $('btnPlay').classList.toggle('on', S.playing);
+  invalidate();
+}
+function togglePlay(){ setPlaying(!S.playing); }
+function advanceFrame(){
+  if(S.loop==='pingpong'){
+    let next = S.cf + S.pingDir;
+    if(next>=nFrames()){ S.pingDir=-1; next = Math.max(0, nFrames()-2); }
+    else if(next<0){ S.pingDir=1; next = Math.min(nFrames()-1, 1); }
+    S.cf = next;
+  } else {
+    let next = S.cf+1;
+    if(next>=nFrames()){
+      /* stop, never toggle -- a toggle here restarts playback if this is ever
+         reached while already stopped */
+      if(S.loop==='once'){ setPlaying(false); next = nFrames()-1; }
+      else next = 0;
+    }
+    S.cf = next;
+  }
+}
+function tick(t){
+  requestAnimationFrame(tick);
+  if(!lastTick) lastTick = t;
+  const dt = Math.min(200, t-lastTick);
+  lastTick = t;
+  antsPhase = (antsPhase + dt*0.02) % 9;
+  if(S.sel) invalidate();
+
+  if(S.playing && nFrames()>1){
+    playAcc += dt;
+    const per = 1000/Math.max(1,S.fps) * Math.max(1, curFrame().hold);
+    if(playAcc >= per){
+      playAcc -= per;
+      advanceFrame();
+      syncFrameStrip();
+      invalidate();
+    }
+  }
+  if(stroke && S.brush.flow < 45){ strokeIdle(); invalidate(); }
+  if(needsRender) render();
+}
+
+/* ---------- pointer input ---------- */
+let hoverPt = null;
+let drag = null;          // {mode, ...}
+let spaceHeld = false;
+
+function stagePoint(e){
+  const r = stage.getBoundingClientRect();
+  return toArt(e.clientX-r.left, e.clientY-r.top);
+}
+function screenPoint(e){
+  const r = stage.getBoundingClientRect();
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+function pickColourAt(p){
+  const c = compositedFrame(S.cf);
+  const x = clamp(Math.floor(p.x),0,S.W-1), y = clamp(Math.floor(p.y),0,S.H-1);
+  const d = c.getContext('2d',{willReadFrequently:true}).getImageData(x,y,1,1).data;
+  if(d[3]===0){ toast('Nothing there to pick'); return; }
+  const [h,s,v] = rgb2hsv(d[0],d[1],d[2]);
+  S.color.h=h; S.color.s=s; S.color.v=v;
+  syncColourUI();
+  invalidate();
+}
+
+function onDown(e){
+  if(e.button===1 || spaceHeld || S.tool==='pan'){
+    drag = {mode:'pan', sx:e.clientX, sy:e.clientY, px:S.view.px, py:S.view.py};
+    stage.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    return;
+  }
+  if(e.button!==0) return;
+  const p = stagePoint(e);
+  stage.setPointerCapture(e.pointerId);
+
+  if(e.altKey || S.tool==='picker'){ drag = {mode:'pick'}; pickColourAt(p); return; }
+  if(S.playing) togglePlay();
+
+  switch(S.tool){
+    case 'brush': case 'eraser':
+      drag = {mode:'paint'};
+      beginStroke(p, e);
+      break;
+    case 'smudge':
+      drag = {mode:'smudge'};
+      beginSmudge(p);
+      break;
+    case 'fill':
+      floodFill(p.x,p.y);
+      drag = {mode:'none'};
+      break;
+    case 'line': case 'rect': case 'ellipse':
+      drag = {mode:'shape'};
+      shapeStart = p;
+      shapePreview(p,p,e.shiftKey);
+      break;
+    case 'move':
+      drag = {mode:'move'};
+      beginMove(p);
+      break;
+    case 'select':
+      drag = {mode:'select', start:p};
+      break;
+    case 'lasso':
+      drag = {mode:'lasso', pts:[p]};
+      break;
+    default:
+      drag = {mode:'none'};
+  }
+  invalidate();
+  e.preventDefault();
+}
+function onMove(e){
+  const p = stagePoint(e);
+  hoverPt = p;
+  setHud(p);
+  if(!drag){ invalidate(); return; }
+  switch(drag.mode){
+    case 'pan':
+      S.view.px = drag.px + (e.clientX-drag.sx);
+      S.view.py = drag.py + (e.clientY-drag.sy);
+      break;
+    case 'pick': pickColourAt(p); break;
+    case 'paint': strokeTo(p, e); break;
+    case 'smudge': smudgeTo(p); break;
+    case 'shape': shapePreview(shapeStart, p, e.shiftKey); break;
+    case 'move': moveTo(p); break;
+    case 'select': setSelRect(drag.start.x,drag.start.y,p.x,p.y); break;
+    case 'lasso':
+      if(!drag.pts.length || Math.hypot(p.x-drag.pts[drag.pts.length-1].x, p.y-drag.pts[drag.pts.length-1].y) > 2)
+        drag.pts.push(p);
+      setSelLasso(drag.pts);
+      break;
+  }
+  invalidate();
+}
+function onUp(e){
+  if(!drag) return;
+  const mode = drag.mode;
+  drag = null;
+  if(mode==='paint') endStroke();
+  else if(mode==='smudge') endSmudge();
+  else if(mode==='shape'){ commitScratch(); shapeStart=null; }
+  else if(mode==='move') endMove();
+  else if(mode==='lasso' || mode==='select'){ if(S.sel) toast('Selection made — Esc or Ctrl+D to drop it'); }
+  invalidate();
+}
+function setHud(p){
+  $('hud').textContent = (p ? Math.round(p.x)+', '+Math.round(p.y) : '—')+
+    '   ·   frame '+(S.cf+1)+'/'+nFrames()+'   ·   '+S.layerMeta[S.cl].name;
+}
+/* Driven from render(), not from pointer moves: zooming with the wheel or the
+   Fit button does not move the pointer, and a stale percentage is a lie. */
+function setZoomHud(){
+  $('zoomhud').textContent = Math.round(S.view.zoom*100)+'%   ·   '+S.W+'×'+S.H;
+}
+
+/* ---------- tool rail ---------- */
+const ICONS = {
+  brush:'<path d="M3 17c3 0 3-4 6-4 2 0 3 1 3 3 0 2-2 4-5 4-2 0-4-1-4-3z" fill="currentColor" opacity=".9"/><path d="M9 13 18 3l3 3-10 9z" fill="currentColor"/>',
+  eraser:'<path d="M4 15 12 7l6 6-5 5H6z" fill="currentColor"/><path d="M12 7l4-4 6 6-4 4z" fill="currentColor" opacity=".55"/><rect x="3" y="19" width="18" height="2" fill="currentColor" opacity=".5"/>',
+  smudge:'<path d="M12 3c4 4 6 6 6 9a6 6 0 0 1-12 0c0-3 2-5 6-9z" fill="currentColor" opacity=".85"/><path d="M9 13c0 2 1 3 3 3" stroke="#0000" fill="none"/>',
+  fill:'<path d="M5 11 12 4l7 7-7 7z" fill="currentColor"/><path d="M19 14c1.2 1.6 2 2.7 2 3.6a2 2 0 1 1-4 0c0-.9.8-2 2-3.6z" fill="currentColor" opacity=".7"/>',
+  line:'<path d="M4 20 20 4" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+  rect:'<rect x="4" y="6" width="16" height="12" stroke="currentColor" stroke-width="2.2" fill="none" rx="1"/>',
+  ellipse:'<ellipse cx="12" cy="12" rx="8" ry="6" stroke="currentColor" stroke-width="2.2" fill="none"/>',
+  picker:'<path d="M4 20l1-3 8-8 2 2-8 8z" fill="currentColor"/><path d="M14 5l2-2a2.5 2.5 0 0 1 3.5 3.5l-2 2z" fill="currentColor" opacity=".7"/><path d="M12 7l5 5" stroke="currentColor" stroke-width="2"/>',
+  move:'<path d="M12 3l3 3h-2v5h5V9l3 3-3 3v-2h-5v5h2l-3 3-3-3h2v-5H6v2l-3-3 3-3v2h5V6H9z" fill="currentColor"/>',
+  select:'<rect x="4" y="4" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="3 3" rx="1"/>',
+  lasso:'<path d="M12 4c4.4 0 8 2.2 8 5s-3.6 5-8 5c-1.3 0-2.6-.2-3.7-.6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M8 13.4C5.6 12.6 4 11 4 9c0-1.5.9-2.8 2.3-3.7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M8 14c0 3 1 4 1 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
+  pan:'<path d="M10 12V5a1.5 1.5 0 0 1 3 0v6M13 11V4.5a1.5 1.5 0 0 1 3 0V12M16 12V7a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1.6a5 5 0 0 1-3.9-1.9L4 15s.8-1.5 2.2-1.1L10 15" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>'
+};
+const TOOLS = [
+  ['brush','Brush','B'], ['eraser','Eraser','E'], ['smudge','Smudge','S'], ['fill','Fill','G'],
+  ['line','Line','L'], ['rect','Rect','R'], ['ellipse','Oval','O'],
+  ['picker','Pick','I'], ['move','Move','V'], ['select','Box','M'], ['lasso','Lasso','Q'], ['pan','Pan','H']
+];
+function buildTools(){
+  const host = $('tools');
+  host.innerHTML = '';
+  for(const [id,label,key] of TOOLS){
+    const b = document.createElement('button');
+    b.className = 'tool'; b.dataset.tool = id;
+    b.title = label+' ('+key+')';
+    b.innerHTML = '<svg viewBox="0 0 24 24">'+ICONS[id]+'</svg><span>'+label+'</span>';
+    b.onclick = ()=>setTool(id);
+    host.appendChild(b);
+  }
+}
+function setTool(id){
+  S.tool = id;
+  for(const b of document.querySelectorAll('.tool')) b.classList.toggle('on', b.dataset.tool===id);
+  $('rowSmudge').classList.toggle('hidden', id!=='smudge');
+  $('rowFill').classList.toggle('hidden', id!=='fill');
+  $('rowShape').classList.toggle('hidden', !['rect','ellipse'].includes(id));
+  const cursor = id==='pan' ? 'grab' : (id==='picker' ? 'copy' : (id==='move' ? 'move' : 'crosshair'));
+  stage.style.cursor = cursor;
+  invalidate();
+}
+
+/* ---------- brush presets ---------- */
+function buildPresets(){
+  const host = $('presets');
+  host.innerHTML = '';
+  for(const key of Object.keys(BRUSH_PRESETS)){
+    const b = document.createElement('button');
+    b.className = 'preset';
+    const cv = mkCanvas(68,32);
+    drawPresetSwatch(cv, BRUSH_PRESETS[key]);
+    b.appendChild(cv);
+    const s = document.createElement('span'); s.textContent = key;
+    b.appendChild(s);
+    b.onclick = ()=>applyPreset(key);
+    host.appendChild(b);
+  }
+}
+function drawPresetSwatch(cv, p){
+  const g = ctxOf(cv);
+  g.clearRect(0,0,cv.width,cv.height);
+  const size = Math.min(20, Math.max(3, p.size*0.4));
+  const tip = brushTip(size, p.hardness, 'rgba(233,234,241,1)');
+  const n = 26;
+  for(let i=0;i<=n;i++){
+    const t = i/n;
+    const x = 6 + t*(cv.width-12);
+    const y = cv.height/2 + Math.sin(t*Math.PI*1.4)*5;
+    const press = Math.sin(t*Math.PI);
+    const sz = p.dynSize ? Math.max(1,size*lerp(0.15,1,press)) : size;
+    const tp = p.dynSize ? brushTip(sz, p.hardness, 'rgba(233,234,241,1)') : tip;
+    g.globalAlpha = (p.flow/100) * (p.dynFlow ? lerp(0.1,1,press) : 1);
+    g.drawImage(tp, x-tp.width/2, y-tp.height/2);
+  }
+  g.globalAlpha = 1;
+}
+function applyPreset(key){
+  const p = BRUSH_PRESETS[key];
+  Object.assign(S.brush, p);
+  if(!['brush','eraser'].includes(S.tool)) setTool('brush');
+  syncBrushUI();
+  toast('Brush: '+key);
+}
+
+/* ---------- colour UI ---------- */
+function drawSV(){
+  const c = $('sv'), g = ctxOf(c);
+  const w = c.width, h = c.height;
+  const [r0,g0,b0] = hsv2rgb(S.color.h,1,1);
+  const base = g.createLinearGradient(0,0,w,0);
+  base.addColorStop(0,'#fff'); base.addColorStop(1,'rgb('+r0+','+g0+','+b0+')');
+  g.fillStyle = base; g.fillRect(0,0,w,h);
+  const dark = g.createLinearGradient(0,0,0,h);
+  dark.addColorStop(0,'rgba(0,0,0,0)'); dark.addColorStop(1,'rgba(0,0,0,1)');
+  g.fillStyle = dark; g.fillRect(0,0,w,h);
+  const x = S.color.s*w, y = (1-S.color.v)*h;
+  g.strokeStyle = '#000'; g.lineWidth = 3;
+  g.beginPath(); g.arc(x,y,5,0,Math.PI*2); g.stroke();
+  g.strokeStyle = '#fff'; g.lineWidth = 1.6;
+  g.beginPath(); g.arc(x,y,5,0,Math.PI*2); g.stroke();
+}
+function drawHue(){
+  const c = $('hue'), g = ctxOf(c);
+  const w = c.width, h = c.height;
+  const grad = g.createLinearGradient(0,0,0,h);
+  for(let i=0;i<=6;i++){
+    const [r,gg,b] = hsv2rgb(i*60,1,1);
+    grad.addColorStop(i/6,'rgb('+r+','+gg+','+b+')');
+  }
+  g.fillStyle = grad; g.fillRect(0,0,w,h);
+  const y = (S.color.h/360)*h;
+  g.strokeStyle='#000'; g.lineWidth=3;
+  g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke();
+  g.strokeStyle='#fff'; g.lineWidth=1.4;
+  g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke();
+}
+function syncColourUI(){
+  drawSV(); drawHue();
+  const hex = currentHex();
+  $('curCol').querySelector('i').style.background = 'rgba('+hsv2rgb(S.color.h,S.color.s,S.color.v).join(',')+','+S.color.a+')';
+  $('altCol').style.background = S.alt;
+  if(document.activeElement !== $('hex')) $('hex').value = hex;
+  $('rgAlpha').value = Math.round(S.color.a*100);
+  $('vAlpha').textContent = Math.round(S.color.a*100);
+  buildSwatches();
+}
+function buildSwatches(){
+  const host = $('swatches');
+  host.innerHTML = '';
+  const cur = currentHex();
+  S.swatches.forEach((hex,i)=>{
+    const d = document.createElement('div');
+    d.className = 'sw'+(hex.toLowerCase()===cur.toLowerCase()?' on':'');
+    d.style.background = hex;
+    d.title = hex;
+    d.onclick = ()=>{ S.swIndex=i; setColourHex(hex); };
+    host.appendChild(d);
+  });
+}
+function setColourHex(hex){
+  const rgb = parseHex(hex);
+  if(!rgb) return;
+  const [h,s,v] = rgb2hsv(rgb[0],rgb[1],rgb[2]);
+  S.color.h=h; S.color.s=s; S.color.v=v;
+  syncColourUI();
+  invalidate();
+}
+
+/* ---------- layers UI ---------- */
+function buildLayers(){
+  const host = $('layers');
+  host.innerHTML = '';
+  S.layerMeta.forEach((m,i)=>{
+    const row = document.createElement('div');
+    row.className = 'layer'+(i===S.cl?' on':'');
+    const eye = document.createElement('div');
+    eye.className = 'eye'+(m.visible?'':' off');
+    eye.textContent = m.visible ? '◉' : '◎';
+    eye.title = 'Show / hide';
+    eye.onclick = ev=>{ ev.stopPropagation(); m.visible=!m.visible; S.rev++; fullRefresh(); };
+    const nm = document.createElement('div');
+    nm.className = 'nm'; nm.textContent = m.name;
+    nm.title = 'Double-click to rename';
+    nm.ondblclick = ev=>{
+      ev.stopPropagation();
+      const inp = document.createElement('input');
+      inp.type='text'; inp.value=m.name;
+      nm.textContent=''; nm.appendChild(inp); inp.focus(); inp.select();
+      const done = ()=>{ m.name = inp.value.trim()||m.name; buildLayers(); setHud(hoverPt); };
+      inp.onblur = done;
+      inp.onkeydown = k=>{ if(k.key==='Enter') inp.blur(); if(k.key==='Escape'){ inp.value=m.name; inp.blur(); } k.stopPropagation(); };
+    };
+    const lock = document.createElement('div');
+    lock.className = 'eye'+(m.locked?'':' off');
+    lock.textContent = m.locked ? '🔒' : '🔓';
+    lock.title = 'Lock';
+    lock.onclick = ev=>{ ev.stopPropagation(); m.locked=!m.locked; buildLayers(); };
+    row.appendChild(eye); row.appendChild(nm); row.appendChild(lock);
+    row.onclick = ()=>{ S.cl=i; fullRefresh(); };
+    host.appendChild(row);
+  });
+  const m = S.layerMeta[S.cl];
+  $('rgLayOpac').value = m.opacity;
+  $('vLayOpac').textContent = m.opacity;
+  $('selBlend').value = m.blend;
+}
+function addLayer(dup){
+  if(nLayers()>=12){ toast('12 layers is the limit'); return; }
+  pushStructUndo();
+  const at = S.cl+1;
+  const src = S.layerMeta[S.cl];
+  S.layerMeta.splice(at,0,{
+    name: dup ? src.name+' copy' : 'Layer '+(nLayers()),
+    visible:true, opacity: dup?src.opacity:100, blend: dup?src.blend:'normal', locked:false
+  });
+  for(const f of S.frames){
+    f.layers.splice(at, 0, dup ? cloneCanvas(f.layers[S.cl]) : null);
+    f.rev++;
+  }
+  S.cl = at; S.rev++;
+  frameCache.clear();
+  fullRefresh();
+}
+function deleteLayer(){
+  if(nLayers()<=1){ toast('Need at least one layer'); return; }
+  pushStructUndo();
+  S.layerMeta.splice(S.cl,1);
+  for(const f of S.frames){ f.layers.splice(S.cl,1); f.rev++; }
+  S.cl = clamp(S.cl-1,0,nLayers()-1);
+  S.rev++;
+  frameCache.clear();
+  fullRefresh();
+}
+function moveLayer(dir){
+  const to = S.cl+dir;
+  if(to<0||to>=nLayers()) return;
+  pushStructUndo();
+  const m = S.layerMeta.splice(S.cl,1)[0];
+  S.layerMeta.splice(to,0,m);
+  for(const f of S.frames){
+    const c = f.layers.splice(S.cl,1)[0];
+    f.layers.splice(to,0,c);
+    f.rev++;
+  }
+  S.cl = to; S.rev++;
+  frameCache.clear();
+  fullRefresh();
+}
+function mergeDown(){
+  if(S.cl===0){ toast('Nothing below to merge into'); return; }
+  pushStructUndo();
+  const up = S.layerMeta[S.cl], lo = S.layerMeta[S.cl-1];
+  for(const f of S.frames){
+    const uc = f.layers[S.cl];
+    if(uc){
+      const lc = f.layers[S.cl-1] || mkCanvas(S.W,S.H);
+      const g = ctxOf(lc);
+      g.save();
+      g.globalAlpha = up.opacity/100;
+      g.globalCompositeOperation = up.blend==='normal' ? 'source-over' : up.blend;
+      g.drawImage(uc,0,0);
+      g.restore();
+      f.layers[S.cl-1] = lc;
+    }
+    f.layers.splice(S.cl,1);
+    f.rev++;
+  }
+  S.layerMeta.splice(S.cl,1);
+  S.cl = S.cl-1;
+  S.rev++;
+  frameCache.clear();
+  fullRefresh();
+  toast('Merged down');
+}
+
+/* ---------- frames UI ---------- */
+let dragFrameFrom = null;
+function buildFrames(){
+  const host = $('frames');
+  host.innerHTML = '';
+  S.frames.forEach((f,i)=>{
+    const box = document.createElement('div');
+    box.className = 'frame'+(i===S.cf?' on':'');
+    box.draggable = true;
+    const cv = mkCanvas(84,63);
+    box.appendChild(cv);
+    const n = document.createElement('div'); n.className='n'; n.textContent = i+1;
+    box.appendChild(n);
+    if(f.hold>1){
+      const h = document.createElement('div'); h.className='hold'; h.textContent = '×'+f.hold;
+      box.appendChild(h);
+    }
+    box.onclick = ()=>gotoFrame(i);
+    box.ondragstart = ev=>{ dragFrameFrom = i; ev.dataTransfer.effectAllowed='move'; };
+    box.ondragover = ev=>{ ev.preventDefault(); box.classList.add('drop'); };
+    box.ondragleave = ()=>box.classList.remove('drop');
+    box.ondrop = ev=>{
+      ev.preventDefault(); box.classList.remove('drop');
+      if(dragFrameFrom==null || dragFrameFrom===i) return;
+      pushStructUndo();
+      const fr = S.frames.splice(dragFrameFrom,1)[0];
+      S.frames.splice(i,0,fr);
+      S.cf = i; S.rev++;
+      frameCache.clear();
+      dragFrameFrom = null;
+      fullRefresh();
+    };
+    host.appendChild(box);
+    paintThumb(cv,i);
+  });
+  const add = document.createElement('button');
+  add.id = 'addFrame'; add.textContent = '+';
+  add.title = 'Add a blank frame';
+  add.onclick = ()=>addFrame(false);
+  host.appendChild(add);
+  const cur = host.children[S.cf];
+  if(cur && cur.scrollIntoView) cur.scrollIntoView({block:'nearest', inline:'nearest'});
+}
+function paintThumb(cv, fi){
+  const g = ctxOf(cv);
+  g.clearRect(0,0,cv.width,cv.height);
+  const src = compositedFrame(fi);
+  const s = Math.min(cv.width/S.W, cv.height/S.H);
+  const w = S.W*s, h = S.H*s;
+  if(S.bg!=='checker'){
+    g.fillStyle = S.bg==='black' ? '#000' : '#fff';
+    g.fillRect((cv.width-w)/2,(cv.height-h)/2,w,h);
+  }
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(src, (cv.width-w)/2, (cv.height-h)/2, w, h);
+}
+function syncFrameStrip(){
+  const host = $('frames');
+  [...host.children].forEach((el,i)=>{
+    if(el.id==='addFrame') return;
+    el.classList.toggle('on', i===S.cf);
+  });
+  const cur = host.children[S.cf];
+  if(cur && cur.scrollIntoView) cur.scrollIntoView({block:'nearest', inline:'nearest'});
+  $('vHold').textContent = curFrame().hold;
+  const nf = nFrames(), ns = frameSlots();
+  $('tlInfo').textContent = nf+(nf===1?' frame':' frames')+' · '+ns+(ns===1?' slot':' slots')+
+    ' · '+(ns/Math.max(1,S.fps)).toFixed(2)+'s';
+}
+function addFrame(dup){
+  if(nFrames()>=200){ toast('200 frames is the limit'); return; }
+  pushStructUndo();
+  const f = newFrame();
+  if(dup){
+    const src = curFrame();
+    f.layers = src.layers.map(cloneCanvas);
+    f.hold = src.hold;
+  }
+  S.frames.splice(S.cf+1,0,f);
+  S.cf++;
+  S.rev++;
+  frameCache.clear();
+  fullRefresh();
+}
+function deleteFrame(){
+  if(nFrames()<=1){ toast('Need at least one frame'); return; }
+  pushStructUndo();
+  S.frames.splice(S.cf,1);
+  S.cf = clamp(S.cf,0,nFrames()-1);
+  S.rev++;
+  frameCache.clear();
+  fullRefresh();
+}
+function gotoFrame(i){
+  S.cf = clamp(i,0,nFrames()-1);
+  fullRefresh();
+}
+function setHold(d){
+  const f = curFrame();
+  const v = clamp(f.hold+d,1,20);
+  if(v===f.hold) return;
+  pushStructUndo();
+  f.hold = v;
+  fullRefresh();
+}
+
+/* ---------- refresh ---------- */
+function afterEdit(){
+  frameCache.delete(S.cf);
+  const host = $('frames');
+  const el = host.children[S.cf];
+  if(el && el.firstChild && el.firstChild.tagName==='CANVAS') paintThumb(el.firstChild, S.cf);
+  syncFrameStrip();
+  invalidate();
+}
+function fullRefresh(){
+  buildLayers();
+  buildFrames();
+  syncFrameStrip();
+  syncBrushUI();
+  syncColourUI();
+  setHud(hoverPt);
+  invalidate();
+}
+function syncBrushUI(){
+  const b = S.brush;
+  $('rgSize').value = b.size;   $('vSize').textContent = Math.round(b.size);
+  $('rgHard').value = b.hardness; $('vHard').textContent = Math.round(b.hardness);
+  $('rgOpac').value = b.opacity; $('vOpac').textContent = Math.round(b.opacity);
+  $('rgFlow').value = b.flow;   $('vFlow').textContent = Math.round(b.flow);
+  $('rgSpace').value = b.spacing; $('vSpace').textContent = Math.round(b.spacing);
+  $('rgSmooth').value = b.smooth; $('vSmooth').textContent = Math.round(b.smooth);
+  $('btnDynSize').classList.toggle('on', b.dynSize);
+  $('btnDynFlow').classList.toggle('on', b.dynFlow);
+  $('rgSmudge').value = S.smudgeStrength; $('vSmudge').textContent = S.smudgeStrength;
+  $('rgTol').value = S.fill.tol; $('vTol').textContent = S.fill.tol;
+  $('rgGrow').value = S.fill.grow; $('vGrow').textContent = S.fill.grow;
+  $('btnContig').classList.toggle('on', S.fill.contiguous);
+  $('btnSampleAll').classList.toggle('on', S.fill.sampleAll);
+  $('btnShapeFill').classList.toggle('on', S.shapeFill);
+  $('btnMirX').classList.toggle('on', S.mirX);
+  $('btnMirY').classList.toggle('on', S.mirY);
+  $('btnOnion').classList.toggle('on', S.onion.on);
+  $('btnOnion').textContent = S.onion.on ? 'Onion on' : 'Onion off';
+  $('rgOnBefore').value = S.onion.before; $('vOnBefore').textContent = S.onion.before;
+  $('rgOnAfter').value = S.onion.after;   $('vOnAfter').textContent = S.onion.after;
+  $('rgOnOpac').value = S.onion.opacity;  $('vOnOpac').textContent = S.onion.opacity;
+  $('numFps').value = S.fps;
+  $('selLoop').value = S.loop;
+  $('btnBg').textContent = S.bg==='checker' ? 'Checker' : (S.bg==='white' ? 'White' : 'Black');
+  $('projName').textContent = S.projName ? S.projName : '';
+}
+
+/* ---------- export ---------- */
+function download(blobOrUrl,name){
+  const a = document.createElement('a');
+  a.href = (typeof blobOrUrl==='string') ? blobOrUrl : URL.createObjectURL(blobOrUrl);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  if(typeof blobOrUrl!=='string') setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+/* Flattened frame with the chosen backdrop painted in, for anything leaving the app. */
+function flatFrame(fi, opaque){
+  const c = mkCanvas(S.W,S.H), g = ctxOf(c);
+  if(opaque && S.bg!=='checker'){
+    g.fillStyle = S.bg==='black' ? '#000000' : '#ffffff';
+    g.fillRect(0,0,S.W,S.H);
+  }
+  g.drawImage(compositedFrame(fi),0,0);
+  return c;
+}
+function exportPNG(){
+  download(flatFrame(S.cf,false).toDataURL('image/png'), 'inkflow-frame'+(S.cf+1)+'.png');
+  toast('PNG saved');
+}
+function exportSheet(){
+  const n = nFrames();
+  const cols = Math.min(n, Math.max(1, Math.round(Math.sqrt(n*1.6))));
+  const rows = Math.ceil(n/cols);
+  const c = mkCanvas(S.W*cols, S.H*rows), g = ctxOf(c);
+  for(let i=0;i<n;i++) g.drawImage(flatFrame(i,false), (i%cols)*S.W, Math.floor(i/cols)*S.H);
+  c.toBlob(b=>{ download(b,'inkflow-sheet.png'); toast('Sprite sheet saved ('+cols+'×'+rows+')'); },'image/png');
+}
+
+/* --- GIF encoder (median-cut palette + LZW, no libraries) --- */
+function quantize(framesRGBA, maxColors){
+  const counts = new Map();
+  for(const d of framesRGBA){
+    for(let i=0;i<d.length;i+=4){
+      if(d[i+3]<128) continue;
+      /* Bucket to 5 bits per channel first: smooth artwork has tens of thousands
+         of unique colours and the exact map would be mostly noise. */
+      const key = ((d[i]>>3)<<10)|((d[i+1]>>3)<<5)|(d[i+2]>>3);
+      counts.set(key,(counts.get(key)||0)+1);
+    }
+  }
+  const uniq = [...counts.keys()];
+  if(!uniq.length) return [[0,0,0]];
+  const toRGB = k => [((k>>10)&31)*255/31|0, ((k>>5)&31)*255/31|0, (k&31)*255/31|0];
+  if(uniq.length<=maxColors) return uniq.map(toRGB);
+  let boxes = [uniq.map(k=>{ const c=toRGB(k); c.push(counts.get(k)); return c; })];
+  while(boxes.length<maxColors){
+    let bi=-1, best=-1;
+    for(let i=0;i<boxes.length;i++){
+      const b = boxes[i]; if(b.length<2) continue;
+      let mn=[255,255,255], mx=[0,0,0];
+      for(const p of b) for(let c=0;c<3;c++){ if(p[c]<mn[c])mn[c]=p[c]; if(p[c]>mx[c])mx[c]=p[c]; }
+      const range = Math.max(mx[0]-mn[0],mx[1]-mn[1],mx[2]-mn[2]);
+      if(range>best){ best=range; bi=i; }
+    }
+    if(bi<0||best<=0) break;
+    const b = boxes[bi];
+    let mn=[255,255,255], mx=[0,0,0];
+    for(const p of b) for(let c=0;c<3;c++){ if(p[c]<mn[c])mn[c]=p[c]; if(p[c]>mx[c])mx[c]=p[c]; }
+    let ch=0;
+    if(mx[1]-mn[1]>mx[ch]-mn[ch]) ch=1;
+    if(mx[2]-mn[2]>mx[ch]-mn[ch]) ch=2;
+    b.sort((p,q)=>p[ch]-q[ch]);
+    const half = Math.floor(b.length/2);
+    boxes.splice(bi,1,b.slice(0,half),b.slice(half));
+  }
+  return boxes.filter(b=>b.length).map(b=>{
+    let r=0,g=0,bl=0,w=0;
+    for(const p of b){ r+=p[0]*p[3]; g+=p[1]*p[3]; bl+=p[2]*p[3]; w+=p[3]; }
+    return [Math.round(r/w),Math.round(g/w),Math.round(bl/w)];
+  });
+}
+function nearestIndex(pal,r,g,b,cache){
+  const key = (r<<16)|(g<<8)|b;
+  const hit = cache.get(key);
+  if(hit!==undefined) return hit;
+  let best=0, bd=Infinity;
+  for(let i=0;i<pal.length;i++){
+    const p = pal[i], dr=p[0]-r, dg=p[1]-g, db=p[2]-b;
+    const d = dr*dr*0.3+dg*dg*0.59+db*db*0.11;
+    if(d<bd){ bd=d; best=i; }
+  }
+  cache.set(key,best);
+  return best;
+}
+function gifLZW(minCode, pixels){
+  const out = [];
+  let cur=0, curBits=0, codeSize=minCode+1;
+  const clear = 1<<minCode, eoi = clear+1;
+  let next = eoi+1;
+  let dict = new Map();
+  function emit(code){
+    cur |= code<<curBits; curBits += codeSize;
+    while(curBits>=8){ out.push(cur&255); cur>>=8; curBits-=8; }
+  }
+  function reset(){ dict = new Map(); next = eoi+1; codeSize = minCode+1; }
+  emit(clear); reset();
+  let prefix = pixels[0];
+  for(let i=1;i<pixels.length;i++){
+    const k = pixels[i], key = prefix*4096+k;
+    const got = dict.get(key);
+    if(got!==undefined){ prefix = got; continue; }
+    emit(prefix);
+    if(next<4096){
+      dict.set(key,next);
+      if(next===(1<<codeSize) && codeSize<12) codeSize++;
+      next++;
+    } else {
+      emit(clear); reset();
+    }
+    prefix = k;
+  }
+  emit(prefix);
+  emit(eoi);
+  if(curBits>0) out.push(cur&255);
+  const blocks = [];
+  for(let i=0;i<out.length;i+=255){
+    const chunk = out.slice(i,i+255);
+    blocks.push(chunk.length);
+    for(const v of chunk) blocks.push(v);
+  }
+  blocks.push(0);
+  return blocks;
+}
+function buildGIF(opts){
+  opts = opts||{};
+  const scale = opts.scale || 1;
+  const W = Math.max(1,Math.round(S.W*scale)), H = Math.max(1,Math.round(S.H*scale));
+  const opaque = S.bg!=='checker';
+  const datas = [];
+  for(let i=0;i<nFrames();i++){
+    const c = mkCanvas(W,H), g = ctxOf(c);
+    g.imageSmoothingQuality = 'high';
+    if(opaque){ g.fillStyle = S.bg==='black'?'#000':'#fff'; g.fillRect(0,0,W,H); }
+    g.drawImage(compositedFrame(i),0,0,W,H);
+    datas.push(g.getImageData(0,0,W,H).data);
+  }
+  const pal = quantize(datas, 255);
+  const transIdx = pal.length;
+  const tableSize = Math.max(2, Math.ceil(Math.log2(Math.max(2, pal.length+1))));
+  const tableLen = 1<<tableSize;
+
+  const bytes = [];
+  const push = (...b)=>{ for(const v of b) bytes.push(v); };
+  const short = v => push(v&255,(v>>8)&255);
+  const str = s => { for(let i=0;i<s.length;i++) push(s.charCodeAt(i)); };
+
+  str('GIF89a');
+  short(W); short(H);
+  push(0x80 | ((tableSize-1)&7));
+  push(0); push(0);
+  for(let i=0;i<tableLen;i++){
+    const p = pal[i] || [0,0,0];
+    push(p[0],p[1],p[2]);
+  }
+  push(0x21,0xFF,11); str('NETSCAPE2.0'); push(3,1,0,0,0);
+
+  const cache = new Map();
+  const delayBase = Math.max(2, Math.round(100/Math.max(1,S.fps)));
+  for(let fi=0; fi<datas.length; fi++){
+    const d = datas[fi];
+    const delay = delayBase * Math.max(1, S.frames[fi].hold);
+    push(0x21,0xF9,4);
+    push(0x08 | 0x01);          // disposal = restore-to-background, transparency on
+    short(delay);
+    push(transIdx&255);
+    push(0);
+    push(0x2C); short(0); short(0); short(W); short(H); push(0);
+    const idx = new Uint8Array(W*H);
+    for(let i=0,p=0;i<idx.length;i++,p+=4){
+      idx[i] = d[p+3]<128 ? transIdx : nearestIndex(pal,d[p],d[p+1],d[p+2],cache);
+    }
+    const minCode = Math.max(2, tableSize);
+    push(minCode);
+    const blocks = gifLZW(minCode, idx);
+    for(const v of blocks) bytes.push(v);
+  }
+  push(0x3B);
+  return new Uint8Array(bytes);
+}
+function exportGIF(){
+  const sc = clamp(480/Math.max(S.W,S.H), 0.15, 1);
+  toast('Encoding GIF…');
+  setTimeout(()=>{
+    try{
+      const data = buildGIF({scale:sc});
+      download(new Blob([data],{type:'image/gif'}), 'inkflow.gif');
+      toast('GIF saved — '+nFrames()+' frames, '+(data.length/1024).toFixed(1)+' KB');
+    }catch(err){
+      console.error(err);
+      toast('GIF failed: '+err.message);
+    }
+  },30);
+}
+/* WebM keeps every one of the millions of colours a GIF has to throw away. */
+function exportWebM(){
+  if(typeof MediaRecorder==='undefined' || !MediaRecorder.isTypeSupported('video/webm')){
+    toast('This browser has no WebM recorder — use GIF');
+    return;
+  }
+  const out = mkCanvas(S.W,S.H), g = ctxOf(out);
+  const streamFps = 30;
+  const stream = out.captureStream(streamFps);
+  const rec = new MediaRecorder(stream, {mimeType:'video/webm', videoBitsPerSecond: 6_000_000});
+  const chunks = [];
+  rec.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+  rec.onstop = ()=>{
+    download(new Blob(chunks,{type:'video/webm'}), 'inkflow.webm');
+    toast('WebM saved — '+(chunks.reduce((a,c)=>a+c.size,0)/1024).toFixed(1)+' KB');
+  };
+  const total = frameSlots();
+  let slot = 0;
+  const drawSlot = ()=>{
+    let acc = 0, fi = 0;
+    for(let i=0;i<nFrames();i++){
+      acc += Math.max(1,S.frames[i].hold);
+      if(slot < acc){ fi = i; break; }
+      fi = i;
+    }
+    g.fillStyle = S.bg==='black'?'#000':(S.bg==='checker'?'#000':'#fff');
+    g.fillRect(0,0,S.W,S.H);
+    g.drawImage(compositedFrame(fi),0,0);
+  };
+  toast('Recording WebM…');
+  rec.start();
+  drawSlot();
+  const iv = setInterval(()=>{
+    slot++;
+    if(slot>=total){
+      clearInterval(iv);
+      setTimeout(()=>rec.stop(), 1000/Math.max(1,S.fps));
+      return;
+    }
+    drawSlot();
+  }, 1000/Math.max(1,S.fps));
+}
+
+/* ---------- save / load ---------- */
+const LS_AUTO = 'inkflow.autosave';
+function serialize(){
+  return {
+    v:1, W:S.W, H:S.H, fps:S.fps, loop:S.loop, bg:S.bg,
+    layerMeta: S.layerMeta.map(m=>Object.assign({},m)),
+    swatches: S.swatches.slice(),
+    frames: S.frames.map(f=>({
+      hold: f.hold,
+      layers: f.layers.map(c=>c ? c.toDataURL('image/png') : null)
+    }))
+  };
+}
+function deserialize(o, done){
+  if(!o || !o.frames || !o.layerMeta) throw new Error('not an INKFLOW project');
+  S.W = o.W; S.H = o.H;
+  S.fps = o.fps||12;
+  S.loop = o.loop||'loop';
+  S.bg = o.bg||'white';
+  S.layerMeta = o.layerMeta.map(m=>Object.assign({name:'Layer',visible:true,opacity:100,blend:'normal',locked:false},m));
+  if(o.swatches && o.swatches.length) S.swatches = o.swatches.slice();
+  S.frames = o.frames.map(fr=>({layers:new Array(S.layerMeta.length).fill(null), hold:fr.hold||1, rev:0}));
+  S.cf = 0; S.cl = Math.min(1, S.layerMeta.length-1);
+  S.sel = null;
+  undoStack = []; redoStack = [];
+  allocScratch();
+  frameCache.clear();
+
+  let pending = 0, failed = 0;
+  o.frames.forEach((fr,fi)=>{
+    (fr.layers||[]).forEach((url,li)=>{
+      if(!url || li>=S.layerMeta.length) return;
+      pending++;
+      const img = new Image();
+      img.onload = ()=>{
+        const c = mkCanvas(S.W,S.H);
+        ctxOf(c).drawImage(img,0,0);
+        S.frames[fi].layers[li] = c;
+        S.frames[fi].rev++;
+        if(--pending===0) finish();
+      };
+      img.onerror = ()=>{ failed++; if(--pending===0) finish(); };
+      img.src = url;
+    });
+  });
+  function finish(){
+    frameCache.clear();
+    S.rev++;
+    fitView();
+    fullRefresh();
+    if(failed) toast('Loaded, but '+failed+' layer image(s) were unreadable');
+    if(done) done();
+  }
+  if(pending===0) finish();
+}
+function saveFile(){
+  const name = (S.projName || 'inkflow') .replace(/[^\w\-. ]+/g,'_');
+  download(new Blob([JSON.stringify(serialize())],{type:'application/json'}), name+'.json');
+  toast('Project saved');
+}
+function openFile(file){
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const o = JSON.parse(r.result);
+      S.projName = file.name.replace(/\.json$/i,'');
+      deserialize(o, ()=>toast('Loaded '+S.projName));
+    }catch(err){
+      console.error(err);
+      toast('Could not open that file: '+err.message);
+    }
+  };
+  r.readAsText(file);
+}
+function autosave(){
+  try{
+    const body = JSON.stringify(serialize());
+    if(body.length > 4_500_000){ return false; }   // localStorage would throw
+    localStorage.setItem(LS_AUTO, body);
+    return true;
+  }catch(e){ return false; }
+}
+function tryRestore(){
+  try{
+    const raw = localStorage.getItem(LS_AUTO);
+    if(!raw) return false;
+    const o = JSON.parse(raw);
+    if(!o || !o.frames || !o.frames.length) return false;
+    /* Only offer the autosave if it actually has paint in it. */
+    const hasArt = o.frames.some(f=>(f.layers||[]).some((u,i)=>u && i>0));
+    if(!hasArt) return false;
+    deserialize(o, ()=>toast('Restored your last session'));
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ---------- keyboard ---------- */
+const KEYMAP = {b:'brush', e:'eraser', s:'smudge', g:'fill', l:'line', r:'rect',
+                o:'ellipse', i:'picker', v:'move', m:'select', q:'lasso', h:'pan'};
+function onKeyDown(e){
+  const tag = (e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='select'||tag==='textarea') return;
+  const k = e.key.toLowerCase();
+
+  if(e.ctrlKey||e.metaKey){
+    if(k==='z'){ e.preventDefault(); e.shiftKey?doRedo():doUndo(); return; }
+    if(k==='y'){ e.preventDefault(); doRedo(); return; }
+    if(k==='c'){ e.preventDefault(); doCopy(); return; }
+    if(k==='x'){ e.preventDefault(); doCut(); return; }
+    if(k==='v'){ e.preventDefault(); doPaste(); return; }
+    if(k==='a'){ e.preventDefault(); selectAll(); return; }
+    if(k==='d'){ e.preventDefault(); selectNone(); return; }
+    if(k==='s'){ e.preventDefault(); saveFile(); return; }
+    return;
+  }
+  if(k===' '){ spaceHeld = true; stage.style.cursor='grab'; e.preventDefault(); return; }
+  if(k==='escape'){
+    if($('help').classList.contains('show')) $('help').classList.remove('show');
+    else if($('newModal').classList.contains('show')) $('newModal').classList.remove('show');
+    else selectNone();
+    return;
+  }
+  if(k==='enter'){ e.preventDefault(); togglePlay(); return; }
+  if(k==='delete'||k==='backspace'){ e.preventDefault(); doClearSel(); return; }
+  if(k===','){ gotoFrame(S.cf-1); return; }
+  if(k==='.'){ gotoFrame(S.cf+1); return; }
+  if(k==='['){ setBrushSize(S.brush.size - Math.max(1,S.brush.size*0.15)); return; }
+  if(k===']'){ setBrushSize(S.brush.size + Math.max(1,S.brush.size*0.15)); return; }
+  if(k==='0'){ fitView(); invalidate(); return; }
+  if(k==='1'){ S.view.zoom=1; centreView(); invalidate(); return; }
+  if(k==='x'){ swapColours(); return; }
+  if(k==='?'||k==='/'){ $('help').classList.toggle('show'); return; }
+  if(KEYMAP[k]){ setTool(KEYMAP[k]); return; }
+}
+function onKeyUp(e){
+  if(e.key===' '){ spaceHeld = false; setTool(S.tool); }
+}
+function setBrushSize(v){
+  S.brush.size = clamp(Math.round(v),1,300);
+  syncBrushUI();
+  invalidate();
+}
+function swapColours(){
+  const cur = currentHex();
+  const alt = S.alt;
+  S.alt = cur;
+  setColourHex(alt);
+}
+
+/* ---------- wiring ---------- */
+function bindRange(id, valId, apply){
+  const r = $(id);
+  r.oninput = ()=>{ apply(parseFloat(r.value)); $(valId).textContent = r.value; invalidate(); };
+}
+function boot(){
+  stage = $('stage');
+  stx = stage.getContext('2d');
+
+  S.swatches = ['#000000','#ffffff','#8b7bff','#f6c65b','#ff6b60','#4ee2a6','#4aa3ff','#ff9ec7',
+                '#2a2d37','#e9eaf1','#5b4bd6','#c99a2e','#8c3f38','#2e8f6a','#2f6ea8','#a8607f'];
+
+  buildTools();
+  buildPresets();
+  const sel = $('selBlend');
+  for(const b of BLENDS){
+    const o = document.createElement('option');
+    o.value = b; o.textContent = b;
+    sel.appendChild(o);
+  }
+  const np = $('newPreset');
+  SIZE_PRESETS.forEach(([label,w,h],i)=>{
+    const o = document.createElement('option');
+    o.value = i; o.textContent = label;
+    np.appendChild(o);
+  });
+  np.value = 2;
+  np.onchange = ()=>{
+    const [,w,h] = SIZE_PRESETS[+np.value];
+    $('newW').value = w; $('newH').value = h;
+  };
+
+  newProject(800,600,'white');
+  allocScratch();
+  resizeStage();
+  setTool('brush');
+
+  if(!tryRestore()) fullRefresh();
+
+  /* pointer */
+  stage.addEventListener('pointerdown', onDown);
+  stage.addEventListener('pointermove', onMove);
+  stage.addEventListener('pointerup', onUp);
+  stage.addEventListener('pointercancel', onUp);
+  stage.addEventListener('pointerleave', ()=>{ hoverPt=null; invalidate(); });
+  stage.addEventListener('contextmenu', e=>e.preventDefault());
+  stage.addEventListener('wheel', e=>{
+    e.preventDefault();
+    if(e.shiftKey){
+      setBrushSize(S.brush.size * (e.deltaY<0 ? 1.12 : 0.89));
+      return;
+    }
+    const p = screenPoint(e);
+    zoomAt(p.x, p.y, e.deltaY<0 ? 1.13 : 1/1.13);
+    invalidate();
+  }, {passive:false});
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('resize', ()=>{ resizeStage(); });
+
+  /* brush panel */
+  bindRange('rgSize','vSize', v=>S.brush.size=v);
+  bindRange('rgHard','vHard', v=>S.brush.hardness=v);
+  bindRange('rgOpac','vOpac', v=>S.brush.opacity=v);
+  bindRange('rgFlow','vFlow', v=>S.brush.flow=v);
+  bindRange('rgSpace','vSpace', v=>S.brush.spacing=v);
+  bindRange('rgSmooth','vSmooth', v=>S.brush.smooth=v);
+  bindRange('rgSmudge','vSmudge', v=>S.smudgeStrength=v);
+  bindRange('rgTol','vTol', v=>S.fill.tol=v);
+  bindRange('rgGrow','vGrow', v=>S.fill.grow=v);
+  $('btnDynSize').onclick = ()=>{ S.brush.dynSize=!S.brush.dynSize; syncBrushUI(); };
+  $('btnDynFlow').onclick = ()=>{ S.brush.dynFlow=!S.brush.dynFlow; syncBrushUI(); };
+  $('btnContig').onclick = ()=>{ S.fill.contiguous=!S.fill.contiguous; syncBrushUI(); };
+  $('btnSampleAll').onclick = ()=>{ S.fill.sampleAll=!S.fill.sampleAll; syncBrushUI(); };
+  $('btnShapeFill').onclick = ()=>{ S.shapeFill=!S.shapeFill; syncBrushUI(); };
+  $('btnMirX').onclick = ()=>{ S.mirX=!S.mirX; syncBrushUI(); };
+  $('btnMirY').onclick = ()=>{ S.mirY=!S.mirY; syncBrushUI(); };
+
+  /* selection panel */
+  $('btnSelAll').onclick = selectAll;
+  $('btnSelNone').onclick = selectNone;
+  $('btnCut').onclick = doCut;
+  $('btnCopy').onclick = doCopy;
+  $('btnPaste').onclick = doPaste;
+  $('btnFlipH').onclick = ()=>flipSel(true);
+  $('btnFlipV').onclick = ()=>flipSel(false);
+  $('btnClearLayer').onclick = clearLayer;
+
+  /* colour */
+  const svDrag = e=>{
+    const r = $('sv').getBoundingClientRect();
+    S.color.s = clamp((e.clientX-r.left)/r.width,0,1);
+    S.color.v = clamp(1-(e.clientY-r.top)/r.height,0,1);
+    syncColourUI(); invalidate();
+  };
+  $('sv').addEventListener('pointerdown', e=>{ $('sv').setPointerCapture(e.pointerId); svDrag(e); $('sv').__d=true; });
+  $('sv').addEventListener('pointermove', e=>{ if($('sv').__d) svDrag(e); });
+  $('sv').addEventListener('pointerup', ()=>{ $('sv').__d=false; });
+  const hueDrag = e=>{
+    const r = $('hue').getBoundingClientRect();
+    S.color.h = clamp((e.clientY-r.top)/r.height,0,1)*360;
+    syncColourUI(); invalidate();
+  };
+  $('hue').addEventListener('pointerdown', e=>{ $('hue').setPointerCapture(e.pointerId); hueDrag(e); $('hue').__d=true; });
+  $('hue').addEventListener('pointermove', e=>{ if($('hue').__d) hueDrag(e); });
+  $('hue').addEventListener('pointerup', ()=>{ $('hue').__d=false; });
+  $('hex').onchange = ()=>{ if(parseHex($('hex').value)) setColourHex($('hex').value); else syncColourUI(); };
+  $('rgAlpha').oninput = ()=>{ S.color.a = $('rgAlpha').value/100; syncColourUI(); invalidate(); };
+  $('btnSwap').onclick = swapColours;
+  $('altCol').onclick = swapColours;
+  $('btnAddSw').onclick = ()=>{ S.swatches.push(currentHex()); buildSwatches(); };
+  $('btnDelSw').onclick = ()=>{
+    const cur = currentHex().toLowerCase();
+    const i = S.swatches.findIndex(h=>h.toLowerCase()===cur);
+    if(i>=0){ S.swatches.splice(i,1); buildSwatches(); }
+    else toast('That colour is not in the swatches');
+  };
+
+  /* layers */
+  $('btnLayAdd').onclick = ()=>addLayer(false);
+  $('btnLayDup').onclick = ()=>addLayer(true);
+  $('btnLayDel').onclick = deleteLayer;
+  $('btnLayUp').onclick = ()=>moveLayer(1);
+  $('btnLayDown').onclick = ()=>moveLayer(-1);
+  $('btnLayMerge').onclick = mergeDown;
+  $('rgLayOpac').oninput = ()=>{
+    S.layerMeta[S.cl].opacity = +$('rgLayOpac').value;
+    $('vLayOpac').textContent = $('rgLayOpac').value;
+    S.rev++; frameCache.clear();
+    invalidate(); syncFrameStrip();
+  };
+  $('rgLayOpac').onchange = ()=>{ buildFrames(); };
+  $('selBlend').onchange = ()=>{
+    S.layerMeta[S.cl].blend = $('selBlend').value;
+    S.rev++; frameCache.clear();
+    invalidate(); buildFrames();
+  };
+
+  /* onion */
+  $('btnOnion').onclick = ()=>{ S.onion.on=!S.onion.on; syncBrushUI(); invalidate(); };
+  bindRange('rgOnBefore','vOnBefore', v=>S.onion.before=v);
+  bindRange('rgOnAfter','vOnAfter', v=>S.onion.after=v);
+  bindRange('rgOnOpac','vOnOpac', v=>S.onion.opacity=v);
+
+  /* timeline */
+  $('btnPlay').onclick = togglePlay;
+  $('btnPrev').onclick = ()=>gotoFrame(S.cf-1);
+  $('btnNext').onclick = ()=>gotoFrame(S.cf+1);
+  $('btnFrAdd').onclick = ()=>addFrame(false);
+  $('btnFrDup').onclick = ()=>addFrame(true);
+  $('btnFrDel').onclick = deleteFrame;
+  $('btnHoldUp').onclick = ()=>setHold(1);
+  $('btnHoldDn').onclick = ()=>setHold(-1);
+  $('numFps').onchange = ()=>{ S.fps = clamp(+$('numFps').value||12,1,60); syncBrushUI(); syncFrameStrip(); };
+  $('selLoop').onchange = ()=>{ S.loop = $('selLoop').value; };
+
+  /* topbar */
+  $('btnUndo').onclick = doUndo;
+  $('btnRedo').onclick = doRedo;
+  $('btnFit').onclick = ()=>{ fitView(); invalidate(); };
+  $('btnOne').onclick = ()=>{ S.view.zoom=1; centreView(); invalidate(); };
+  $('btnBg').onclick = ()=>{
+    S.bg = S.bg==='checker' ? 'white' : (S.bg==='white' ? 'black' : 'checker');
+    syncBrushUI(); buildFrames(); invalidate();
+  };
+  $('btnPng').onclick = exportPNG;
+  $('btnSheet').onclick = exportSheet;
+  $('btnGif').onclick = exportGIF;
+  $('btnWebm').onclick = exportWebM;
+  $('btnHelp').onclick = ()=>$('help').classList.add('show');
+  $('btnHelpClose').onclick = ()=>$('help').classList.remove('show');
+  $('help').onclick = e=>{ if(e.target.id==='help') $('help').classList.remove('show'); };
+  $('btnSave').onclick = saveFile;
+  $('btnOpen').onclick = ()=>$('fileIn').click();
+  $('fileIn').onchange = ()=>{ if($('fileIn').files[0]) openFile($('fileIn').files[0]); $('fileIn').value=''; };
+  $('btnNew').onclick = ()=>{
+    $('newW').value = S.W; $('newH').value = S.H;
+    $('newModal').classList.add('show');
+  };
+  $('btnNewCancel').onclick = ()=>$('newModal').classList.remove('show');
+  $('newModal').onclick = e=>{ if(e.target.id==='newModal') $('newModal').classList.remove('show'); };
+  $('btnNewGo').onclick = ()=>{
+    const w = clamp(Math.round(+$('newW').value||800),16,2048);
+    const h = clamp(Math.round(+$('newH').value||600),16,2048);
+    newProject(w,h,$('newBg').value);
+    $('newModal').classList.remove('show');
+    resizeStage();
+    fullRefresh();
+    toast('New '+w+'×'+h+' animation');
+  };
+
+  setInterval(autosave, 20000);
+  window.addEventListener('beforeunload', autosave);
+
+  requestAnimationFrame(tick);
+}
+
+/* Test hook: the harness drives the same functions the UI does, so anything it
+   proves is true of the real app rather than of a parallel copy. */
+window.__IF = {
+  S, get undoStack(){return undoStack;}, get redoStack(){return redoStack;},
+  newProject, compositeFrame:compositedFrame, compositeInto, flatFrame,
+  beginStroke, strokeTo, endStroke, dabAt, brushTip, floodFill,
+  beginSmudge, smudgeTo, endSmudge, beginMove, moveTo, endMove,
+  addFrame, deleteFrame, gotoFrame, setHold, addLayer, deleteLayer, moveLayer, mergeDown,
+  selectAll, selectNone, setSelRect, setSelLasso, doCopy, doCut, doPaste, doClearSel, flipSel, clearLayer,
+  doUndo, doRedo, pushPixelUndo, pushStructUndo,
+  buildGIF, quantize, gifLZW, serialize, deserialize,
+  setTool, setColourHex, currentHex, applyPreset, setBrushSize, togglePlay, setPlaying, advanceFrame,
+  frameSlots, fitView, render, nLayers, nFrames, layerAt, ensureLayer, hsv2rgb, rgb2hsv,
+  toast, fullRefresh, invalidate
+};
+
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+</script>
+</body>
+</html>

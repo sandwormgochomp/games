@@ -1,0 +1,3766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TALLOW — Marrow Hill</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; background:#000; overflow:hidden;
+    font-family: "Courier New", Courier, monospace; color:#c8c2b4; cursor:none; }
+  #wrap { position:fixed; inset:0; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; image-rendering:auto; }
+
+  .panel { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at center, #0a0a0c 0%, #000 75%); z-index:20; cursor:default; }
+  .panel.hidden { display:none; }
+  .box { width:min(760px, 92vw); max-height:92vh; overflow:auto; padding:28px 34px;
+    border:1px solid #2a2620; background:rgba(6,6,8,.92); box-shadow:0 0 80px rgba(0,0,0,.9) inset; }
+  h1 { font-size:clamp(38px,7vw,74px); letter-spacing:.34em; font-weight:normal; color:#e8dcc0;
+       text-shadow:0 0 26px rgba(255,170,60,.24); margin-bottom:2px; }
+  h1 .flick { animation:flick 4.3s infinite; }
+  @keyframes flick { 0%,96%,100%{opacity:1} 96.5%{opacity:.25} 97.2%{opacity:.9} 97.6%{opacity:.15} 98.4%{opacity:1} }
+  h2 { font-size:15px; letter-spacing:.5em; color:#6d6455; font-weight:normal; margin-bottom:26px; }
+  h3 { font-size:13px; letter-spacing:.28em; color:#b08a4a; font-weight:normal; margin:18px 0 8px; }
+  p  { font-size:13.5px; line-height:1.75; color:#8d8574; margin-bottom:10px; }
+  .keys { display:grid; grid-template-columns:118px 1fr; gap:5px 14px; font-size:12.5px; line-height:1.6; }
+  .keys b { color:#c9a35f; font-weight:normal; letter-spacing:.12em; }
+  .keys span { color:#847c6c; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; }
+  button { font-family:inherit; font-size:12.5px; letter-spacing:.22em; padding:11px 20px;
+    background:#100f10; color:#b8ac92; border:1px solid #35302a; cursor:pointer; transition:.14s; }
+  button:hover { background:#1d1a16; color:#f0e2c0; border-color:#6e5c3c; }
+  button.sel { background:#2a2114; color:#f4dfae; border-color:#a5793a; }
+  button.primary { background:#2a2114; color:#f4dfae; border-color:#8a6630; }
+  button.primary:hover { background:#3d2f18; }
+  .dim { color:#4e4840; font-size:11.5px; letter-spacing:.16em; margin-top:16px; }
+  .note-text { font-size:14px; line-height:1.85; color:#a89d86; white-space:pre-wrap;
+    border-left:2px solid #6a5530; padding-left:16px; font-style:italic; }
+  .big { font-size:clamp(30px,6vw,58px); letter-spacing:.3em; color:#8e2b22; text-shadow:0 0 40px rgba(180,30,20,.4); }
+  .win  { color:#c8b070; text-shadow:0 0 40px rgba(210,180,110,.35); }
+  .stats { font-size:12.5px; color:#6e675a; line-height:1.9; margin-top:14px; letter-spacing:.1em; }
+  #hud { position:absolute; inset:0; pointer-events:none; z-index:10; }
+  #toast { position:absolute; left:50%; top:16%; transform:translateX(-50%); text-align:center;
+    font-size:14px; letter-spacing:.22em; color:#d4c39a; text-shadow:0 0 14px #000; opacity:0; transition:opacity .4s; }
+  #subs { position:absolute; left:50%; bottom:12%; transform:translateX(-50%); text-align:center;
+    font-size:13px; letter-spacing:.16em; color:#7b7365; text-shadow:0 0 10px #000; opacity:0; transition:opacity .5s; font-style:italic;}
+  ::-webkit-scrollbar { width:8px; } ::-webkit-scrollbar-thumb { background:#332e28; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div id="hud"><div id="toast"></div><div id="subs"></div></div>
+
+  <div class="panel" id="titleScreen">
+    <div class="box" style="text-align:center">
+      <h1>TAL<span class="flick">L</span>OW</h1>
+      <h2>MARROW HILL</h2>
+      <p style="max-width:540px;margin:0 auto 6px">The sanatorium lost power in 1961 and was never emptied.<br>
+      Five fuses. One generator. One way out.<br>
+      <span style="color:#6b6254">Something in here walks. Something else has never had to.</span></p>
+      <h3 style="margin-top:26px">DIFFICULTY</h3>
+      <div class="row" style="justify-content:center" id="diffRow">
+        <button data-d="0">RESTLESS</button>
+        <button data-d="1" class="sel">HAUNTED</button>
+        <button data-d="2">STARVING</button>
+      </div>
+      <p class="dim" id="diffDesc">It hears you. It is patient. Oil burns fast.</p>
+      <div class="row" style="justify-content:center">
+        <button class="primary" id="btnStart">DESCEND</button>
+        <button id="btnHelp">HOW TO SURVIVE</button>
+      </div>
+      <p class="dim">Headphones recommended. Click anywhere first to enable sound.</p>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="helpScreen">
+    <div class="box">
+      <h1 style="font-size:30px">HOW TO SURVIVE</h1>
+      <h3>CONTROLS</h3>
+      <div class="keys">
+        <b>W A S D</b><span>move</span>
+        <b>MOUSE</b><span>aim the lantern beam</span>
+        <b>SHIFT</b><span>run — fast, loud, tiring</span>
+        <b>CTRL</b><span>crouch — slow, nearly silent</span>
+        <b>LEFT CLICK</b><span>focus beam: longer, brighter, burns 3× oil. Staggers the Hollow up close.</span>
+        <b>L</b><span>douse the lantern — total darkness, total silence, total blindness</span>
+        <b>E</b><span>interact: doors, lockers, fuses, oil, notes, the generator — and the bodies</span>
+        <b>Q</b><span>strike a flare — burns 40s where it lands, the Hollow avoids it</span>
+        <b>F</b><span>set a tallow candle where you stand</span>
+        <b>SPACE</b><span>hold your breath while hiding — and struggle when grabbed</span>
+        <b>TAB</b><span>map of what you have already walked</span>
+        <b>ESC</b><span>pause</span>
+      </div>
+      <h3>THE RULES OF MARROW HILL</h3>
+      <p><b style="color:#c9a35f">Oil</b> is time. The lantern drains whenever it is lit. Canisters are scattered through the wards.</p>
+      <p><b style="color:#c9a35f">Noise</b> travels. Running is heard three wards away. Slamming a door is heard everywhere. The Hollow walks toward sound.</p>
+      <p><b style="color:#c9a35f">Sanity</b> rots in the dark and near the Hollow. Red emergency lamps hold it back. Sedatives help. At zero, it always knows where you are.</p>
+      <p><b style="color:#c9a35f">Doors</b> can be shut behind you. It takes the Hollow time to break one — and breaking one is very loud, which tells you exactly where it is.</p>
+      <p><b style="color:#c9a35f">Lockers</b> hide you completely — but you are still breathing, and it will come and stand at the vent. Hold <b>SPACE</b>. You have about seven seconds of air. It usually takes less than that to lose interest. Usually.</p>
+      <p><b style="color:#c9a35f">Tallow</b> is why you are still alive. Hold <b>E</b> over a body with the lantern lit and you can render it down — it takes nearly four seconds of kneeling with your back to the room, it burns oil, it is wet and loud, and it is worth it. Each body gives two or three candles.</p>
+      <p><b style="color:#c9a35f">A candle</b> is a weak light and a very good witness. Set one with <b>F</b> and it burns for four minutes. <b>The Hollow snuffs any flame it walks past.</b> Check the map: gold means still burning, grey means something has been through there. Learn to read it before your nerve goes, because after that the flames start lying to you.</p>
+      <p><b style="color:#c9a35f">Total darkness</b> is not empty. Stay in it for more than about twenty seconds and you will not come out of it. Any light resets that — the lantern, a flare, an emergency lamp.</p>
+      <p><b style="color:#8e2b22">The thing that climbs out</b> cannot be hurt, cannot be outrun forever, and cannot be hidden from. It can only be <i>looked at</i>. While it is in your light it does not move at all. The moment it isn't, it starts again — faster the longer you leave it. Back away with it in your beam, and try not to think about what is behind you.</p>
+      <p><b style="color:#6d6455">Your lantern is old and your nerve is not what it was. Neither the flame nor the readouts on this screen are entirely reliable.</b></p>
+      <p><b style="color:#8e2b22">The pit</b> is not on any floor plan. There is a ledge around it. Walk the ledge, keep the wall on your left, and do not stop. Things come up out of it, and they are longer than you think. Light does not reach the bottom, so light will not tell you when one is coming.</p>
+      <p><b style="color:#c9a35f">Restoring power</b> lights the whole building. It also wakes the Hollow permanently. Do not restore power until you know the way to the stairwell.</p>
+      <div class="row"><button class="primary" id="btnBack">BACK</button></div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="pauseScreen">
+    <div class="box" style="text-align:center">
+      <h1 style="font-size:30px">PAUSED</h1>
+      <p class="dim" id="pauseInfo"></p>
+      <div class="row" style="justify-content:center">
+        <button class="primary" id="btnResume">RESUME</button>
+        <button id="btnQuit">ABANDON</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="noteScreen">
+    <div class="box">
+      <h3 id="noteTitle">RECOVERED PAGE</h3>
+      <div class="note-text" id="noteBody"></div>
+      <div class="row"><button class="primary" id="btnCloseNote">CLOSE  [E]</button></div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="endScreen">
+    <div class="box" style="text-align:center">
+      <div class="big" id="endTitle">THE HOLLOW FOUND YOU</div>
+      <p id="endFlavor" style="margin-top:18px"></p>
+      <div class="stats" id="endStats"></div>
+      <div class="row" style="justify-content:center">
+        <button class="primary" id="btnRetry">TRY AGAIN</button>
+        <button id="btnMenu">MENU</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   TALLOW — MARROW HILL
+   Single-file top-down survival horror. Canvas 2D + WebAudio, no assets.
+   ========================================================================== */
+
+/* ---------------------------------- util --------------------------------- */
+const TAU = Math.PI * 2;
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const lerp  = (a,b,t) => a + (b-a)*t;
+const dist2 = (ax,ay,bx,by) => { const dx=bx-ax, dy=by-ay; return dx*dx+dy*dy; };
+const dist  = (ax,ay,bx,by) => Math.hypot(bx-ax, by-ay);
+const angLerp = (a,b,t) => { let d=((b-a+Math.PI)%TAU+TAU)%TAU-Math.PI; return a+d*t; };
+
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296; }; }
+let rng = mulberry32(1);
+const rnd  = (a=1,b=0) => b + rng()*(a-b);
+const rndi = (n) => Math.floor(rng()*n);
+const pick = (arr) => arr[Math.floor(rng()*arr.length)];
+
+/* -------------------------------- constants ------------------------------ */
+const TILE = 32;
+const GW = 59, GH = 59;                 // grid dimensions (tiles)
+const T_WALL = 0, T_FLOOR = 1, T_PIT = 2;
+
+const SPD_WALK = 3.05, SPD_RUN = 5.05, SPD_CROUCH = 1.55;   // tiles / second
+const LANTERN_R = 6.2;                   // ambient lantern radius (tiles)
+const BEAM_R = 13.5, BEAM_FOCUS_R = 20.0;
+const BEAM_ARC = 0.52, BEAM_FOCUS_ARC = 0.26;               // half-angle rad
+const OIL_MAX = 100;
+
+/* --- tallow ---------------------------------------------------------------
+   You render fat off the bodies and pour it into candles. A planted candle is
+   a light you did not have to carry — and, far more useful, a witness. The
+   Hollow snuffs any flame it walks past. A dark dot on the map where you know
+   you left one burning is proof it crossed there. The trouble is that the
+   building has opinions about your evidence, and your nerve has its own.
+   -------------------------------------------------------------------------- */
+const CANDLE_R = 3.3;        // light radius, tiles
+const CANDLE_WAX = 260;      // seconds of burn
+const RENDER_TIME = 3.6;     // seconds bent over a body
+const RENDER_OIL = 9;        // oil burned melting it down
+
+const DIFFS = [
+  { name:"RESTLESS", oilDrain:0.72, sanDrain:0.62, huntSpd:3.05, patSpd:1.42, sight:12.5,
+    hearMul:0.82, escapes:2, aggro:0.72, desc:"It sleeps lightly. You have room to breathe." },
+  { name:"HAUNTED",  oilDrain:1.00, sanDrain:1.00, huntSpd:3.42, patSpd:1.62, sight:14.5,
+    hearMul:1.00, escapes:1, aggro:1.00, desc:"It hears you. It is patient. Oil burns fast." },
+  { name:"STARVING", oilDrain:1.34, sanDrain:1.45, huntSpd:3.80, patSpd:1.92, sight:17.0,
+    hearMul:1.25, escapes:0, aggro:1.40, desc:"It has not eaten in sixty years. There is no second chance." },
+];
+
+/* ---------------------------------- audio -------------------------------- */
+const Audio_ = {
+  ctx:null, master:null, noiseBuf:null, ready:false,
+  droneGain:null, heartTimer:0, heartRate:1.2, breathTimer:0,
+  init(){
+    if(this.ctx) { if(this.ctx.state === "suspended") this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.85;
+    this.master.connect(this.ctx.destination);
+    // shared noise buffer
+    const n = this.ctx.sampleRate * 2;
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i] = Math.random()*2-1;
+    this.noiseBuf = buf;
+    this.ready = true;
+  },
+  now(){ return this.ctx ? this.ctx.currentTime : 0; },
+  // low room drone that never stops
+  startDrone(){
+    if(!this.ready || this.droneGain) return;
+    const c = this.ctx, t = c.currentTime;
+    const g = c.createGain(); g.gain.value = 0.0; g.connect(this.master);
+    const f = c.createBiquadFilter(); f.type="lowpass"; f.frequency.value = 190; f.Q.value=2; f.connect(g);
+    [36, 54.5, 72.7].forEach((freq,i)=>{
+      const o = c.createOscillator(); o.type = i===2?"triangle":"sawtooth"; o.frequency.value = freq;
+      const og = c.createGain(); og.gain.value = i===0?0.5:0.2;
+      const lfo = c.createOscillator(); lfo.frequency.value = 0.05 + i*0.037;
+      const lg = c.createGain(); lg.gain.value = 1.6 + i;
+      lfo.connect(lg); lg.connect(o.frequency); lfo.start();
+      o.connect(og); og.connect(f); o.start();
+    });
+    // airy hiss
+    const ns = c.createBufferSource(); ns.buffer = this.noiseBuf; ns.loop = true;
+    const nf = c.createBiquadFilter(); nf.type="bandpass"; nf.frequency.value=520; nf.Q.value=0.6;
+    const ng = c.createGain(); ng.gain.value = 0.045;
+    ns.connect(nf); nf.connect(ng); ng.connect(g); ns.start();
+    g.gain.linearRampToValueAtTime(0.5, t+3);
+    this.droneGain = g;
+  },
+  stopDrone(){ if(this.droneGain){ try{ this.droneGain.gain.linearRampToValueAtTime(0, this.now()+0.6);}catch(e){} } },
+  setDrone(v){ if(this.droneGain){ try{ this.droneGain.gain.setTargetAtTime(v, this.now(), 0.5);}catch(e){} } },
+  pan(px){ const p = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+    if(p) p.pan.value = clamp(px,-1,1); return p; },
+  burst(opts){
+    if(!this.ready) return;
+    const c=this.ctx, t=c.currentTime, o=opts||{};
+    const src=c.createBufferSource(); src.buffer=this.noiseBuf; src.loop=true;
+    src.playbackRate.value = o.rate || 1;
+    const f=c.createBiquadFilter(); f.type=o.type||"bandpass";
+    f.frequency.value=o.freq||800; f.Q.value=o.q||1.2;
+    const g=c.createGain(); g.gain.value=0;
+    const dur=o.dur||0.12, vol=o.vol!=null?o.vol:0.2;
+    g.gain.linearRampToValueAtTime(vol, t+ (o.atk||0.005));
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    src.connect(f); f.connect(g);
+    const p=this.pan(o.pan||0); if(p){ g.connect(p); p.connect(this.master); } else g.connect(this.master);
+    src.start(t); src.stop(t+dur+0.05);
+  },
+  tone(opts){
+    if(!this.ready) return;
+    const c=this.ctx, t=c.currentTime, o=opts||{};
+    const osc=c.createOscillator(); osc.type=o.wave||"sine";
+    osc.frequency.setValueAtTime(o.f0||220, t);
+    if(o.f1) osc.frequency.exponentialRampToValueAtTime(Math.max(1,o.f1), t+(o.dur||0.3));
+    const g=c.createGain(); g.gain.value=0;
+    g.gain.linearRampToValueAtTime(o.vol!=null?o.vol:0.15, t+(o.atk||0.01));
+    g.gain.exponentialRampToValueAtTime(0.0001, t+(o.dur||0.3));
+    osc.connect(g);
+    const p=this.pan(o.pan||0); if(p){ g.connect(p); p.connect(this.master); } else g.connect(this.master);
+    osc.start(t); osc.stop(t+(o.dur||0.3)+0.05);
+  },
+  step(running, crouch, pan){
+    this.burst({freq: running?1500:900, q:0.9, dur: running?0.10:0.075,
+      vol: crouch?0.028:(running?0.13:0.07), rate: 0.8+Math.random()*0.4, pan});
+  },
+  heartbeat(intensity){
+    this.tone({wave:"sine", f0:64, f1:36, dur:0.20, vol:0.10+0.22*intensity, atk:0.006});
+    setTimeout(()=> this.tone({wave:"sine", f0:56, f1:32, dur:0.16, vol:0.07+0.16*intensity, atk:0.006}), 175);
+  },
+  growl(pan, intensity){
+    this.tone({wave:"sawtooth", f0:52+Math.random()*16, f1:31, dur:1.5, vol:0.05+0.10*intensity, atk:0.3, pan});
+    this.burst({freq:240, q:0.5, dur:1.2, vol:0.03+0.06*intensity, atk:0.35, pan, rate:0.4});
+  },
+  scream(pan){
+    this.tone({wave:"sawtooth", f0:900, f1:110, dur:1.1, vol:0.30, atk:0.005, pan});
+    this.burst({freq:2600, q:0.4, dur:1.0, vol:0.22, atk:0.005, pan, rate:1.6});
+    this.tone({wave:"square", f0:70, f1:40, dur:1.6, vol:0.20, atk:0.01});
+  },
+  door(open, pan){
+    this.burst({freq: open?420:180, q:1.0, dur: open?0.42:0.20, vol:0.14, rate:0.5, pan});
+    if(!open) this.tone({wave:"triangle", f0:120, f1:56, dur:0.28, vol:0.16, pan});
+  },
+  bang(pan){
+    this.burst({freq:150, q:0.7, dur:0.34, vol:0.34, rate:0.35, pan, type:"lowpass"});
+    this.tone({wave:"square", f0:88, f1:40, dur:0.30, vol:0.16, pan});
+  },
+  pickup(){ this.tone({wave:"triangle", f0:520, f1:790, dur:0.16, vol:0.11});
+            this.tone({wave:"sine", f0:1050, dur:0.10, vol:0.05}); },
+  flare(pan){ this.burst({freq:2400, q:0.5, dur:0.5, vol:0.20, rate:1.4, pan});
+              this.tone({wave:"sawtooth", f0:180, f1:600, dur:0.25, vol:0.08, pan}); },
+  power(){ this.tone({wave:"sawtooth", f0:40, f1:120, dur:2.4, vol:0.22, atk:0.4});
+           this.burst({freq:900, q:0.4, dur:2.0, vol:0.10, rate:0.6});
+           setTimeout(()=>this.tone({wave:"square", f0:120, f1:118, dur:3.0, vol:0.05}), 900); },
+  whisper(pan){
+    this.burst({freq: 900+Math.random()*1400, q: 6, dur: 0.7+Math.random()*0.7,
+      vol:0.055, atk:0.25, rate:0.35+Math.random()*0.3, pan});
+  },
+  stinger(){
+    this.tone({wave:"sawtooth", f0:1400, f1:70, dur:0.9, vol:0.22, atk:0.004});
+    this.burst({freq:600, q:0.4, dur:1.2, vol:0.16, rate:0.3});
+  },
+  win(){ [392,523,659,784].forEach((f,i)=> setTimeout(()=>
+    this.tone({wave:"triangle", f0:f, dur:1.4, vol:0.11, atk:0.05}), i*260)); },
+
+  /* ---- the scary half ---- */
+  // your own breathing, close and wet, when you are hiding
+  breathe(out, vol, pan){
+    this.burst({freq: out ? 620 : 900, q: 1.6, dur: out ? 0.55 : 0.42,
+      vol: vol, atk: out ? 0.06 : 0.14, rate: out ? 0.32 : 0.42, pan: pan||0});
+  },
+  gasp(pan){
+    this.burst({freq:1200, q:1.2, dur:0.55, vol:0.30, atk:0.01, rate:0.7, pan:pan||0});
+    this.tone({wave:"sawtooth", f0:240, f1:120, dur:0.4, vol:0.10, pan:pan||0});
+  },
+  // something heavy dragging itself over stone
+  drag(pan, vol){
+    this.burst({freq:170, q:0.4, dur:1.4, vol:vol!=null?vol:0.09, atk:0.25, rate:0.20, pan:pan||0});
+    this.burst({freq:1900, q:9, dur:0.9, vol:(vol!=null?vol:0.09)*0.35, atk:0.3, rate:0.5, pan:pan||0});
+  },
+  // it comes up out of the hole
+  rise(){
+    this.tone({wave:"sawtooth", f0:22, f1:44, dur:5.0, vol:0.30, atk:1.6});
+    this.burst({freq:110, q:0.35, dur:4.5, vol:0.20, atk:1.2, rate:0.18});
+    setTimeout(()=> this.burst({freq:2400,q:0.5,dur:1.6,vol:0.16,atk:0.05,rate:1.1}), 2200);
+    setTimeout(()=> this.tone({wave:"square", f0:180, f1:44, dur:2.2, vol:0.18}), 2600);
+  },
+  // a footstep that is not yours, a half beat behind
+  echoStep(pan){
+    this.burst({freq:760, q:1.0, dur:0.10, vol:0.055, rate:0.7, pan:pan||0});
+  },
+  lampFail(pan){
+    this.burst({freq:2200, q:3, dur:0.5, vol:0.09, rate:1.3, pan:pan||0});
+    this.tone({wave:"sine", f0:420, f1:90, dur:0.6, vol:0.07, pan:pan||0});
+  },
+  lampRelight(){
+    this.burst({freq:1500, q:2, dur:0.30, vol:0.10, rate:1.1});
+    this.tone({wave:"triangle", f0:120, f1:260, dur:0.25, vol:0.06});
+  },
+  // absolute silence, then whatever comes next lands twice as hard
+  hush(){ if(this.droneGain){ try{ this.droneGain.gain.setTargetAtTime(0.0, this.now(), 0.10); }catch(e){} } },
+};
+
+/* ------------------------------- canvases -------------------------------- */
+const cv = document.getElementById("game");
+const ctx = cv.getContext("2d");
+let VW = 0, VH = 0, DPR = 1;
+
+const lightCv = document.createElement("canvas");
+const lctx = lightCv.getContext("2d");
+const LIGHT_SCALE = 0.5;
+
+let mapCv = null, mctx = null;    // pre-rendered static level
+let grainCvs = [];                 // pre-rendered film grain tiles
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  VW = Math.floor(window.innerWidth);
+  VH = Math.floor(window.innerHeight);
+  cv.width = Math.floor(VW*DPR); cv.height = Math.floor(VH*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  lightCv.width  = Math.max(2, Math.floor(VW*LIGHT_SCALE));
+  lightCv.height = Math.max(2, Math.floor(VH*LIGHT_SCALE));
+}
+window.addEventListener("resize", resize);
+
+function buildGrain(){
+  grainCvs = [];
+  for(let k=0;k<4;k++){
+    const c = document.createElement("canvas"); c.width = c.height = 128;
+    const g = c.getContext("2d");
+    const img = g.createImageData(128,128);
+    for(let i=0;i<img.data.length;i+=4){
+      const v = 120 + Math.random()*135;
+      img.data[i]=img.data[i+1]=img.data[i+2]=v; img.data[i+3]=255;
+    }
+    g.putImageData(img,0,0);
+    grainCvs.push(c);
+  }
+}
+
+/* --------------------------------- state --------------------------------- */
+const G = {
+  mode: "menu",           // menu | play | paused | note | dead | won
+  diff: 1, seed: 0,
+  t: 0, dt: 0, frame: 0,
+  grid: null, seen: null,
+  rooms: [], doors: [], lights: [], items: [], lockers: [], flares: [], noiseRings: [], corpses: [],
+  candles: [],            // planted tallow candles — your only witnesses
+  candlesLit: 0, candlesSnuffed: 0,
+  player: null, hollow: null,
+  fuses: 0, fusesNeeded: 5, powered: false, genRoom: null, exit: null, genDone: false,
+  escapesLeft: 1, notesRead: 0, notesTotal: 0,
+  timeAlive: 0, showMap: false, endReason: "",
+  shake: 0, shakeX:0, shakeY:0, flashRed: 0, hurtPulse: 0,
+  distField: null, distFieldTarget: [-1,-1], distFieldTimer: 0,
+  phantoms: [], whisperTimer: 4, breathTimer: 0, heartAcc: 0,
+  camX: 0, camY: 0, msgTimer: 0, subTimer: 0,
+  grabbed: 0, grabMash: 0, grabCool: 0,
+  ambientEvent: 6,
+  // --- dread systems ---
+  climber: null,                      // the thing that comes up out of the pit
+  playerField: null, playerFieldT: 0, // shared flow field toward the player
+  silence: 0,                         // seconds of enforced total quiet
+  darkT: 0,                           // how long you have been in true darkness
+  subliminal: 0,                      // frames of a face you are not sure you saw
+  deathFace: 0,
+  hudLieT: 0, hudLie: null,           // the HUD is not always telling the truth
+  mirrorT: 0, mirrorPan: 0,           // footsteps behind you that stop when you stop
+  lastPlayerMoving: false,
+};
+
+/* ------------------------------ level notes ------------------------------ */
+const NOTES = [
+  ["ADMISSIONS — 4 MARCH 1959",
+   "Patient 31 arrived without papers, without a name, and without shoes.\nHe would not speak. He would not stop smiling.\nDr. Vane admitted him under the designation HOLLOW, which I assumed at the time was a joke."],
+  ["NURSE'S LOG — WARD C",
+   "Third night in a row the corridor lamps have failed between two and four.\nI walked it with a hand lamp. The doors were all open. I closed them.\nBy the time I reached the end of the hall they were open again behind me."],
+  ["MEMO — DR. VANE",
+   "Do not attempt the treatment in darkness. I cannot state this more plainly.\nWhatever we have coaxed out of him is not afraid of us.\nIt is afraid of light, and only of light, and only barely."],
+  ["SCRAP",
+   "it doesnt run\nit doesnt need to\nit just keeps walking toward the sound you made an hour ago"],
+  ["MAINTENANCE — 12 JUNE 1960",
+   "Generator will not carry the full building on four fuses. It needs five.\nThe fifth is not lost. Someone has been taking them.\nI find them in odd places. Under beds. In the chapel. Inside the walls."],
+  ["PATIENT LETTER (UNSENT)",
+   "Mother,\nThey say I am improving. I am not improving.\nI have learned to hold my breath for a very long time, which they mistake for calm.\nIf you come, come at noon. Do not come at night. Do not knock."],
+  ["NURSE'S LOG — WARD E",
+   "Rule I have made for myself and tell no one:\nIf the lamp goes out, do not run. Running is a bell.\nCrouch. Breathe through the nose. Count to two hundred.\nIt has never found me yet."],
+  ["ORDERLY'S NOTE",
+   "Lockers on the east side still lock from the inside.\nI have spent whole shifts in one. It walked past twice.\nIt only opens them if it saw you climb in. It is not clever. It is only certain."],
+  ["DR. VANE — PRIVATE",
+   "We have been calling it a delusion because the alternative is unbearable.\nBut I measured the corridor. It is forty-one feet.\nHe crossed it in the dark in under four seconds and I was watching the whole time."],
+  ["EVACUATION ORDER — 1961",
+   "All staff to the north stairwell. Take nothing.\nPower is to be cut at 23:00 to prevent further incidents.\nNOTE ADDED IN PENCIL: cutting the power was the incident"],
+  ["SCRAWL ON A DOOR FRAME",
+   "the light doesnt hurt it\nthe light just reminds it that it used to have a face"],
+  ["SURVEYOR'S REPORT — 1957",
+   "There is a void beneath the east ward. It is not on any plan.\nWe lowered a weighted line. Two hundred feet, no floor.\nWe lowered a lamp. The lamp went out at ninety feet and we did not get it back."],
+  ["DR. VANE — TORN PAGE",
+   "The patients did not develop the condition here. They arrived with it,\nfrom eleven different counties, and every one of them drew the same hole.\nI have stopped asking what is at the bottom.\nI have started asking what has been coming up."],
+  ["PENCIL, ON THE LEDGE RAIL",
+   "it is not a monster\na monster is a thing you can be shown\nthis is the other kind\n\nkeep the wall on your left and DO NOT LOOK DOWN\nit takes longer if you look"],
+  ["ORDERLY'S NOTE — SECOND SHEET",
+   "Vane says the fat renders clean if you keep the flame low.\nI have stopped asking where the fat comes from. There is a great deal of it here.\nSet them in the doorways. Then walk your rounds and count them on the way back."],
+  ["COUNTING SHEET, WATER-STAINED",
+   "Set nine. Came back to six.\nSet six. Came back to eight.\n\nThe first number is the one that means something.\nThe second number means my hands are not to be trusted any more.\nIf you cannot remember what you set, you have already lost the use of them."],
+  ["LAST PAGE",
+   "If you are reading this you have already made too much noise getting here.\nRestore the power. All of it, at once, and then run — do not stop to listen.\nThe lights will show you the stairs.\nThey will also show it you."],
+];
+
+/* ------------------------------ level gen -------------------------------- */
+function idx(x,y){ return y*GW + x; }
+function inBounds(x,y){ return x>=0 && y>=0 && x<GW && y<GH; }
+function tileAt(x,y){ return inBounds(x,y) ? G.grid[idx(x,y)] : T_WALL; }
+
+function doorAt(x,y){
+  for(let i=0;i<G.doors.length;i++){ const d=G.doors[i]; if(d.x===x && d.y===y) return d; }
+  return null;
+}
+function isOpen(x,y){ const t = tileAt(x,y); return t === T_FLOOR || t === T_PIT; }
+function isPit(x,y){ return inBounds(x,y) && G.grid[idx(x,y)] === T_PIT; }
+
+function isSolid(x,y){
+  if(!inBounds(x,y)) return true;
+  if(G.grid[idx(x,y)] === T_WALL) return true;   // the pit is NOT solid — you can walk off it
+  const d = doorAt(x,y);
+  if(d && !d.open && !d.broken) return true;
+  return false;
+}
+function isOpaque(x,y){
+  if(!inBounds(x,y)) return true;
+  if(G.grid[idx(x,y)] === T_WALL) return true;   // light crosses the pit; it just never comes back up
+  const d = doorAt(x,y);
+  if(d && !d.open && !d.broken) return true;
+  for(let i=0;i<G.lockers.length;i++){ const L=G.lockers[i]; if(L.x===x && L.y===y) return true; }
+  return false;
+}
+function walkableForAI(x,y){
+  if(!inBounds(x,y)) return false;
+  const t = G.grid[idx(x,y)];
+  if(t === T_WALL || t === T_PIT) return false;  // it will not cross the pit. it came out of it.
+  for(let i=0;i<G.lockers.length;i++){ const L=G.lockers[i]; if(L.x===x && L.y===y) return false; }
+  return true;   // closed doors are passable for AI (it breaks them)
+}
+
+function generate(seed){
+  rng = mulberry32(seed>>>0);
+  G.grid = new Uint8Array(GW*GH);           // 0 = wall everywhere
+  G.seen = new Uint8Array(GW*GH);
+  G.rooms = []; G.doors = []; G.lights = []; G.items = []; G.lockers = [];
+  G.flares = []; G.noiseRings = []; G.corpses = []; G.phantoms = []; G.candles = [];
+
+  // --- BSP ---
+  const leaves = [];
+  const MIN = 8;
+  function bsp(node, depth){
+    const canH = node.h >= MIN*2+2, canV = node.w >= MIN*2+2;
+    if(depth >= 5 || (!canH && !canV) || (depth>=3 && rng()<0.22)){
+      leaves.push(node); return;
+    }
+    let horiz;
+    if(canH && !canV) horiz = true;
+    else if(canV && !canH) horiz = false;
+    else if(node.w > node.h*1.3) horiz = false;
+    else if(node.h > node.w*1.3) horiz = true;
+    else horiz = rng() < 0.5;
+    if(horiz){
+      const cut = MIN + rndi(node.h - MIN*2);
+      node.a = {x:node.x, y:node.y, w:node.w, h:cut};
+      node.b = {x:node.x, y:node.y+cut, w:node.w, h:node.h-cut};
+    } else {
+      const cut = MIN + rndi(node.w - MIN*2);
+      node.a = {x:node.x, y:node.y, w:cut, h:node.h};
+      node.b = {x:node.x+cut, y:node.y, w:node.w-cut, h:node.h};
+    }
+    bsp(node.a, depth+1); bsp(node.b, depth+1);
+  }
+  const root = {x:1, y:1, w:GW-2, h:GH-2};
+  bsp(root, 0);
+
+  // --- carve rooms in leaves ---
+  for(const lf of leaves){
+    const pad = 1;
+    const rw = Math.max(4, lf.w - pad*2 - rndi(2));
+    const rh = Math.max(4, lf.h - pad*2 - rndi(2));
+    const rx = lf.x + pad + rndi(Math.max(1, lf.w - rw - pad*2 + 1));
+    const ry = lf.y + pad + rndi(Math.max(1, lf.h - rh - pad*2 + 1));
+    const room = {x:rx, y:ry, w:rw, h:rh, cx:Math.floor(rx+rw/2), cy:Math.floor(ry+rh/2), tag:null};
+    for(let y=ry;y<ry+rh;y++) for(let x=rx;x<rx+rw;x++) if(inBounds(x,y)) G.grid[idx(x,y)] = T_FLOOR;
+    lf.room = room;
+    G.rooms.push(room);
+  }
+
+  // --- connect ---
+  function centerOf(node){
+    if(node.room) return [node.room.cx, node.room.cy];
+    const a = centerOf(node.a), b = centerOf(node.b);
+    return rng()<0.5 ? a : b;
+  }
+  function carveH(x0,x1,y){ const a=Math.min(x0,x1), b=Math.max(x0,x1);
+    for(let x=a;x<=b;x++) if(inBounds(x,y)) G.grid[idx(x,y)] = T_FLOOR; }
+  function carveV(y0,y1,x){ const a=Math.min(y0,y1), b=Math.max(y0,y1);
+    for(let y=a;y<=b;y++) if(inBounds(x,y)) G.grid[idx(x,y)] = T_FLOOR; }
+  function connect(node){
+    if(node.room) return;
+    connect(node.a); connect(node.b);
+    const [ax,ay] = centerOf(node.a), [bx,by] = centerOf(node.b);
+    if(rng()<0.5){ carveH(ax,bx,ay); carveV(ay,by,bx); }
+    else { carveV(ay,by,ax); carveH(ax,bx,by); }
+  }
+  connect(root);
+
+  // a couple of extra loops so the map isn't a tree (dead ends are unfair)
+  for(let k=0;k<4 && G.rooms.length>2;k++){
+    const a = pick(G.rooms), b = pick(G.rooms);
+    if(a===b) continue;
+    if(rng()<0.5){ carveH(a.cx,b.cx,a.cy); carveV(a.cy,b.cy,b.cx); }
+    else { carveV(a.cy,b.cy,a.cx); carveH(a.cx,b.cx,b.cy); }
+  }
+
+  // --- doors on room perimeters where a corridor punched through ---
+  for(const r of G.rooms){
+    const ring = [];
+    for(let x=r.x-1;x<=r.x+r.w;x++){ ring.push([x, r.y-1]); ring.push([x, r.y+r.h]); }
+    for(let y=r.y;y<r.y+r.h;y++){ ring.push([r.x-1, y]); ring.push([r.x+r.w, y]); }
+    for(const [x,y] of ring){
+      if(!inBounds(x,y) || G.grid[idx(x,y)] !== T_FLOOR) continue;
+      if(doorAt(x,y)) continue;
+      // must be a real chokepoint: walls on one axis, floor on the other
+      const hz = (tileAt(x-1,y)===T_WALL && tileAt(x+1,y)===T_WALL);
+      const vt = (tileAt(x,y-1)===T_WALL && tileAt(x,y+1)===T_WALL);
+      if(!(hz ^ vt)) continue;
+      if(rng() < 0.78) G.doors.push({x, y, open: rng()<0.55, horiz: vt, broken:false, breakT:0, swing:0});
+    }
+  }
+
+  // --- pick special rooms ---
+  const sorted = G.rooms.slice();
+  const spawnRoom = pick(sorted.filter(r=>r.w*r.h >= 24) || sorted);
+  spawnRoom.tag = "spawn";
+  // generator: farthest room from spawn
+  let far = null, fd = -1;
+  for(const r of G.rooms){
+    if(r===spawnRoom) continue;
+    const d = dist2(r.cx,r.cy,spawnRoom.cx,spawnRoom.cy);
+    if(d > fd){ fd = d; far = r; }
+  }
+  far.tag = "generator"; G.genRoom = far;
+  // exit: a room far from the generator but not the spawn
+  let ex = null, ed = -1;
+  for(const r of G.rooms){
+    if(r.tag) continue;
+    const d = dist2(r.cx,r.cy,far.cx,far.cy) * 1.0 + dist2(r.cx,r.cy,spawnRoom.cx,spawnRoom.cy)*0.35;
+    if(d > ed){ ed = d; ex = r; }
+  }
+  if(!ex) ex = spawnRoom;
+  ex.tag = "exit";
+  G.exit = { x: ex.cx, y: ex.cy, room: ex };
+
+  // --- helper: random free floor tile in a room, away from doors ---
+  const occupied = new Set();
+  function freeSpot(room, tries){
+    tries = tries || 30;
+    for(let i=0;i<tries;i++){
+      const x = room.x + rndi(room.w), y = room.y + rndi(room.h);
+      if(G.grid[idx(x,y)] !== T_FLOOR) continue;
+      if(occupied.has(idx(x,y))) continue;
+      if(doorAt(x,y)) continue;
+      occupied.add(idx(x,y));
+      return [x,y];
+    }
+    return null;
+  }
+
+  // --- THE PIT -------------------------------------------------------------
+  // A hole in the floor of Marrow Hill that the blueprints do not show.
+  // The ledge around it stays walkable; the Hollow will not cross it.
+  G.pit = null;
+  {
+    let cand = null, cs = -1;
+    for(const r of G.rooms){
+      if(r.tag) continue;
+      if(r.w < 9 || r.h < 9) continue;
+      const s = r.w*r.h + rng()*30;
+      if(s > cs){ cs = s; cand = r; }
+    }
+    if(cand){
+      cand.tag = "pit";
+      const pcx = cand.x + cand.w/2, pcy = cand.y + cand.h/2;
+      const prx = (cand.w - 4)/2, pry = (cand.h - 4)/2;
+      let carved = 0;
+      for(let y=cand.y;y<cand.y+cand.h;y++) for(let x=cand.x;x<cand.x+cand.w;x++){
+        const nx = (x+0.5-pcx)/prx, ny = (y+0.5-pcy)/pry;
+        if(nx*nx + ny*ny <= 1){ G.grid[idx(x,y)] = T_PIT; carved++; }
+      }
+      if(carved > 6){
+        G.pit = {
+          room: cand, cx: pcx*TILE, cy: pcy*TILE,
+          rx: prx*TILE, ry: pry*TILE, tendrils: [], breath: 0, awake: 0,
+        };
+        // limbs anchored around the inner rim
+        const nT = 5 + rndi(4);
+        for(let i=0;i<nT;i++){
+          const a = (i/nT)*TAU + rnd(0.4,-0.4);
+          G.pit.tendrils.push({
+            a, aim: a, phase: rng()*TAU, len: 0, want: 0, state:"idle", t: rng()*4,
+            wig: rng()*TAU, speed: 0.8 + rng()*0.6, cool: rng()*3, bx:0, by:0,
+          });
+        }
+      } else {
+        // too small once carved — put the floor back
+        for(let y=cand.y;y<cand.y+cand.h;y++) for(let x=cand.x;x<cand.x+cand.w;x++)
+          if(G.grid[idx(x,y)] === T_PIT) G.grid[idx(x,y)] = T_FLOOR;
+        cand.tag = null;
+      }
+    }
+  }
+
+  // Every room needs a guaranteed-walkable anchor now that one of them has a
+  // hole where its centre used to be. Used for AI targets and spawns.
+  for(const r of G.rooms){
+    r.ax = r.cx; r.ay = r.cy;
+    if(G.grid[idx(r.cx, r.cy)] !== T_FLOOR){
+      let best = null, bd = 1e9;
+      for(let y=r.y;y<r.y+r.h;y++) for(let x=r.x;x<r.x+r.w;x++){
+        if(G.grid[idx(x,y)] !== T_FLOOR) continue;
+        const d = dist2(x,y,r.cx,r.cy);
+        if(d < bd){ bd = d; best = [x,y]; }
+      }
+      if(best){ r.ax = best[0]; r.ay = best[1]; }
+    }
+  }
+
+  // --- emergency lights: about one per 1.6 rooms ---
+  for(const r of G.rooms){
+    if(rng() < 0.62 || r.tag){
+      const s = freeSpot(r);
+      if(s) G.lights.push({ x:(s[0]+0.5)*TILE, y:(s[1]+0.5)*TILE, tx:s[0], ty:s[1],
+        r: r.tag==="generator" ? 7.5 : 5.4 + rng()*1.6,
+        flick: rng()*TAU, broken: rng()<0.14, kind:"emergency" });
+    }
+  }
+
+  // --- lockers ---
+  for(const r of G.rooms){
+    const n = rng()<0.55 ? 1 + rndi(2) : 0;
+    for(let i=0;i<n;i++){
+      // prefer against a wall
+      let placed = false;
+      for(let t=0;t<18 && !placed;t++){
+        const x = r.x + rndi(r.w), y = r.y + rndi(r.h);
+        if(G.grid[idx(x,y)] !== T_FLOOR || occupied.has(idx(x,y)) || doorAt(x,y)) continue;
+        const againstWall = tileAt(x,y-1)===T_WALL || tileAt(x,y+1)===T_WALL ||
+                            tileAt(x-1,y)===T_WALL || tileAt(x+1,y)===T_WALL;
+        if(!againstWall) continue;
+        // never block the only path: require 2+ open orthogonal neighbours
+        let open = 0;
+        if(tileAt(x-1,y)===T_FLOOR) open++; if(tileAt(x+1,y)===T_FLOOR) open++;
+        if(tileAt(x,y-1)===T_FLOOR) open++; if(tileAt(x,y+1)===T_FLOOR) open++;
+        if(open < 2) continue;
+        occupied.add(idx(x,y));
+        G.lockers.push({x, y, rust: rng()});
+        placed = true;
+      }
+    }
+  }
+
+  // --- items ---
+  const roomPool = G.rooms.filter(r => r !== spawnRoom);
+  function scatter(type, count, opts){
+    let placed = 0, guard = 0;
+    while(placed < count && guard++ < 400){
+      const r = pick(roomPool.length ? roomPool : G.rooms);
+      if(opts && opts.oncePerRoom && r._used) continue;
+      const s = freeSpot(r, 12);
+      if(!s) continue;
+      if(opts && opts.oncePerRoom) r._used = true;
+      G.items.push({ type, x:(s[0]+0.5)*TILE, y:(s[1]+0.5)*TILE, tx:s[0], ty:s[1],
+                     data: opts && opts.data ? opts.data(placed) : null, bob: rng()*TAU });
+      placed++;
+    }
+  }
+  // one fuse always waits on the ledge, so you have to walk the rim at least once
+  let pitFuse = 0;
+  if(G.pit){
+    const s = freeSpot(G.pit.room, 60);
+    if(s){
+      G.items.push({ type:"fuse", x:(s[0]+0.5)*TILE, y:(s[1]+0.5)*TILE, tx:s[0], ty:s[1],
+                     data:null, bob:rng()*TAU, ledge:true });
+      G.pit.room._used = true; pitFuse = 1;
+    }
+  }
+  scatter("fuse", G.fusesNeeded - pitFuse, { oncePerRoom:true });
+  for(const r of G.rooms) r._used = false;
+  scatter("oil", 8 + rndi(3));
+  scatter("flare", 5 + rndi(3));
+  scatter("sedative", 3 + rndi(2));
+  const noteOrder = NOTES.map((_,i)=>i);
+  for(let i=noteOrder.length-1;i>0;i--){ const j=rndi(i+1); const t=noteOrder[i]; noteOrder[i]=noteOrder[j]; noteOrder[j]=t; }
+  scatter("note", Math.min(NOTES.length, 12), { data:(i)=> noteOrder[i] });
+  G.notesTotal = G.items.filter(it=>it.type==="note").length;
+
+  // --- generator ---
+  const gs = [far.cx, far.cy];
+  G.generator = { x:(gs[0]+0.5)*TILE, y:(gs[1]+0.5)*TILE, tx:gs[0], ty:gs[1] };
+  occupied.add(idx(gs[0],gs[1]));
+  G.grid[idx(gs[0],gs[1])] = T_FLOOR;
+
+  // --- exit gate ---
+  G.exit.px = (G.exit.x+0.5)*TILE; G.exit.py = (G.exit.y+0.5)*TILE;
+  G.grid[idx(G.exit.x, G.exit.y)] = T_FLOOR;
+
+  // corpses / gurneys. The ones with something still on them are the reason
+  // you have a lantern that burns fat and a knife you do not think about.
+  // Placed last, and never crowding the generator or the stairwell — those two
+  // swallow the interact prompt, and a body you cannot kneel over is just scenery.
+  function addCorpse(room, forceBody){
+    for(let t=0;t<6;t++){
+      const s = freeSpot(room, 8);
+      if(!s) return false;
+      if(dist2(s[0],s[1], gs[0],gs[1]) < 9) continue;
+      if(dist2(s[0],s[1], G.exit.x,G.exit.y) < 9) continue;
+      const kind = forceBody ? rndi(2) : rndi(3);
+      G.corpses.push({ x:s[0], y:s[1], px:(s[0]+0.5)*TILE, py:(s[1]+0.5)*TILE,
+                       a:rng()*TAU, kind,
+                       body: kind !== 2 && (forceBody || rng() < 0.78), rendered:false,
+                       yield: 2 + (rng()<0.35?1:0) });
+      return true;
+    }
+    return false;
+  }
+  for(const r of G.rooms) if(rng() < 0.42) addCorpse(r, false);
+  // the candles are a system, not a bonus — every level owes you enough wax to
+  // learn what it means when one of them is out
+  const MIN_BODIES = 4;
+  let guardB = 0;
+  while(G.corpses.filter(c=>c.body).length < MIN_BODIES && guardB++ < 140){
+    addCorpse(pick(G.rooms), true);
+  }
+
+  // --- player & hollow ---
+  const ps = [spawnRoom.cx, spawnRoom.cy];
+  G.player = {
+    x:(ps[0]+0.5)*TILE, y:(ps[1]+0.5)*TILE, vx:0, vy:0, r: TILE*0.30,
+    ang: rng()*TAU, aim: 0, oil: OIL_MAX, lamp: true, focus:false,
+    sanity: 100, stamina: 100, crouch:false, running:false,
+    stepPhase: 0, flares: 1, sedatives: 0, candles: 2, hideIn: null, lastNoise: 0,
+    rendering: null,
+    bobPhase: 0, footPan: 0, alive:true, fall: 0,
+    breath: 100, holding: false, breathT: 0, gaspT: 0, breathTell: 0,
+    lampFail: 0, lampFailCool: 14 + rng()*20,
+  };
+  G.player.aim = G.player.ang;
+
+  // hollow spawns far from player, in a room, never the generator room
+  let hr = null, hd = -1;
+  for(const r of G.rooms){
+    if(r === spawnRoom || r.tag === "exit" || r.tag === "pit") continue;
+    const d = dist2(r.ax,r.ay,ps[0],ps[1]);
+    if(d > hd){ hd = d; hr = r; }
+  }
+  if(!hr) hr = far;
+  G.hollow = {
+    x:(hr.ax+0.5)*TILE, y:(hr.ay+0.5)*TILE, vx:0, vy:0, r: TILE*0.36,
+    state:"patrol", stateT:0, target:[hr.ax,hr.ay], path:null,
+    ang: rng()*TAU, spd:0, anim:0, stun:0, lastSeen:0, aggro:0,
+    breakDoor:null, breakT:0, growlT: 3, searchT:0, memX:0, memY:0, visible:false,
+    lunge:0, sawHide:false, seenPlayerT: 0,
+    watchT: 0, unseenT: 0, inspectT: 0, watchCool: 12 + rng()*15,
+  };
+
+  // the climber sleeps at the bottom of the pit until something wakes it
+  G.climber = G.pit ? {
+    x: G.pit.cx, y: G.pit.cy, vx:0, vy:0, r: TILE*0.40,
+    active: false, frozen: true, seenT: 0, anim: 0, ang: 0,
+    dragT: 2, spawnT: 0, rise: 0,
+  } : null;
+
+  buildMapCanvas();
+}
+
+/* --------------------- pre-render the static level ----------------------- */
+function buildMapCanvas(){
+  mapCv = document.createElement("canvas");
+  mapCv.width = GW*TILE; mapCv.height = GH*TILE;
+  mctx = mapCv.getContext("2d");
+  const g = mctx;
+  const r2 = mulberry32(G.seed ^ 0x9e3779b9);
+
+  g.fillStyle = "#07070a"; g.fillRect(0,0,mapCv.width,mapCv.height);
+
+  // floors
+  for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){
+    if(G.grid[idx(x,y)] !== T_FLOOR) continue;
+    const px = x*TILE, py = y*TILE;
+    const v = 0.82 + r2()*0.36;
+    const base = Math.floor(30*v);
+    g.fillStyle = `rgb(${base+4},${base+3},${base+7})`;
+    g.fillRect(px,py,TILE,TILE);
+    // tile seams
+    g.strokeStyle = "rgba(0,0,0,0.34)"; g.lineWidth = 1;
+    g.strokeRect(px+0.5, py+0.5, TILE-1, TILE-1);
+    // grime blobs
+    if(r2() < 0.16){
+      g.fillStyle = `rgba(${20+r2()*22|0},${16+r2()*14|0},${12+r2()*10|0},${0.16+r2()*0.22})`;
+      const rr = 4+r2()*11;
+      g.beginPath(); g.ellipse(px+r2()*TILE, py+r2()*TILE, rr, rr*(0.6+r2()*0.6), r2()*TAU, 0, TAU); g.fill();
+    }
+    // rare old blood
+    if(r2() < 0.028){
+      g.fillStyle = `rgba(${58+r2()*26|0},${12+r2()*8|0},${10+r2()*6|0},${0.20+r2()*0.26})`;
+      for(let k=0;k<3+r2()*4;k++){
+        g.beginPath();
+        g.ellipse(px+r2()*TILE, py+r2()*TILE, 2+r2()*7, 2+r2()*6, r2()*TAU, 0, TAU); g.fill();
+      }
+    }
+  }
+
+  // --- the pit: a hole with no visible bottom ---
+  if(G.pit){
+    const P = G.pit;
+    g.save();
+    // hard black interior
+    g.beginPath();
+    for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){
+      if(G.grid[idx(x,y)] !== T_PIT) continue;
+      g.rect(x*TILE, y*TILE, TILE, TILE);
+    }
+    g.clip();
+    g.fillStyle = "#000"; g.fillRect(0,0,mapCv.width, mapCv.height);
+    // a suggestion of walls falling away, then nothing
+    const rings = 7;
+    for(let i=rings;i>=1;i--){
+      const t = i/rings;
+      const rr = 1 - (1-t)*0.55;
+      g.save();
+      g.translate(P.cx, P.cy); g.scale(P.rx*rr, P.ry*rr);
+      g.beginPath(); g.arc(0,0,1,0,TAU);
+      g.restore();
+      g.fillStyle = `rgba(${Math.floor(16*t)},${Math.floor(15*t)},${Math.floor(19*t)},0.9)`;
+      g.fill();
+    }
+    // broken masonry hanging off the rim
+    const r3 = mulberry32(G.seed ^ 0x5f356495);
+    for(let i=0;i<90;i++){
+      const a = r3()*TAU, k = 0.86 + r3()*0.16;
+      const px = P.cx + Math.cos(a)*P.rx*k, py = P.cy + Math.sin(a)*P.ry*k;
+      g.fillStyle = `rgba(${18+r3()*22|0},${17+r3()*20|0},${20+r3()*22|0},${0.5+r3()*0.5})`;
+      g.beginPath();
+      g.moveTo(px,py);
+      g.lineTo(px + (r3()-0.5)*16, py + (r3()-0.5)*16);
+      g.lineTo(px + (r3()-0.5)*16, py + (r3()-0.5)*16);
+      g.closePath(); g.fill();
+    }
+    g.restore();
+    // rim highlight so you can see the edge coming
+    g.save();
+    g.translate(P.cx, P.cy);
+    g.beginPath(); g.ellipse(0,0,P.rx,P.ry,0,0,TAU);
+    g.strokeStyle = "rgba(120,110,92,0.30)"; g.lineWidth = 3; g.stroke();
+    g.strokeStyle = "rgba(0,0,0,0.85)"; g.lineWidth = 1.2; g.stroke();
+    g.restore();
+    // scratch marks on the ledge — something climbed out, more than once
+    const r4 = mulberry32(G.seed ^ 0x27d4eb2f);
+    g.save();
+    g.strokeStyle = "rgba(48,26,20,0.55)"; g.lineWidth = 1.4;
+    for(let i=0;i<40;i++){
+      const a = r4()*TAU;
+      const k0 = 1.02 + r4()*0.06, k1 = k0 + 0.10 + r4()*0.16;
+      g.beginPath();
+      for(let s=-1;s<=1;s+=2){
+        const off = s*0.02;
+        g.moveTo(P.cx + Math.cos(a+off)*P.rx*k0, P.cy + Math.sin(a+off)*P.ry*k0);
+        g.lineTo(P.cx + Math.cos(a+off)*P.rx*k1, P.cy + Math.sin(a+off)*P.ry*k1);
+      }
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  // walls
+  for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){
+    if(G.grid[idx(x,y)] !== T_WALL) continue;
+    // only draw walls that touch open space (interior fill stays void)
+    let touches = false;
+    for(let dy=-1;dy<=1 && !touches;dy++) for(let dx=-1;dx<=1;dx++){
+      if(isOpen(x+dx,y+dy)){ touches = true; break; }
+    }
+    if(!touches) continue;
+    const px=x*TILE, py=y*TILE;
+    const v = 0.85 + r2()*0.3;
+    const b = Math.floor(40*v);
+    g.fillStyle = `rgb(${b+6},${b+4},${b+10})`;
+    g.fillRect(px,py,TILE,TILE);
+    // plaster texture
+    g.fillStyle = `rgba(255,250,235,${0.012+r2()*0.02})`;
+    g.fillRect(px, py, TILE, TILE*0.5);
+    if(r2()<0.30){ // cracks
+      g.strokeStyle = `rgba(0,0,0,${0.20+r2()*0.3})`; g.lineWidth = 1;
+      g.beginPath();
+      let cx = px+r2()*TILE, cy = py+r2()*TILE;
+      g.moveTo(cx,cy);
+      for(let k=0;k<3;k++){ cx += (r2()-0.5)*16; cy += (r2()-0.5)*16; g.lineTo(cx,cy); }
+      g.stroke();
+    }
+    // lip highlight where open space sits below → fake depth
+    if(isOpen(x,y+1)){
+      const grd = g.createLinearGradient(0, py+TILE-10, 0, py+TILE);
+      grd.addColorStop(0, "rgba(150,140,120,0.00)");
+      grd.addColorStop(1, "rgba(160,150,128,0.16)");
+      g.fillStyle = grd; g.fillRect(px, py+TILE-10, TILE, 10);
+      g.fillStyle = "rgba(0,0,0,0.5)"; g.fillRect(px, py+TILE-1, TILE, 1);
+    }
+    if(isOpen(x,y-1)){ g.fillStyle="rgba(0,0,0,0.30)"; g.fillRect(px,py,TILE,5); }
+    if(isOpen(x-1,y)){ g.fillStyle="rgba(0,0,0,0.22)"; g.fillRect(px,py,4,TILE); }
+    if(isOpen(x+1,y)){ g.fillStyle="rgba(0,0,0,0.22)"; g.fillRect(px+TILE-4,py,4,TILE); }
+  }
+
+  // room markers baked in (generator floor plate, exit stairs)
+  const gp = G.generator;
+  g.save();
+  g.translate(gp.tx*TILE, gp.ty*TILE);
+  g.fillStyle = "#3a3630"; g.fillRect(-TILE*0.6, -TILE*0.4, TILE*2.2, TILE*1.8);
+  g.fillStyle = "#26231f"; g.fillRect(-TILE*0.45, -TILE*0.25, TILE*1.9, TILE*1.5);
+  g.strokeStyle = "#5a5040"; g.lineWidth=2; g.strokeRect(-TILE*0.6, -TILE*0.4, TILE*2.2, TILE*1.8);
+  g.fillStyle = "#8a6a30"; g.font = "bold 9px monospace"; g.textAlign="center";
+  g.fillText("GENERATOR", TILE*0.5, TILE*1.62);
+  g.restore();
+
+  const ep = G.exit;
+  g.save();
+  g.translate(ep.x*TILE + TILE/2, ep.y*TILE + TILE/2);
+  for(let i=0;i<6;i++){
+    const t = i/6;
+    g.fillStyle = `rgb(${26+i*5},${25+i*5},${28+i*5})`;
+    g.fillRect(-TILE*0.9, -TILE*0.9 + i*(TILE*1.8/6), TILE*1.8, TILE*1.8/6 - 1);
+  }
+  g.strokeStyle = "#6a6250"; g.lineWidth=2; g.strokeRect(-TILE*0.9,-TILE*0.9,TILE*1.8,TILE*1.8);
+  g.fillStyle = "#7a7260"; g.font="bold 9px monospace"; g.textAlign="center";
+  g.fillText("STAIRWELL", 0, TILE*1.15);
+  g.restore();
+
+  // decorative corpses / debris
+  for(const c of G.corpses){
+    g.save();
+    g.translate(c.x*TILE+TILE/2, c.y*TILE+TILE/2); g.rotate(c.a);
+    if(c.kind === 0){ // gurney
+      g.fillStyle="#2e2c2a"; g.fillRect(-16,-9,32,18);
+      g.fillStyle="#3d3a35"; g.fillRect(-16,-9,32,4);
+      g.strokeStyle="#191817"; g.lineWidth=1; g.strokeRect(-16,-9,32,18);
+    } else if(c.kind === 1){ // wheelchair
+      g.strokeStyle="#33302c"; g.lineWidth=2;
+      g.beginPath(); g.arc(-7,0,8,0,TAU); g.stroke();
+      g.beginPath(); g.arc(8,0,8,0,TAU); g.stroke();
+      g.fillStyle="#2b2825"; g.fillRect(-6,-7,14,14);
+    } else { // rubble
+      g.fillStyle="rgba(40,38,34,0.9)";
+      for(let k=0;k<5;k++){ g.fillRect(-12+k*5, -6+((k*7)%9), 4+((k*3)%5), 3+((k*5)%6)); }
+    }
+    g.restore();
+  }
+}
+
+/* ------------------------------ ray casting ------------------------------ */
+// dir must be normalised; rx/ry & maxDist in TILE units
+function castRay(rx, ry, dx, dy, maxDist){
+  let mapX = Math.floor(rx), mapY = Math.floor(ry);
+  const ddx = dx === 0 ? 1e30 : Math.abs(1/dx);
+  const ddy = dy === 0 ? 1e30 : Math.abs(1/dy);
+  let stepX, stepY, sdx, sdy;
+  if(dx < 0){ stepX = -1; sdx = (rx - mapX) * ddx; } else { stepX = 1; sdx = (mapX + 1 - rx) * ddx; }
+  if(dy < 0){ stepY = -1; sdy = (ry - mapY) * ddy; } else { stepY = 1; sdy = (mapY + 1 - ry) * ddy; }
+  let d = 0;
+  for(let i=0;i<220;i++){
+    if(sdx < sdy){ d = sdx; sdx += ddx; mapX += stepX; }
+    else          { d = sdy; sdy += ddy; mapY += stepY; }
+    if(d > maxDist) return maxDist;
+    if(mapX < 0 || mapY < 0 || mapX >= GW || mapY >= GH) return Math.min(d, maxDist);
+    if(isOpaque(mapX, mapY)) return d;
+  }
+  return maxDist;
+}
+function hasLOS(ax, ay, bx, by){   // world px
+  const rx = ax/TILE, ry = ay/TILE;
+  let dx = bx/TILE - rx, dy = by/TILE - ry;
+  const len = Math.hypot(dx,dy);
+  if(len < 0.001) return true;
+  dx/=len; dy/=len;
+  return castRay(rx,ry,dx,dy,len) >= len - 0.02;
+}
+
+const RAYS = 168;
+const _poly = new Float32Array((RAYS+1)*2);
+function visPoly(wx, wy, maxTiles){
+  const rx = wx/TILE, ry = wy/TILE;
+  for(let i=0;i<=RAYS;i++){
+    const a = (i/RAYS)*TAU;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    let d = castRay(rx, ry, dx, dy, maxTiles);
+    d += 0.035;                              // bleed slightly into the wall face
+    _poly[i*2]   = (rx + dx*d) * TILE;
+    _poly[i*2+1] = (ry + dy*d) * TILE;
+  }
+  return _poly;
+}
+function pathPoly(c, poly, ox, oy, sc){
+  c.beginPath();
+  c.moveTo((poly[0]-ox)*sc, (poly[1]-oy)*sc);
+  for(let i=1;i<=RAYS;i++) c.lineTo((poly[i*2]-ox)*sc, (poly[i*2+1]-oy)*sc);
+  c.closePath();
+}
+
+/* ------------------------------ pathfinding ------------------------------ */
+const _q = new Int32Array(GW*GH);
+function bfsField(tx, ty){
+  const f = new Int32Array(GW*GH).fill(-1);
+  if(!inBounds(tx,ty) || !walkableForAI(tx,ty)){
+    // snap to nearest walkable — the search has to be wide enough to clear the pit
+    let best=null, bd=1e9;
+    for(let R=3; R<=Math.max(GW,GH) && !best; R+=4){
+      for(let y=Math.max(0,ty-R);y<Math.min(GH,ty+R+1);y++)
+        for(let x=Math.max(0,tx-R);x<Math.min(GW,tx+R+1);x++){
+          if(!walkableForAI(x,y)) continue;
+          const d = dist2(x,y,tx,ty); if(d<bd){bd=d;best=[x,y];}
+        }
+    }
+    if(!best) return f;
+    tx = best[0]; ty = best[1];
+  }
+  let head=0, tail=0;
+  f[idx(tx,ty)] = 0; _q[tail++] = idx(tx,ty);
+  while(head < tail){
+    const cur = _q[head++];
+    const cx = cur % GW, cy = (cur / GW) | 0;
+    const nd = f[cur] + 1;
+    for(let k=0;k<4;k++){
+      const nx = cx + (k===0?1:k===1?-1:0), ny = cy + (k===2?1:k===3?-1:0);
+      if(nx<0||ny<0||nx>=GW||ny>=GH) continue;
+      const ni = idx(nx,ny);
+      if(f[ni] !== -1) continue;
+      if(!walkableForAI(nx,ny)) continue;
+      // closed doors cost more (it has to break them)
+      const d = doorAt(nx,ny);
+      f[ni] = nd + (d && !d.open && !d.broken ? 6 : 0);
+      _q[tail++] = ni;
+    }
+  }
+  return f;
+}
+
+/* --------------------------------- input --------------------------------- */
+const keys = Object.create(null);
+let mouseX = 0, mouseY = 0, mouseDown = false;
+window.addEventListener("keydown", e=>{
+  if(["Tab","Space","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.code)) e.preventDefault();
+  if(keys[e.code]) return;   // ignore auto-repeat for edge triggers
+  keys[e.code] = true;
+  onKeyPress(e.code);
+});
+window.addEventListener("keyup", e=>{ keys[e.code] = false; });
+window.addEventListener("blur", ()=>{ for(const k in keys) keys[k]=false; mouseDown=false; });
+cv.addEventListener("mousemove", e=>{ const r = cv.getBoundingClientRect(); mouseX = e.clientX-r.left; mouseY = e.clientY-r.top; });
+cv.addEventListener("mousedown", e=>{ if(e.button===0) mouseDown = true; Audio_.init(); });
+window.addEventListener("mouseup", e=>{ if(e.button===0) mouseDown = false; });
+cv.addEventListener("contextmenu", e=>e.preventDefault());
+window.addEventListener("pointerdown", ()=> Audio_.init(), {once:false});
+
+function onKeyPress(code){
+  if(code === "Escape"){
+    if(G.mode === "play"){ pause(true); }
+    else if(G.mode === "paused"){ pause(false); }
+    else if(G.mode === "note"){ closeNote(); }
+    return;
+  }
+  if(G.mode === "note"){ if(code==="KeyE" || code==="Enter") closeNote(); return; }
+  if(G.mode !== "play") return;
+  if(code === "KeyE") interact();
+  if(code === "KeyQ") dropFlare();
+  if(code === "KeyF") plantCandle();
+  if(code === "KeyL") toggleLamp();
+  if(code === "Tab") G.showMap = !G.showMap;
+}
+
+/* ------------------------------ UI helpers -------------------------------- */
+const $ = id => document.getElementById(id);
+function toast(msg, dur){
+  $("toast").textContent = msg; $("toast").style.opacity = 1;
+  G.msgTimer = dur || 2.4;
+}
+function sub(msg, dur){
+  $("subs").textContent = msg; $("subs").style.opacity = 1;
+  G.subTimer = dur || 3.5;
+}
+
+/* ------------------------------ interactions ------------------------------ */
+function nearestInteractable(){
+  const p = G.player;
+  let best = null, bd = TILE*1.35, bd2 = bd*bd;
+  for(const it of G.items){
+    if(it.taken) continue;
+    const d2 = dist2(p.x,p.y,it.x,it.y);
+    if(d2 < bd2){ bd2 = d2; best = {kind:"item", ref:it}; }
+  }
+  for(const d of G.doors){
+    if(d.broken) continue;
+    const dx = (d.x+0.5)*TILE, dy = (d.y+0.5)*TILE;
+    const d2 = dist2(p.x,p.y,dx,dy);
+    if(d2 < bd2){ bd2 = d2; best = {kind:"door", ref:d}; }
+  }
+  for(const L of G.lockers){
+    const lx = (L.x+0.5)*TILE, ly = (L.y+0.5)*TILE;
+    const d2 = dist2(p.x,p.y,lx,ly);
+    if(d2 < bd2){ bd2 = d2; best = {kind:"locker", ref:L}; }
+  }
+  for(const co of G.corpses){
+    if(!co.body || co.rendered) continue;
+    const d2 = dist2(p.x,p.y,co.px,co.py);
+    if(d2 < bd2){ bd2 = d2; best = {kind:"corpse", ref:co}; }
+  }
+  const gg = G.generator;
+  if(!G.powered){
+    const d2 = dist2(p.x,p.y,gg.x,gg.y);
+    if(d2 < (TILE*1.9)*(TILE*1.9) && d2 < Math.max(bd2, (TILE*1.9)*(TILE*1.9))) best = {kind:"generator", ref:gg};
+  }
+  const ex = G.exit;
+  if(dist2(p.x,p.y,ex.px,ex.py) < (TILE*1.6)*(TILE*1.6)) best = {kind:"exit", ref:ex};
+  return best;
+}
+
+function interact(){
+  const p = G.player;
+  if(p.rendering){          // second press abandons the work
+    p.rendering = null;
+    toast("you stop");
+    return;
+  }
+  if(p.hideIn){ // climb out
+    p.hideIn = null;
+    p.x = p.hideOutX; p.y = p.hideOutY;
+    makeNoise(p.x, p.y, 3.2);
+    Audio_.door(true, panFor(p.x));
+    toast("you climb out");
+    return;
+  }
+  const n = nearestInteractable();
+  if(!n){ return; }
+  if(n.kind === "item"){
+    const it = n.ref;
+    if(it.type === "note"){
+      it.taken = true; G.notesRead++;
+      openNote(it.data);
+      Audio_.pickup();
+      return;
+    }
+    if(it.type === "fuse"){
+      it.taken = true; G.fuses++;
+      Audio_.pickup();
+      toast(`FUSE  ${G.fuses} / ${G.fusesNeeded}`);
+      if(it.ledge){
+        sub("The moment it leaves the ledge, the breathing below you stops.");
+        if(G.pit){ G.pit.awake = 1; G.pit.climberDelay = 2.4; }
+        Audio_.hush(); G.silence = Math.max(G.silence, 2.6);
+      } else {
+        sub(G.fuses >= G.fusesNeeded ? "That is all of them. Find the generator." : "Ceramic. Still warm, somehow.");
+      }
+      return;
+    }
+    if(it.type === "oil"){
+      it.taken = true;
+      const before = p.oil;
+      p.oil = Math.min(OIL_MAX, p.oil + 42);
+      Audio_.pickup();
+      toast(`LAMP OIL  +${Math.round(p.oil-before)}`);
+      return;
+    }
+    if(it.type === "flare"){
+      it.taken = true; p.flares++;
+      Audio_.pickup(); toast(`FLARE  ×${p.flares}`);
+      return;
+    }
+    if(it.type === "sedative"){
+      it.taken = true; p.sedatives++;
+      Audio_.pickup(); toast(`SEDATIVE  ×${p.sedatives}  [R to take]`);
+      return;
+    }
+  }
+  if(n.kind === "corpse"){
+    const co = n.ref;
+    if(G.grabbed > 0 || p.fall > 0) return;
+    if(!p.lamp){ toast("you need the flame to melt it"); sub("Cold fat will not pour."); return; }
+    if(p.oil < RENDER_OIL + 2){ toast("not enough oil to work by"); return; }
+    p.rendering = { c: co, t: 0, dur: RENDER_TIME, noise: 0 };
+    sub("You open your knife. It takes a while, and it is not quiet.");
+    return;
+  }
+  if(n.kind === "door"){
+    const d = n.ref;
+    // don't shut a door on yourself
+    if(d.open){
+      const px = Math.floor(p.x/TILE), py = Math.floor(p.y/TILE);
+      if(px === d.x && py === d.y){ toast("stand clear of the door"); return; }
+    }
+    d.open = !d.open;
+    d.swing = 1;
+    Audio_.door(d.open, panFor((d.x+0.5)*TILE));
+    makeNoise((d.x+0.5)*TILE, (d.y+0.5)*TILE, d.open ? 4.5 : 6.0);
+    return;
+  }
+  if(n.kind === "locker"){
+    const L = n.ref;
+    p.hideOutX = p.x; p.hideOutY = p.y;
+    p.hideIn = L;
+    p.x = (L.x+0.5)*TILE; p.y = (L.y+0.5)*TILE;
+    p.vx = p.vy = 0;
+    // did it see you?
+    const h = G.hollow;
+    G.hollow.sawHide = hasLOS(h.x,h.y,p.x,p.y) && dist(h.x,h.y,p.x,p.y) < TILE*13;
+    Audio_.door(false, panFor(p.x));
+    makeNoise(p.x, p.y, 3.0);
+    toast("hidden — hold still  [E to leave]");
+    if(G.hollow.sawHide) sub("It was looking right at you.");
+    return;
+  }
+  if(n.kind === "generator"){
+    if(G.powered) return;
+    if(G.fuses < G.fusesNeeded){
+      toast(`GENERATOR — ${G.fuses} / ${G.fusesNeeded} FUSES`);
+      sub("The panel is dead. Sockets three, five and seven are empty.");
+      return;
+    }
+    restorePower();
+    return;
+  }
+  if(n.kind === "exit"){
+    if(!G.powered){
+      toast("STAIRWELL SHUTTER — NO POWER");
+      sub("The motor is dead. The shutter will not lift by hand.");
+      return;
+    }
+    win();
+  }
+}
+
+function toggleLamp(){
+  const p = G.player;
+  p.lamp = !p.lamp;
+  Audio_.burst({freq: p.lamp?1600:400, q:2, dur:0.12, vol:0.08});
+  if(p.lamp) toast("lantern lit");
+  else { toast("lantern doused"); sub("You cannot see. Neither, for a moment, can it."); }
+}
+
+function dropFlare(){
+  const p = G.player;
+  if(p.hideIn) return;
+  if(p.flares <= 0){ toast("no flares"); return; }
+  p.flares--;
+  const a = p.aim;
+  // throw it up to 4 tiles, stopping at walls
+  const d = castRay(p.x/TILE, p.y/TILE, Math.cos(a), Math.sin(a), 4.0) - 0.35;
+  const fx = p.x + Math.cos(a)*d*TILE, fy = p.y + Math.sin(a)*d*TILE;
+  G.flares.push({ x:fx, y:fy, life: 40, max: 40, flick: 0 });
+  Audio_.flare(panFor(fx));
+  makeNoise(fx, fy, 5.0);
+  toast(`FLARE  ×${p.flares}`);
+}
+
+function snuffCandle(cd, byIt){
+  if(!cd.lit) return;
+  cd.lit = false; cd.byIt = !!byIt; cd.changedT = G.t;
+  G.candlesSnuffed++;
+  const p = G.player;
+  const d = dist(cd.x,cd.y,p.x,p.y)/TILE;
+  if(d < 9){
+    Audio_.burst({freq:900, q:0.7, dur:0.16, vol:0.05*clamp(1-d/9,0,1), rate:0.6, pan:panFor(cd.x)});
+  }
+  // you only get told if you were looking at it
+  if(d < 14 && hasLOS(p.x,p.y,cd.x,cd.y) && beingWatched(cd.x, cd.y)){
+    sub("The candle goes out.");
+  }
+}
+
+function plantCandle(){
+  const p = G.player;
+  if(p.hideIn || p.rendering || p.fall > 0 || G.grabbed > 0) return;
+  if(p.candles <= 0){ toast("no candles"); return; }
+  const tx = Math.floor(p.x/TILE), ty = Math.floor(p.y/TILE);
+  if(!inBounds(tx,ty) || tileAt(tx,ty) !== T_FLOOR){ toast("nothing here to stand it on"); return; }
+  for(const cd of G.candles){
+    if(dist(cd.x,cd.y,p.x,p.y) < TILE*0.9){ toast("there is already one here"); return; }
+  }
+  p.candles--;
+  G.candles.push({ x:p.x, y:p.y, tx, ty, lit:true, wax:CANDLE_WAX,
+                   flick: rng()*TAU, byIt:false, changedT:-99, born:G.t });
+  G.candlesLit++;
+  Audio_.burst({freq:1400, q:3, dur:0.10, vol:0.05, pan:panFor(p.x)});
+  makeNoise(p.x, p.y, 1.1);            // striking it is almost nothing
+  toast(`CANDLE SET  —  ${p.candles} LEFT`);
+}
+
+function restorePower(){
+  G.powered = true; G.genDone = true;
+  Audio_.power();
+  G.shake = 1.4;
+  for(const l of G.lights) if(!l.broken) l.kind = "main";
+  toast("POWER RESTORED");
+  sub("Every light in Marrow Hill comes on at once. So does it.");
+  makeNoise(G.generator.x, G.generator.y, 900);   // heard everywhere
+  const h = G.hollow;
+  h.state = "hunt"; h.stateT = 0; h.aggro = 1;
+  G.objectiveHint = true;
+}
+
+function makeNoise(x, y, radiusTiles){
+  G.noiseRings.push({ x, y, r:0, max: radiusTiles*TILE, life: 1 });
+  const h = G.hollow;
+  if(!h) return;
+  const d = dist(h.x, h.y, x, y) / TILE;
+  const eff = radiusTiles * DIFFS[G.diff].hearMul;
+  if(d < eff){
+    if(h.state === "hunt") return;
+    h.state = "search"; h.stateT = 0;
+    h.memX = x; h.memY = y;
+    h.searchT = 9 + rng()*5;
+    setAITarget(Math.floor(x/TILE), Math.floor(y/TILE));
+  }
+}
+
+function setAITarget(tx, ty){
+  G.distField = bfsField(tx, ty);
+  G.distFieldTarget = [tx, ty];
+  G.distFieldTimer = 0;
+}
+
+function panFor(wx){
+  const p = G.player; if(!p) return 0;
+  return clamp((wx - p.x) / (TILE*14), -1, 1);
+}
+
+/* -------------------------------- player --------------------------------- */
+function updatePlayer(dt){
+  const p = G.player, D = DIFFS[G.diff];
+
+  // aim toward mouse
+  const sx = VW/2 + (p.x - G.camX), sy = VH/2 + (p.y - G.camY);
+  const wantAim = Math.atan2(mouseY - VH/2 - (p.y - G.camY), mouseX - VW/2 - (p.x - G.camX));
+  p.aim = angLerp(p.aim, wantAim, 1 - Math.pow(0.0001, dt));
+
+  // over the edge — a half second of nothing under your boot
+  if(p.fall > 0){
+    p.fall -= dt;
+    if(G.pit){
+      p.x = lerp(p.x, G.pit.cx, 1-Math.pow(0.25,dt));
+      p.y = lerp(p.y, G.pit.cy, 1-Math.pow(0.25,dt));
+    }
+    G.shake = Math.max(G.shake, 1.1);
+    if(p.fall <= 0) fallIntoPit();
+    return;
+  }
+
+  if(G.grabbed > 0){ updateGrab(dt); return; }
+
+  if(p.hideIn){
+    p.stamina = Math.min(100, p.stamina + 14*dt);
+    // sanity drains slower while hidden but you're blind
+    p.sanity = clamp(p.sanity - D.sanDrain * 0.30 * dt, 0, 100);
+    if(p.lamp) p.oil -= D.oilDrain * 1.1 * dt;
+    updateHiding(dt);
+    return;
+  }
+
+  let ix = (keys.KeyD||keys.ArrowRight?1:0) - (keys.KeyA||keys.ArrowLeft?1:0);
+  let iy = (keys.KeyS||keys.ArrowDown?1:0) - (keys.KeyW||keys.ArrowUp?1:0);
+  const mag = Math.hypot(ix,iy);
+  if(mag > 0){ ix/=mag; iy/=mag; }
+
+  // --- rendering tallow: you are kneeling, lit up, with your back to the room ---
+  if(p.rendering){
+    const R = p.rendering;
+    if(mag > 0){ p.rendering = null; toast("you stop"); }
+    else if(!p.lamp || p.oil <= 0){ p.rendering = null; sub("The flame is gone. The fat sets hard."); }
+    else if(dist(p.x,p.y,R.c.px,R.c.py) > TILE*1.9){ p.rendering = null; }
+    else {
+      p.vx = p.vy = 0;
+      p.crouch = true; p.running = false; p.focus = false;
+      R.t += dt;
+      p.oil = Math.max(0, p.oil - (RENDER_OIL/R.dur)*dt);
+      p.sanity = clamp(p.sanity - D.sanDrain*0.9*dt, 0, 100);
+      // wet, rhythmic, and audible for about four tiles
+      R.noise -= dt;
+      if(R.noise <= 0){
+        R.noise = 0.55;
+        makeNoise(p.x, p.y, 3.8);
+        Audio_.burst({freq:260+rng()*120, q:0.9, dur:0.16, vol:0.075, rate:0.5, pan:panFor(p.x)});
+      }
+      if(R.t >= R.dur){
+        R.c.rendered = true;
+        p.candles += R.c.yield;
+        p.rendering = null;
+        Audio_.pickup();
+        toast(`TALLOW  —  ${R.c.yield} CANDLES  (${p.candles})`);
+        sub(pick(["It gives more than you expected.",
+                  "Still warm. You try not to work out how.",
+                  "Whoever this was, they are a light now."]));
+      }
+      revealAround(p.x, p.y, p.lamp ? 8 : 2.6);
+      return;
+    }
+  }
+
+  p.crouch  = !!(keys.ControlLeft || keys.ControlRight || keys.KeyC);
+  p.running = !!(keys.ShiftLeft || keys.ShiftRight) && !p.crouch && p.stamina > 1 && mag > 0;
+  p.focus   = mouseDown && p.lamp && p.oil > 0;
+
+  let spd = p.crouch ? SPD_CROUCH : p.running ? SPD_RUN : SPD_WALK;
+  if(p.sanity < 20) spd *= 0.90;
+  if(!p.lamp) spd *= 0.86;                 // you move carefully in the dark
+  spd *= TILE;
+
+  if(p.running){ p.stamina -= 22*dt; if(p.stamina <= 0){ p.stamina = 0; p.running = false; } }
+  else p.stamina = Math.min(100, p.stamina + (p.crouch ? 16 : 10)*dt);
+
+  const tvx = ix*spd, tvy = iy*spd;
+  const accel = 1 - Math.pow(0.00005, dt);
+  p.vx = lerp(p.vx, tvx, accel);
+  p.vy = lerp(p.vy, tvy, accel);
+
+  moveCircle(p, p.vx*dt, p.vy*dt);
+
+  // did you just walk off the edge?
+  if(isPit(Math.floor(p.x/TILE), Math.floor(p.y/TILE))){
+    p.fall = 0.75; p.vx = p.vy = 0;
+    Audio_.burst({freq:900, q:1.5, dur:0.3, vol:0.16, rate:1.2});
+    Audio_.tone({wave:"sawtooth", f0:180, f1:60, dur:0.6, vol:0.14});
+    sub("There is no floor here.");
+    return;
+  }
+
+  if(mag > 0) p.ang = angLerp(p.ang, Math.atan2(iy,ix), 1-Math.pow(0.0005,dt));
+
+  // footsteps + noise
+  const speed = Math.hypot(p.vx,p.vy);
+  if(speed > 12){
+    p.stepPhase += speed * dt / (p.running ? 34 : p.crouch ? 52 : 42);
+    if(p.stepPhase >= 1){
+      p.stepPhase -= 1;
+      Audio_.step(p.running, p.crouch, 0);
+      const nr = p.crouch ? 1.6 : p.running ? 9.5 : 4.2;
+      makeNoise(p.x, p.y, nr);
+      // ...and sometimes there is one more step than you took
+      if(rng() < 0.20 && G.silence <= 0){
+        G.mirrorT = 0.22 + rng()*0.14;
+        G.mirrorPan = rnd(0.75,-0.75);
+      }
+    }
+    G.lastPlayerMoving = true;
+  } else {
+    p.stepPhase = 0.6;
+    // the extra footstep that lands after you have already stopped
+    if(G.lastPlayerMoving && rng() < 0.30 && G.silence <= 0){
+      G.mirrorT = 0.42 + rng()*0.2;
+      G.mirrorPan = rnd(0.85,-0.85);
+    }
+    G.lastPlayerMoving = false;
+  }
+
+  // --- the lantern is old, and it fails at the worst possible moment ---
+  // (it is not superstition: the chance really does rise when something is near)
+  const hDist = dist(G.hollow.x, G.hollow.y, p.x, p.y)/TILE;
+  const cNear = G.climber && G.climber.active && G.climber.rise <= 0
+    ? dist(G.climber.x, G.climber.y, p.x, p.y)/TILE : 99;
+  const menace = clamp(1 - Math.min(hDist, cNear)/15, 0, 1);
+  if(p.lampFail > 0){
+    p.lampFail -= dt;
+    if(p.lampFail <= 0 && p.lamp && p.oil > 0){ Audio_.lampRelight(); sub(""); }
+  } else if(p.lamp && p.oil > 2){
+    p.lampFailCool -= dt * (0.55 + menace*2.6 + (1 - p.sanity/100)*0.9);
+    if(p.lampFailCool <= 0){
+      p.lampFailCool = 20 + rng()*26;
+      p.lampFail = 0.9 + rng()*1.7;
+      Audio_.lampFail(0);
+      Audio_.hush(); G.silence = Math.max(G.silence, p.lampFail + 0.5);
+      sub("The flame gutters.");
+    }
+  }
+
+  // lantern oil
+  if(p.lamp){
+    let drain = D.oilDrain * 1.35;
+    if(p.focus) drain *= 3.0;
+    p.oil -= drain * dt;
+    if(p.oil <= 0){
+      p.oil = 0; p.lamp = false;
+      Audio_.burst({freq:300, q:2, dur:0.4, vol:0.12});
+      toast("THE LANTERN GOES OUT");
+      sub("Dry. You shake it and hear nothing move inside.");
+    }
+  }
+
+  // sanity
+  const lit = playerLitAmount();
+  let sdrain = 0;
+  if(lit < 0.25) sdrain += D.sanDrain * (2.0 - lit*4) * 0.65;
+  else if(lit > 0.7) sdrain -= 2.1;               // bright light restores
+  const h = G.hollow;
+  if(h.visible){
+    const hd = dist(h.x,h.y,p.x,p.y)/TILE;
+    sdrain += D.sanDrain * clamp(4.2 - hd*0.22, 0.7, 4.2);
+  }
+  p.sanity = clamp(p.sanity - sdrain*dt, 0, 100);
+
+  // --- true darkness is not neutral. it is occupied. ---
+  if(lit < 0.06){
+    G.darkT += dt;
+    if(G.darkT > 8 && rng() < dt*1.6) Audio_.whisper(rnd(1,-1));
+    if(G.darkT > 9 && G.darkT - dt <= 9) sub("Something in here is breathing with you.");
+    if(G.darkT > 15 && G.darkT - dt <= 15){ sub("It is close enough to touch."); G.subliminal = 2; }
+    if(G.darkT > 19 && G.darkT - dt <= 19){ Audio_.hush(); G.silence = 3; sub(""); }
+    if(G.darkT > 22){ G.subliminal = 4; die("dark"); return; }
+  } else {
+    if(G.darkT > 9) sub("");
+    G.darkT = Math.max(0, G.darkT - dt*4);
+  }
+
+  if(keys.KeyR && p.sedatives > 0 && p.sanity < 92){
+    p.sedatives--; p.sanity = Math.min(100, p.sanity + 45);
+    keys.KeyR = false;
+    Audio_.tone({wave:"sine", f0:300, f1:520, dur:0.5, vol:0.10});
+    toast("SEDATIVE  — the walls stop moving");
+  }
+
+  // reveal seen tiles
+  revealAround(p.x, p.y, p.lamp ? 8 : 2.6);
+}
+
+function moveCircle(o, dx, dy){
+  // axis separated, circle vs tile
+  const r = o.r;
+  let nx = o.x + dx;
+  if(!collides(nx, o.y, r)) o.x = nx; else o.vx *= -0.1;
+  let ny = o.y + dy;
+  if(!collides(o.x, ny, r)) o.y = ny; else o.vy *= -0.1;
+}
+function collides(x, y, r){
+  const x0 = Math.floor((x-r)/TILE), x1 = Math.floor((x+r)/TILE);
+  const y0 = Math.floor((y-r)/TILE), y1 = Math.floor((y+r)/TILE);
+  for(let ty=y0;ty<=y1;ty++) for(let tx=x0;tx<=x1;tx++){
+    if(!isSolid(tx,ty)) continue;
+    const cx = clamp(x, tx*TILE, tx*TILE+TILE), cy = clamp(y, ty*TILE, ty*TILE+TILE);
+    if(dist2(x,y,cx,cy) < r*r) return true;
+  }
+  return false;
+}
+
+function revealAround(wx, wy, rad){
+  const cx = Math.floor(wx/TILE), cy = Math.floor(wy/TILE);
+  const R = Math.ceil(rad);
+  for(let y=cy-R;y<=cy+R;y++) for(let x=cx-R;x<=cx+R;x++){
+    if(!inBounds(x,y)) continue;
+    if(dist(x+0.5,y+0.5,wx/TILE,wy/TILE) > rad) continue;
+    if(G.seen[idx(x,y)]) continue;
+    if(hasLOS(wx,wy,(x+0.5)*TILE,(y+0.5)*TILE)) G.seen[idx(x,y)] = 1;
+  }
+}
+
+// 0..1 — how brightly the player is currently lit (drives sanity + AI detection)
+function playerLitAmount(){
+  const p = G.player;
+  if(p.hideIn) return 0.35;
+  let v = 0;
+  if(p.lamp) v = Math.max(v, p.focus ? 0.85 : 0.62);
+  for(const l of G.lights){
+    if(l.broken) continue;
+    if(l.kind === "emergency" && !G.powered){
+      const d = dist(p.x,p.y,l.x,l.y)/TILE;
+      if(d < l.r*0.75 && hasLOS(p.x,p.y,l.x,l.y)) v = Math.max(v, 0.42*(1-d/(l.r*0.75)) + 0.28);
+    } else if(G.powered){
+      const d = dist(p.x,p.y,l.x,l.y)/TILE;
+      if(d < l.r*1.25 && hasLOS(p.x,p.y,l.x,l.y)) v = Math.max(v, 0.95*(1-d/(l.r*1.25)) + 0.3);
+    }
+  }
+  for(const f of G.flares){
+    const d = dist(p.x,p.y,f.x,f.y)/TILE;
+    if(d < 6 && hasLOS(p.x,p.y,f.x,f.y)) v = Math.max(v, 0.9*(1-d/6));
+  }
+  // a candle is not much, but it is enough to keep the dark off you —
+  // and enough to show you to whatever is at the other end of the corridor
+  for(const cd of G.candles){
+    if(!cd.lit) continue;
+    const d = dist(p.x,p.y,cd.x,cd.y)/TILE;
+    if(d < CANDLE_R && hasLOS(p.x,p.y,cd.x,cd.y)) v = Math.max(v, 0.50*(1-d/CANDLE_R) + 0.14);
+  }
+  return clamp(v, 0, 1);
+}
+
+/* --------------------------------- Hollow -------------------------------- */
+function updateHollow(dt){
+  const h = G.hollow, p = G.player, D = DIFFS[G.diff];
+  h.anim += dt;
+  h.stateT += dt;
+  if(h.stun > 0){ h.stun -= dt; }
+
+  // --- perception ---
+  const dPix = dist(h.x,h.y,p.x,p.y);
+  const dT = dPix / TILE;
+  const los = hasLOS(h.x,h.y,p.x,p.y);
+  h.visible = los && dT < 26 && (playerLitAmount() > 0.05 || dT < 5.5);
+
+  let sees = false;
+  if(!p.hideIn && los){
+    const toP = Math.atan2(p.y-h.y, p.x-h.x);
+    let da = Math.abs(((toP - h.ang + Math.PI) % TAU + TAU) % TAU - Math.PI);
+    const inFov = da < 1.25 || dT < 3.0;
+    const lit = playerLitAmount();
+    let range = D.sight * (0.45 + lit*0.95);
+    if(p.crouch) range *= 0.68;
+    if(p.running) range *= 1.18;
+    if(p.sanity <= 0) range = 999;
+    if(inFov && dT < range) sees = true;
+  }
+  if(G.powered) sees = sees || (rng() < 0.02);      // enraged: it drifts toward you regardless
+  if(p.sanity <= 0) sees = true;
+
+  if(h.watchCool > 0) h.watchCool -= dt;
+
+  if(sees){
+    h.seenPlayerT = 1.6;
+    if(h.state !== "hunt" && h.state !== "watch"){
+      if(h.watchCool <= 0 && dT > 6.5 && dT < 20 && !G.powered && rng() < 0.6){
+        enterWatch();
+      } else {
+        h.state = "hunt"; h.stateT = 0;
+        Audio_.growl(panFor(h.x), 1);
+        if(dT < 12) { Audio_.stinger(); G.shake = Math.max(G.shake, 0.5); }
+        sub("It has seen you.");
+      }
+    }
+    h.memX = p.x; h.memY = p.y;
+  } else if(h.seenPlayerT > 0) h.seenPlayerT -= dt;
+
+  // --- it stops. it faces you. it does not come any closer. ---
+  if(h.state === "watch"){
+    h.vx = h.vy = 0;
+    h.anim += dt*0.15;
+    h.ang = angLerp(h.ang, Math.atan2(p.y-h.y, p.x-h.x), 1 - Math.pow(0.01, dt));
+    h.watchT -= dt;
+    const watched = beingWatched(h.x, h.y);
+    if(watched) h.unseenT = 0; else h.unseenT += dt;
+    p.sanity = clamp(p.sanity - D.sanDrain * (watched ? 3.0 : 1.0) * dt, 0, 100);
+    if(h.unseenT > 0.6){
+      h.watchCool = 24 + rng()*22;
+      h.state = "hunt"; h.stateT = 0; h.seenPlayerT = 2.5;
+      // You looked away for half a second. It is always somewhere else now —
+      // and one time in four, somewhere much worse.
+      const veryClose = rng() < 0.25;
+      const moved = veryClose
+        ? (teleportHollowNear(2.2, 4.2) || teleportHollowNear(4.0, 9.0))
+        : (teleportHollowNear(4.0, 9.0) || teleportHollowNear(2.2, 4.2));
+      if(moved){
+        Audio_.stinger(); G.shake = Math.max(G.shake, veryClose ? 0.95 : 0.65);
+        G.subliminal = veryClose ? 3 : 2;
+        sub(veryClose ? "It is much closer than it was." : "It is not where it was.");
+      }
+      setAITarget(Math.floor(p.x/TILE), Math.floor(p.y/TILE));
+      return;
+    }
+    if(h.watchT <= 0){
+      h.watchCool = 26 + rng()*20;
+      h.state = "hunt"; h.stateT = 0; h.seenPlayerT = 2;
+      Audio_.growl(panFor(h.x), 1);
+      sub("It starts walking.");
+    }
+    return;
+  }
+
+  // --- state machine ---
+  if(h.state === "hunt"){
+    if(h.seenPlayerT <= 0 && !G.powered && p.sanity > 0){
+      if(h.stateT > 3.5){ h.state = "search"; h.stateT = 0; h.searchT = 10; }
+    }
+    if(G.frame % 12 === 0) setAITarget(Math.floor(p.x/TILE), Math.floor(p.y/TILE));
+  }
+  else if(h.state === "search"){
+    h.searchT -= dt;
+    const dm = dist(h.x,h.y,h.memX,h.memY)/TILE;
+    if(dm < 1.4 || h.searchT <= 0){
+      // wander near the memory point, then give up
+      if(h.searchT > 0){
+        const r = pick(G.rooms);
+        h.memX = (r.ax+0.5)*TILE; h.memY = (r.ay+0.5)*TILE;
+        setAITarget(r.ax, r.ay);
+        h.searchT -= 3;
+      } else { h.state = "patrol"; h.stateT = 0; pickPatrol(); }
+    }
+  }
+  else { // patrol
+    const dt2 = dist(h.x,h.y,h.target[0]*TILE+TILE/2, h.target[1]*TILE+TILE/2)/TILE;
+    if(dt2 < 1.5 || h.stateT > 26) pickPatrol();
+  }
+
+  // --- hiding: it walks to the locker and puts its face against the vent ---
+  if(p.hideIn){
+    const L = p.hideIn;
+    const lx = (L.x+0.5)*TILE, ly = (L.y+0.5)*TILE;
+    const ld = dist(h.x, h.y, lx, ly)/TILE;
+    if(h.sawHide){
+      h.state = "hunt"; h.memX = lx; h.memY = ly;
+      if(G.frame % 15 === 0) setAITarget(L.x, L.y);
+    }
+    if(ld < 1.7){
+      h.vx = h.vy = 0;
+      h.ang = angLerp(h.ang, Math.atan2(ly-h.y, lx-h.x), 1 - Math.pow(0.01, dt));
+      if(h.inspectT <= 0){
+        h.inspectT = h.sawHide ? 2.3 : 3.5 + rng()*3.0;
+        Audio_.hush(); G.silence = Math.max(G.silence, h.inspectT + 0.6);
+        Audio_.breathe(true, 0.17, 0);
+        sub(h.sawHide ? "It knows which one." : "HOLD YOUR BREATH   [SPACE]");
+      }
+      h.inspectT -= dt;
+      G.shake = Math.max(G.shake, 0.07);
+      // any sound out of you and the door comes off
+      if(p.gaspT > 0 || p.breathTell > 0 || (h.sawHide && h.inspectT <= 0)){
+        p.hideIn = null; p.x = p.hideOutX; p.y = p.hideOutY;
+        G.subliminal = 3;
+        Audio_.door(true, panFor(lx));
+        grab();
+        return;
+      }
+      if(h.inspectT <= 0){
+        h.sawHide = false;
+        h.state = "search"; h.stateT = 0; h.searchT = 5;
+        pickPatrol();
+        Audio_.setDrone(0.42);
+        sub("It walks away.");
+      }
+      return;
+    } else h.inspectT = 0;
+  }
+
+  // avoid flares
+  let avoidX = 0, avoidY = 0;
+  for(const f of G.flares){
+    const fd = dist(h.x,h.y,f.x,f.y);
+    if(fd < TILE*4.2 && hasLOS(h.x,h.y,f.x,f.y)){
+      const k = (1 - fd/(TILE*4.2));
+      avoidX += (h.x - f.x)/Math.max(1,fd) * k * 2.4;
+      avoidY += (h.y - f.y)/Math.max(1,fd) * k * 2.4;
+      if(rng()<dt*1.2) h.stun = Math.max(h.stun, 0.25);
+    }
+  }
+  // focused beam staggers it up close
+  if(p.focus && p.lamp && dT < 6.5 && los){
+    const toH = Math.atan2(h.y-p.y, h.x-p.x);
+    let da = Math.abs(((toH - p.aim + Math.PI)%TAU+TAU)%TAU - Math.PI);
+    if(da < BEAM_FOCUS_ARC*1.3){
+      h.stun = Math.max(h.stun, 0.20);
+      avoidX += (h.x-p.x)/Math.max(1,dPix) * 1.6;
+      avoidY += (h.y-p.y)/Math.max(1,dPix) * 1.6;
+      if(rng() < dt*3) Audio_.burst({freq:220, q:1.5, dur:0.25, vol:0.08, pan:panFor(h.x)});
+    }
+  }
+
+  // --- movement along the flow field ---
+  let targetSpd = h.state === "hunt" ? D.huntSpd : h.state === "search" ? D.patSpd*1.45 : D.patSpd;
+  if(h.stun > 0) targetSpd *= 0.15;
+  targetSpd *= TILE;
+
+  let mx = 0, my = 0;
+  const f = G.distField;
+  const hx = Math.floor(h.x/TILE), hy = Math.floor(h.y/TILE);
+  if(f && inBounds(hx,hy)){
+    let best = f[idx(hx,hy)], bx = hx, by = hy;
+    if(best < 0) best = 1e9;
+    for(let k=0;k<8;k++){
+      const nx = hx + [1,-1,0,0,1,1,-1,-1][k], ny = hy + [0,0,1,-1,1,-1,1,-1][k];
+      if(!inBounds(nx,ny)) continue;
+      const v = f[idx(nx,ny)];
+      if(v < 0) continue;
+      if(k >= 4 && (!walkableForAI(nx,hy) || !walkableForAI(hx,ny))) continue;  // no corner cutting
+      if(!walkableForAI(nx,ny)) continue;
+      if(v < best){ best = v; bx = nx; by = ny; }
+    }
+    const tx = (bx+0.5)*TILE, ty = (by+0.5)*TILE;
+    mx = tx - h.x; my = ty - h.y;
+    const m = Math.hypot(mx,my);
+    if(m > 0.001){ mx/=m; my/=m; }
+  }
+  mx += avoidX; my += avoidY;
+  const mm = Math.hypot(mx,my);
+  if(mm > 0.001){ mx/=mm; my/=mm; }
+
+  const acc = 1 - Math.pow(0.0002, dt);
+  h.vx = lerp(h.vx, mx*targetSpd, acc);
+  h.vy = lerp(h.vy, my*targetSpd, acc);
+
+  // open/break doors in its way
+  const nextTx = Math.floor((h.x + h.vx*dt*3)/TILE), nextTy = Math.floor((h.y + h.vy*dt*3)/TILE);
+  const dr = doorAt(nextTx, nextTy);
+  if(dr && !dr.open && !dr.broken){
+    h.breakT += dt;
+    h.vx *= 0.2; h.vy *= 0.2;
+    if(h.breakT > 0.55 && rng() < dt*4){
+      Audio_.bang(panFor(h.x));
+      G.shake = Math.max(G.shake, 0.35 * clamp(1 - dPix/(TILE*16), 0, 1));
+    }
+    if(h.breakT > (h.state==="hunt" ? 1.9 : 3.0)){
+      dr.broken = true; dr.open = true; dr.swing = 1; h.breakT = 0;
+      Audio_.bang(panFor(h.x));
+      makeNoise((dr.x+0.5)*TILE,(dr.y+0.5)*TILE, 16);
+      G.shake = Math.max(G.shake, 0.5);
+    }
+  } else h.breakT = Math.max(0, h.breakT - dt*2);
+
+  moveCircle(h, h.vx*dt, h.vy*dt);
+  h.spd = Math.hypot(h.vx,h.vy);
+
+  // it puts out every flame it passes. it does not break stride to do it.
+  for(const cd of G.candles){
+    if(!cd.lit) continue;
+    if(dist(h.x,h.y,cd.x,cd.y) > TILE*1.15) continue;
+    snuffCandle(cd, true);
+  }
+  if(h.spd > 4) h.ang = angLerp(h.ang, Math.atan2(h.vy,h.vx), 1-Math.pow(0.002,dt));
+
+  // catch the player
+  if(!p.hideIn && dPix < h.r + p.r + 4 && G.grabbed <= 0 && G.grabCool <= 0){
+    grab();
+  }
+
+  // audio presence
+  h.growlT -= dt;
+  if(h.growlT <= 0){
+    h.growlT = h.state === "hunt" ? 1.6 + rng()*1.2 : 5 + rng()*7;
+    if(dT < 22) Audio_.growl(panFor(h.x), clamp(1 - dT/22, 0, 1) * (h.state==="hunt"?1:0.55));
+  }
+  // footsteps you can hear
+  if(h.spd > 20 && G.frame % 9 === 0 && dT < 18){
+    Audio_.burst({freq:520, q:1.1, dur:0.10, vol:0.055*clamp(1-dT/18,0,1), rate:0.55, pan:panFor(h.x)});
+  }
+}
+
+/* ---------------------------------- THE PIT -------------------------------
+   The Hollow you can eventually understand: it walks, it hunts, it opens doors.
+   The pit you never can. You only ever see the part of it that comes up.
+   -------------------------------------------------------------------------- */
+const TENDRIL_REACH = 4.4;   // tiles
+
+function pitProximity(){      // 0 outside, →1 standing on the rim
+  const P = G.pit; if(!P) return 0;
+  const p = G.player;
+  const nx = (p.x - P.cx)/P.rx, ny = (p.y - P.cy)/P.ry;
+  const norm = Math.hypot(nx, ny);
+  const avgR = (P.rx + P.ry) * 0.5 / TILE;
+  const outside = (norm - 1) * avgR;         // ≈ tiles beyond the rim
+  return clamp(1 - outside/6.5, 0, 1);
+}
+
+function updatePit(dt){
+  const P = G.pit; if(!P) return;
+  const p = G.player;
+  const near = pitProximity();
+
+  // it notices you. slowly. and it stays noticing.
+  if(near > 0.02 && p.fall <= 0) P.awake = Math.min(1, P.awake + dt*near*0.55);
+  else P.awake = Math.max(0, P.awake - dt*0.10);
+
+  // once it is fully roused, something starts climbing
+  if(G.climber && !G.climber.active){
+    if(P.climberDelay == null && P.awake >= 0.99) P.climberDelay = 1.4;
+    if(P.climberDelay != null){
+      P.climberDelay -= dt;
+      if(P.climberDelay <= 0){ P.climberDelay = null; wakeClimber(); }
+    }
+  }
+
+  // breathing — the only thing that tells you how big it is
+  P.breath -= dt;
+  if(P.breath <= 0){
+    P.breath = lerp(9.5, 3.4, P.awake) + rng()*2.5;
+    const vol = 0.035 + near*0.13 + P.awake*0.05;
+    const pan = panFor(P.cx);
+    Audio_.tone({wave:"sine", f0:26 + rng()*8, f1:19, dur:2.6, vol, atk:0.9, pan});
+    Audio_.burst({freq:190, q:0.45, dur:2.4, vol:vol*0.6, atk:1.0, rate:0.22, pan});
+    if(near > 0.45 && rng() < 0.4){
+      Audio_.burst({freq:1500+rng()*900, q:8, dur:0.9, vol:0.05, atk:0.3, pan:rnd(1,-1)});
+      if(rng() < 0.5) sub(pick([
+        "…it is not a basement…",
+        "…the surveyors measured two hundred feet and then stopped measuring…",
+        "…do not lean over…",
+        "…something down there is turning over in its sleep…",
+      ]), 3.0);
+    }
+  }
+
+  // standing at the edge of it costs you
+  if(near > 0.15){
+    p.sanity = clamp(p.sanity - DIFFS[G.diff].sanDrain * near * 2.4 * dt, 0, 100);
+    if(near > 0.75) G.shake = Math.max(G.shake, 0.10 * near * P.awake);
+  }
+
+  // --- the limbs ---
+  for(const t of P.tendrils){
+    t.t += dt;
+    t.wig += dt * t.speed * 2.4;
+    if(t.cool > 0) t.cool -= dt;
+
+    t.bx = P.cx + Math.cos(t.a)*P.rx*0.95;
+    t.by = P.cy + Math.sin(t.a)*P.ry*0.95;
+    const pd = dist(t.bx, t.by, p.x, p.y)/TILE;
+
+    if(t.state === "idle"){
+      // resting: it swells and subsides just below the rim, occasionally peeking
+      t.want = P.awake > 0.12
+        ? (0.45 + Math.sin(t.t*0.75 + t.phase)*0.55) * 1.6 * P.awake
+        : 0.10;
+      t.aim = angLerp(t.aim, t.a, 1 - Math.pow(0.08, dt));
+      if(P.awake > 0.30 && t.cool <= 0 && p.fall <= 0 && !p.hideIn &&
+         pd < TENDRIL_REACH && hasLOS(t.bx, t.by, p.x, p.y) &&
+         rng() < dt*(0.45 + P.awake*1.1)){
+        t.state = "strike"; t.t = 0;
+        t.aim = Math.atan2(p.y - t.by, p.x - t.bx);
+        Audio_.burst({freq:300, q:0.7, dur:0.45, vol:0.15, rate:0.55, pan:panFor(t.bx)});
+        Audio_.tone({wave:"sawtooth", f0:130, f1:58, dur:0.35, vol:0.10, pan:panFor(t.bx)});
+      }
+    } else if(t.state === "strike"){
+      t.aim = angLerp(t.aim, Math.atan2(p.y - t.by, p.x - t.bx), 1 - Math.pow(0.015, dt));
+      t.want = Math.min(TENDRIL_REACH*1.06, pd + 0.35);
+      if(t.t > 0.95){ t.state = "recoil"; t.t = 0; t.cool = 2.2 + rng()*3.4; }
+    } else { // recoil
+      t.want = 0.06;
+      t.aim = angLerp(t.aim, t.a, 1 - Math.pow(0.05, dt));
+      if(t.t > 1.1){ t.state = "idle"; t.t = 0; }
+    }
+
+    t.len = lerp(t.len, t.want, clamp(dt * (t.state === "strike" ? 13 : 3.0), 0, 1));
+
+    if(t.state === "strike" && G.grabbed <= 0 && G.grabCool <= 0 && p.fall <= 0 && !p.hideIn){
+      const tx = t.bx + Math.cos(t.aim)*t.len*TILE;
+      const ty = t.by + Math.sin(t.aim)*t.len*TILE;
+      if(dist(tx, ty, p.x, p.y) < p.r + 11){
+        grab("pit", P.cx, P.cy);
+        t.state = "recoil"; t.t = 0; t.cool = 6;
+      }
+    }
+  }
+
+  // a flare thrown into the hole shows you nothing, and annoys it
+  for(const f of G.flares){
+    if(isPit(Math.floor(f.x/TILE), Math.floor(f.y/TILE))){
+      f.life = Math.min(f.life, 0.6);
+      P.awake = Math.min(1, P.awake + dt*0.9);
+    }
+  }
+}
+
+function drawPitDepths(c){
+  // Faint shapes far down. Never resolved. Never explained.
+  const P = G.pit; if(!P) return;
+  const near = pitProximity();
+  if(near < 0.05) return;
+  const n = 3;
+  for(let i=0;i<n;i++){
+    const ph = G.t*0.13 + i*2.2;
+    const k = 0.30 + 0.35*Math.sin(ph*0.7 + i);
+    const a = ph*0.8 + i*2.1;
+    const x = P.cx + Math.cos(a)*P.rx*k*0.7;
+    const y = P.cy + Math.sin(a)*P.ry*k*0.7;
+    const rr = (26 + Math.sin(ph*1.3)*9) * (0.5 + k);
+    const alpha = (0.020 + 0.030*Math.abs(Math.sin(ph*0.9))) * near * (0.4 + P.awake*0.6);
+    const g = c.createRadialGradient(x,y,0, x,y,rr);
+    g.addColorStop(0, `rgba(150,148,140,${alpha})`);
+    g.addColorStop(1, "rgba(120,118,112,0)");
+    c.fillStyle = g;
+    c.beginPath(); c.ellipse(x, y, rr, rr*0.62, a*0.3, 0, TAU); c.fill();
+  }
+}
+
+function drawTendrils(c){
+  const P = G.pit; if(!P) return;
+  const SEG = 11;
+  for(const t of P.tendrils){
+    if(t.len < 0.06) continue;
+    const L = t.len * TILE;
+    let px0 = t.bx, py0 = t.by;
+    for(let i=1;i<=SEG;i++){
+      const f = i/SEG;
+      const wig = Math.sin(t.wig + f*5.1) * (1 - f*0.28) * (t.state === "strike" ? 0.06 : 0.17);
+      const ax = t.aim + wig;
+      const px = t.bx + Math.cos(ax)*L*f;
+      const py = t.by + Math.sin(ax)*L*f;
+      c.beginPath(); c.moveTo(px0, py0); c.lineTo(px, py);
+      c.lineCap = "round";
+      c.lineWidth = lerp(14, 2.4, f); c.strokeStyle = "#05040a"; c.stroke();
+      c.lineWidth = lerp(9.5, 1.3, f);
+      c.strokeStyle = `rgb(${18 + f*16 | 0},${11 + f*9 | 0},${20 + f*14 | 0})`;
+      c.stroke();
+      // wet highlight along the upper edge
+      c.lineWidth = lerp(2.6, 0.7, f);
+      c.strokeStyle = `rgba(150,140,150,${0.10 + f*0.10})`;
+      c.beginPath();
+      c.moveTo(px0, py0 - lerp(4,0.8,f)); c.lineTo(px, py - lerp(4,0.8,f));
+      c.stroke();
+      // hooks
+      if(i > SEG - 4 && i % 2 === 0){
+        const hk = lerp(4.5, 2.2, f);
+        c.beginPath();
+        c.moveTo(px, py);
+        c.lineTo(px + Math.cos(ax - 2.2)*hk, py + Math.sin(ax - 2.2)*hk);
+        c.lineWidth = 1.6; c.strokeStyle = "#0a0810"; c.stroke();
+      }
+      px0 = px; py0 = py;
+    }
+  }
+}
+
+/* ================= THE CLIMBER ============================================
+   The Hollow hunts you. This does not hunt — it arrives.
+   It cannot move while you are looking at it. That is the only rule it has,
+   and it is the only rule you get.
+   ========================================================================== */
+function fieldDir(ex, ey, f){
+  const hx = Math.floor(ex/TILE), hy = Math.floor(ey/TILE);
+  if(!f || !inBounds(hx,hy)) return [0,0];
+  let best = f[idx(hx,hy)]; if(best < 0) best = 1e9;
+  let bx = hx, by = hy;
+  for(let k=0;k<8;k++){
+    const nx = hx + [1,-1,0,0,1,1,-1,-1][k], ny = hy + [0,0,1,-1,1,-1,1,-1][k];
+    if(!inBounds(nx,ny)) continue;
+    const v = f[idx(nx,ny)];
+    if(v < 0) continue;
+    if(k>=4 && (!walkableForAI(nx,hy) || !walkableForAI(hx,ny))) continue;
+    if(!walkableForAI(nx,ny)) continue;
+    if(v < best){ best = v; bx = nx; by = ny; }
+  }
+  let mx = (bx+0.5)*TILE - ex, my = (by+0.5)*TILE - ey;
+  const m = Math.hypot(mx,my);
+  if(m > 0.001){ mx/=m; my/=m; }
+  return [mx,my];
+}
+
+// the beam narrows as your nerve goes — tunnel vision, and it is not cosmetic
+function beamArc(){
+  const p = G.player;
+  return (p.focus ? BEAM_FOCUS_ARC : BEAM_ARC) * lerp(0.66, 1, clamp(p.sanity/100, 0, 1));
+}
+
+// is a world point currently inside the player's cone of attention?
+function beingWatched(wx, wy){
+  const p = G.player;
+  if(p.hideIn || p.fall > 0 || G.grabbed > 0) return false;
+  if(!hasLOS(p.x,p.y,wx,wy)) return false;
+  const dT = dist(p.x,p.y,wx,wy)/TILE;
+  if(dT < 2.2) return true;
+  if(p.lamp && p.lampFail <= 0){
+    if(dT < LANTERN_R*0.82) return true;
+    const to = Math.atan2(wy-p.y, wx-p.x);
+    const da = Math.abs(((to - p.aim + Math.PI)%TAU+TAU)%TAU - Math.PI);
+    const rr  = p.focus ? BEAM_FOCUS_R : BEAM_R;
+    if(da < beamArc()*1.15 && dT < rr) return true;
+  }
+  for(const f of G.flares)
+    if(dist(f.x,f.y,wx,wy) < TILE*5.2 && hasLOS(f.x,f.y,wx,wy)) return true;
+  for(const l of G.lights){
+    if(l.broken) continue;
+    if(!(G.powered || l.kind === "emergency")) continue;
+    if(dist(l.x,l.y,wx,wy) < l.r*TILE*0.85 && hasLOS(l.x,l.y,wx,wy)) return true;
+  }
+  return false;
+}
+
+function wakeClimber(){
+  const c = G.climber, P = G.pit, p = G.player;
+  if(!c || c.active || !P) return;
+  // it comes up on the far side of the rim from wherever you are standing
+  const a = Math.atan2(p.y-P.cy, p.x-P.cx) + Math.PI + rnd(0.5,-0.5);
+  let sx = null, sy = null;
+  for(let k=1.02;k<1.9;k+=0.04){
+    const x = P.cx + Math.cos(a)*P.rx*k, y = P.cy + Math.sin(a)*P.ry*k;
+    if(walkableForAI(Math.floor(x/TILE), Math.floor(y/TILE))){ sx=x; sy=y; break; }
+  }
+  if(sx === null){
+    for(const r of G.rooms){ if(r.tag !== "pit"){ sx=(r.ax+0.5)*TILE; sy=(r.ay+0.5)*TILE; break; } }
+  }
+  c.active = true; c.rise = 3.6;
+  c.x = P.cx + Math.cos(a)*P.rx*0.55; c.y = P.cy + Math.sin(a)*P.ry*0.55;
+  c.spawnX = sx; c.spawnY = sy;
+  Audio_.hush(); G.silence = 6.0;
+  Audio_.rise();
+  G.shake = 1.3;
+  G.subliminal = 2;
+  toast("SOMETHING IS COMING UP");
+  sub("You hear it find the edge with its hands.");
+}
+
+function updateClimber(dt){
+  const c = G.climber; if(!c) return;
+  const p = G.player, P = G.pit;
+
+  if(!c.active) return;
+  c.anim += dt;
+
+  // hauling itself over the rim — it cannot be stopped during this
+  if(c.rise > 0){
+    c.rise -= dt;
+    c.x = lerp(c.x, c.spawnX, 1 - Math.pow(0.25, dt));
+    c.y = lerp(c.y, c.spawnY, 1 - Math.pow(0.25, dt));
+    G.shake = Math.max(G.shake, 0.25);
+    return;
+  }
+
+  const d = dist(c.x, c.y, p.x, p.y), dT = d/TILE;
+  const observed = beingWatched(c.x, c.y);
+  c.frozen = observed;
+
+  if(observed){
+    c.seenT += dt;
+    c.vx = c.vy = 0;
+    c.ang = angLerp(c.ang, Math.atan2(p.y-c.y, p.x-c.x), 1 - Math.pow(0.02, dt));
+    // holding its gaze is the only thing that works, and it costs you
+    p.sanity = clamp(p.sanity - DIFFS[G.diff].sanDrain * 2.1 * dt * clamp(1.2 - dT/16, 0.25, 1.2), 0, 100);
+    if(c.seenT > 0.15 && c.seenT < 0.15 + dt) Audio_.drag(panFor(c.x), 0.05);
+    return;
+  }
+
+  // unobserved: it accelerates the longer you fail to look
+  c.seenT = Math.max(0, c.seenT - dt);
+  c.unseen = (c.unseen || 0) + dt;
+  const spd = lerp(1.9, 3.7, clamp(c.unseen/4.5, 0, 1)) * TILE;
+  const [mx, my] = fieldDir(c.x, c.y, G.playerField);
+  c.vx = lerp(c.vx, mx*spd, 1 - Math.pow(0.0005, dt));
+  c.vy = lerp(c.vy, my*spd, 1 - Math.pow(0.0005, dt));
+  if(Math.hypot(c.vx,c.vy) > 3) c.ang = angLerp(c.ang, Math.atan2(c.vy,c.vx), 1-Math.pow(0.004,dt));
+
+  // it opens doors. it does not open them loudly.
+  const nx = Math.floor((c.x + c.vx*dt*4)/TILE), ny = Math.floor((c.y + c.vy*dt*4)/TILE);
+  const dr = doorAt(nx, ny);
+  if(dr && !dr.open && !dr.broken){ dr.open = true; dr.swing = 1; }
+
+  moveCircle(c, c.vx*dt, c.vy*dt);
+
+  // it drags. rarely. just enough that you know it is still out there.
+  c.dragT -= dt;
+  if(c.dragT <= 0){
+    c.dragT = 3.5 + rng()*5;
+    if(dT < 20) Audio_.drag(panFor(c.x), 0.035 + 0.07*clamp(1-dT/20,0,1));
+  }
+
+  if(!p.hideIn && dT*TILE < c.r + p.r + 4 && G.grabbed <= 0 && G.grabCool <= 0 && p.fall <= 0){
+    G.subliminal = 3;
+    grab("climber", c.x, c.y);
+  }
+}
+
+function drawClimber(c2){
+  const c = G.climber;
+  if(!c || !c.active) return;
+  const p = G.player;
+  c2.save();
+  c2.translate(c.x, c.y);
+  c2.rotate(c.ang + Math.PI/2);
+  c2.globalAlpha = 0.6; c2.fillStyle = "#000";
+  c2.beginPath(); c2.ellipse(0, 10, 17, 8, 0, 0, TAU); c2.fill();
+  c2.globalAlpha = 1;
+
+  const s = 1.75;
+  const still = c.frozen;
+  // when it is frozen it does not sway at all, which is worse
+  const sway = still ? 0 : Math.sin(c.anim*3.1)*2.6;
+  c2.save(); c2.scale(s, s);
+
+  // too many limbs, all of them too long
+  c2.strokeStyle = "#040409"; c2.lineCap = "round";
+  for(let i=0;i<3;i++){
+    const ph = i*2.1;
+    const o = still ? Math.sin(ph)*1.2 : Math.sin(c.anim*2.3 + ph)*4.5;
+    c2.lineWidth = 3.4 - i*0.5;
+    c2.beginPath();
+    c2.moveTo(-5, -6 + i*4); c2.quadraticCurveTo(-13 - o, -2 + i*5, -17 - o*1.4, 10 + i*3);
+    c2.moveTo( 5, -6 + i*4); c2.quadraticCurveTo( 13 + o, -2 + i*5,  17 + o*1.4, 10 + i*3);
+    c2.stroke();
+  }
+  // trunk
+  c2.fillStyle = "#07070c";
+  c2.beginPath();
+  c2.moveTo(-8,-11); c2.quadraticCurveTo(0,-17, 8,-11);
+  c2.lineTo(6, 9 + sway*0.2); c2.quadraticCurveTo(0, 13, -6, 9 - sway*0.2);
+  c2.closePath(); c2.fill();
+  // a head that is not on straight
+  c2.save();
+  c2.translate(sway*0.2, -15);
+  c2.rotate(still ? 0.55 : Math.sin(c.anim*0.9)*0.5);
+  c2.fillStyle = "#0d0d12";
+  c2.beginPath(); c2.ellipse(0,0, 5.2, 8.4, 0, 0, TAU); c2.fill();
+  c2.fillStyle = "#c8c0ae";
+  c2.beginPath(); c2.ellipse(0, 1.5, 3.2, 5.0, 0, 0, TAU); c2.fill();
+  c2.fillStyle = "#000";
+  c2.beginPath(); c2.ellipse(-1.3, -0.6, 1.0, 1.5, 0, 0, TAU); c2.fill();
+  c2.beginPath(); c2.ellipse( 1.3, -0.6, 1.0, 1.5, 0, 0, TAU); c2.fill();
+  c2.beginPath(); c2.ellipse( 0, 3.4, 1.1, 2.0, 0, 0, TAU); c2.fill();
+  c2.restore();
+  c2.restore();
+  c2.restore();
+}
+
+/* ================= HIDING ================================================= */
+function updateHiding(dt){
+  const p = G.player, h = G.hollow, L = p.hideIn;
+  const lx = (L.x+0.5)*TILE, ly = (L.y+0.5)*TILE;
+  const hd = dist(h.x, h.y, lx, ly)/TILE;
+  const cl = G.climber;
+  const cd = (cl && cl.active && cl.rise <= 0) ? dist(cl.x, cl.y, lx, ly)/TILE : 99;
+  const threat = Math.min(hd, cd);
+
+  p.holding = !!keys.Space;
+  if(p.holding){
+    p.breath -= dt * 13;
+    if(p.breath <= 0){
+      p.breath = 0; p.holding = false; p.gaspT = 1.1;
+      Audio_.gasp(0);
+      makeNoise(lx, ly, 8.0);
+      G.shake = Math.max(G.shake, 0.3);
+      sub("You cannot hold it any longer.");
+    }
+  } else {
+    p.breath = Math.min(100, p.breath + dt*24);
+    p.breathT -= dt;
+    if(p.breathT <= 0){
+      p.breathT = 2.2 + rng()*0.8;
+      const close = clamp(1 - threat/9, 0, 1);
+      Audio_.breathe(rng() < 0.5, 0.09 + close*0.17, 0);
+      makeNoise(lx, ly, 2.6);
+      p.breathTell = 0.4;          // it is standing close enough to hear that
+    }
+  }
+  if(p.breathTell > 0) p.breathTell -= dt;
+  if(p.gaspT > 0) p.gaspT -= dt;
+
+  // the heart gives you away to nobody but yourself
+  if(threat < 4 && G.frame % 4 === 0) G.shake = Math.max(G.shake, 0.05*(1-threat/4));
+
+  // there is no hiding from the thing out of the pit
+  if(cd < 1.35 && G.grabbed <= 0){
+    p.hideIn = null; p.x = p.hideOutX; p.y = p.hideOutY;
+    G.subliminal = 3;
+    grab("climber", cl.x, cl.y);
+  }
+}
+
+/* ================= THE WATCHER ============================================ */
+// It stops. It faces you. It does not come any closer. Then you blink.
+function teleportHollowNear(minT, maxT){
+  const h = G.hollow, p = G.player;
+  const pcx = Math.floor(p.x/TILE), pcy = Math.floor(p.y/TILE);
+  let cands = [];
+  // In a wide open ward there may be nowhere close that is also out of sight,
+  // so widen the ring until somewhere qualifies rather than giving up.
+  for(const [lo,hi] of [[minT,maxT], [minT*0.8, maxT*1.7], [3, 16]]){
+    const R = Math.ceil(hi);
+    for(let y=pcy-R;y<=pcy+R;y++) for(let x=pcx-R;x<=pcx+R;x++){
+      if(!inBounds(x,y) || !walkableForAI(x,y)) continue;
+      const d = dist(x+0.5, y+0.5, p.x/TILE, p.y/TILE);
+      if(d < lo || d > hi) continue;
+      if(hasLOS(p.x, p.y, (x+0.5)*TILE, (y+0.5)*TILE)) continue;   // never appear in view
+      cands.push([x,y]);
+    }
+    if(cands.length) break;
+  }
+  if(!cands.length) return false;
+  const [tx,ty] = pick(cands);
+  h.x = (tx+0.5)*TILE; h.y = (ty+0.5)*TILE;
+  h.vx = h.vy = 0;
+  return true;
+}
+
+function enterWatch(){
+  const h = G.hollow;
+  h.state = "watch"; h.stateT = 0; h.unseenT = 0;
+  h.watchT = 3.5 + rng()*4.5;
+  h.vx = h.vy = 0;
+  Audio_.hush(); G.silence = Math.max(G.silence, h.watchT + 0.8);
+  Audio_.tone({wave:"sine", f0:40, f1:33, dur:2.6, vol:0.11, atk:0.6});
+  G.subliminal = 1;
+  sub("It is just standing there.");
+}
+
+function pickPatrol(){
+  const h = G.hollow;
+  // prefer rooms it hasn't just come from, weighted toward the player's half of the map
+  let best = null, bs = -1;
+  for(let i=0;i<6;i++){
+    const r = pick(G.rooms);
+    const dp = dist(r.ax*TILE, r.ay*TILE, G.player.x, G.player.y)/TILE;
+    const dh = dist(r.ax*TILE, r.ay*TILE, h.x, h.y)/TILE;
+    const s = (60 - dp) * DIFFS[G.diff].aggro + dh*0.6 + rng()*20;
+    if(s > bs){ bs = s; best = r; }
+  }
+  if(!best) best = G.rooms[0];
+  h.target = [best.ax, best.ay];
+  h.stateT = 0;
+  setAITarget(best.ax, best.ay);
+}
+
+function grab(source, tx, ty){
+  const p = G.player, h = G.hollow;
+  p.rendering = null;              // whatever you were doing, you are not doing it now
+  G.grabBy = source || "hollow";
+  G.grabX = tx != null ? tx : h.x;
+  G.grabY = ty != null ? ty : h.y;
+  G.grabbed = G.grabBy === "pit" ? 3.1 : 2.6;
+  G.grabMash = 0;
+  Audio_.scream(panFor(G.grabX));
+  if(G.grabBy === "pit"){
+    Audio_.tone({wave:"sawtooth", f0:44, f1:22, dur:2.4, vol:0.24, atk:0.02});
+    Audio_.burst({freq:120, q:0.5, dur:2.0, vol:0.14, rate:0.25});
+    sub("Something has you by the ankle.");
+  } else if(G.grabBy === "climber"){
+    Audio_.tone({wave:"sawtooth", f0:58, f1:26, dur:2.8, vol:0.26, atk:0.02});
+    Audio_.burst({freq:90, q:0.4, dur:2.6, vol:0.16, rate:0.2});
+    sub("It has you. It is not in any hurry.");
+  }
+  G.shake = 1.6; G.flashRed = 1;
+}
+
+function updateGrab(dt){
+  const p = G.player, h = G.hollow;
+  G.grabbed -= dt;
+  if(G.grabBy === "hollow"){ G.grabX = h.x; G.grabY = h.y; }
+  if(G.grabBy === "climber" && G.climber){ G.grabX = G.climber.x; G.grabY = G.climber.y; }
+  // dragged toward it
+  const pull = G.grabBy === "pit" ? 0.42 : 0.15;
+  p.x = lerp(p.x, G.grabX, 1-Math.pow(pull,dt));
+  p.y = lerp(p.y, G.grabY, 1-Math.pow(pull,dt));
+  G.shake = Math.max(G.shake, 0.9);
+  // the pit does not need to finish the job itself — it only needs you over the edge
+  if(G.grabBy === "pit" && isPit(Math.floor(p.x/TILE), Math.floor(p.y/TILE)) && G.grabbed < 1.4){
+    G.grabbed = 0; fallIntoPit(); return;
+  }
+  if(G.escapesLeft > 0){
+    if(keys.Space){ G.grabMash += 1; keys.Space = false;
+      Audio_.burst({freq:900, q:1, dur:0.05, vol:0.10}); }
+    if(G.grabMash >= (G.grabBy === "pit" ? 16 : 14)){
+      G.escapesLeft--;
+      G.grabbed = 0; G.grabCool = 3.0;
+      if(G.grabBy === "hollow"){
+        h.stun = 1.5; h.state = "search"; h.stateT = 0; h.searchT = 6;
+        h.memX = p.x; h.memY = p.y;
+      } else if(G.grabBy === "climber" && G.climber){
+        // you do not hurt it. you only buy distance.
+        const c = G.climber;
+        const a2 = Math.atan2(c.y - p.y, c.x - p.x);
+        for(let s=5.0; s>=1.0; s-=0.5){
+          const nx = c.x + Math.cos(a2)*TILE*s, ny = c.y + Math.sin(a2)*TILE*s;
+          if(!collides(nx,ny,c.r) && !isPit(Math.floor(nx/TILE), Math.floor(ny/TILE))){ c.x=nx; c.y=ny; break; }
+        }
+        c.unseen = 0; c.seenT = 0;
+      } else if(G.pit){
+        for(const t of G.pit.tendrils){ t.state = "recoil"; t.t = 0; t.cool = 5 + rng()*5; }
+        G.pit.awake = Math.min(1, G.pit.awake + 0.4);
+      }
+      // shove apart — for the pit, shove strictly outward, and onto real floor
+      const a = Math.atan2(p.y-G.grabY, p.x-G.grabX);
+      for(let step=2.6; step>=0.6; step-=0.4){
+        const nx = p.x + Math.cos(a)*TILE*step, ny = p.y + Math.sin(a)*TILE*step;
+        if(!collides(nx,ny,p.r) && !isPit(Math.floor(nx/TILE), Math.floor(ny/TILE))){ p.x=nx; p.y=ny; break; }
+      }
+      p.sanity = clamp(p.sanity - (G.grabBy === "pit" ? 34 : 28), 0, 100);
+      p.stamina = 0;
+      G.flashRed = 1;
+      Audio_.stinger();
+      toast(G.grabBy === "pit" ? "YOU KICK IT LOOSE" : "YOU TEAR FREE");
+      sub(G.escapesLeft > 0 ? "You will not manage that twice."
+          : G.grabBy === "pit" ? "Your boot came away wet. It is not your blood."
+          : "There is nothing left to tear with.");
+      return;
+    }
+  }
+  if(G.grabbed <= 0){
+    if(G.grabBy === "pit") fallIntoPit();
+    else if(G.grabBy === "climber") die("climber");
+    else die("taken");
+  }
+}
+
+function fallIntoPit(){
+  if(G.mode !== "play") return;
+  G.grabbed = 0;
+  G.shake = 2.0;
+  Audio_.tone({wave:"sine", f0:300, f1:18, dur:3.4, vol:0.26, atk:0.02});
+  Audio_.burst({freq:400, q:0.4, dur:3.0, vol:0.16, rate:0.2});
+  die("pit");
+}
+
+/* --------------------------------- flow ---------------------------------- */
+function die(reason){
+  if(G.mode !== "play") return;
+  G.mode = "dying"; G.endReason = reason;
+  G.deathFace = (reason === "pit") ? 0 : 1.7;
+  G.shake = 1.8;
+  Audio_.stopDrone();
+  Audio_.scream(0);
+  setTimeout(showEndScreen, reason === "pit" ? 900 : 1650);
+}
+
+function showEndScreen(){
+  if(G.mode !== "dying") return;
+  G.mode = "dead";
+  const reason = G.endReason;
+  const flavors = {
+    taken: "It does not eat. It does not kill, exactly.\nIt simply keeps you, the way it was kept.",
+    dark:  "They found the lantern in Ward E, dry, upright, and cold.\nThey did not find you.",
+    pit:   "You fall for four seconds, which is much too long.\nThe lantern is still lit. That is the worst part.\nYou can see, now, exactly how much there is down here.",
+    climber: "It carries you back the way it came, without hurrying, because it has never once had to.\nThe lantern goes over the edge first.\nYou watch it fall, and it takes a very long time to stop being visible.",
+  };
+  const titles = {
+    taken: "THE HOLLOW FOUND YOU",
+    dark:  "THE DARK KEPT YOU",
+    pit:   "YOU DO NOT REACH THE BOTTOM",
+    climber: "IT TAKES YOU BACK DOWN",
+  };
+  $("endTitle").textContent = titles[reason] || titles.taken;
+  $("endTitle").className = "big";
+  $("endFlavor").textContent = flavors[reason] || flavors.taken;
+  $("endStats").innerHTML = statLines();
+  $("endScreen").classList.remove("hidden");
+  document.body.style.cursor = "default";
+}
+function win(){
+  G.mode = "won";
+  Audio_.stopDrone(); Audio_.win();
+  $("endTitle").textContent = "YOU REACH THE STAIRWELL";
+  $("endTitle").className = "big win";
+  $("endFlavor").textContent =
+    "Cold air. Real air.\nBehind you, every light in Marrow Hill is burning, and something is standing under all of them at once.\nYou do not look back until the sky is over you.";
+  $("endStats").innerHTML = statLines();
+  $("endScreen").classList.remove("hidden");
+  document.body.style.cursor = "default";
+}
+function statLines(){
+  const m = Math.floor(G.timeAlive/60), s = Math.floor(G.timeAlive%60);
+  return `TIME IN THE BUILDING &nbsp; ${m}:${String(s).padStart(2,"0")}<br>` +
+         `FUSES RECOVERED &nbsp; ${G.fuses} / ${G.fusesNeeded}<br>` +
+         `PAGES READ &nbsp; ${G.notesRead} / ${G.notesTotal}<br>` +
+         `CANDLES SET &nbsp; ${G.candlesLit} &nbsp;&nbsp; PUT OUT &nbsp; ${G.candlesSnuffed}<br>` +
+         `POWER &nbsp; ${G.powered ? "RESTORED" : "NEVER RESTORED"}<br>` +
+         `DIFFICULTY &nbsp; ${DIFFS[G.diff].name}<br>` +
+         `SEED &nbsp; ${G.seed}`;
+}
+
+function pause(on){
+  if(on && G.mode === "play"){
+    G.mode = "paused";
+    $("pauseInfo").innerHTML = statLines();
+    $("pauseScreen").classList.remove("hidden");
+    document.body.style.cursor = "default";
+    Audio_.setDrone(0.12);
+  } else if(!on && G.mode === "paused"){
+    G.mode = "play";
+    $("pauseScreen").classList.add("hidden");
+    document.body.style.cursor = "none";
+    Audio_.setDrone(0.5);
+  }
+}
+function openNote(i){
+  const n = NOTES[i % NOTES.length];
+  $("noteTitle").textContent = n[0];
+  $("noteBody").textContent = n[1];
+  $("noteScreen").classList.remove("hidden");
+  G.mode = "note";
+  document.body.style.cursor = "default";
+}
+function closeNote(){
+  $("noteScreen").classList.add("hidden");
+  G.mode = "play";
+  document.body.style.cursor = "none";
+}
+
+function startGame(){
+  G.seed = (Math.random()*0x7fffffff)|0;
+  G.mode = "play";
+  G.fuses = 0; G.powered = false; G.genDone = false;
+  G.timeAlive = 0; G.notesRead = 0; G.showMap = false;
+  G.shake = 0; G.flashRed = 0; G.grabbed = 0; G.grabCool = 0;
+  G.escapesLeft = DIFFS[G.diff].escapes;
+  G.whisperTimer = 6; G.ambientEvent = 8;
+  G.silence = 0; G.darkT = 0; G.subliminal = 0; G.deathFace = 0;
+  G.hudLie = null; G.hudLieT = 12; G.mirrorT = 0; G.lastPlayerMoving = false;
+  G.candlesLit = 0; G.candlesSnuffed = 0;
+  G.playerField = null; G.playerFieldT = 0;
+  generate(G.seed);
+  setAITarget(G.hollow.target[0], G.hollow.target[1]);
+  G.camX = G.player.x; G.camY = G.player.y;
+  ["titleScreen","helpScreen","pauseScreen","endScreen","noteScreen"].forEach(id=>$(id).classList.add("hidden"));
+  document.body.style.cursor = "none";
+  Audio_.init(); Audio_.startDrone(); Audio_.setDrone(0.5);
+  toast("MARROW HILL SANATORIUM");
+  setTimeout(()=>{ if(G.mode==="play") sub("Five fuses. Then the generator. Then the stairwell."); }, 2600);
+}
+
+/* --------------------------------- render -------------------------------- */
+function render(){
+  const p = G.player;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,VW,VH);
+  ctx.fillStyle = "#000"; ctx.fillRect(0,0,VW,VH);
+  if(!p) return;
+
+  const ox = G.camX - VW/2 + G.shakeX, oy = G.camY - VH/2 + G.shakeY;
+
+  /* ---- world layer ---- */
+  ctx.save();
+  ctx.translate(-ox, -oy);
+
+  // static map blit (only the visible slice)
+  const sx = clamp(Math.floor(ox), 0, mapCv.width), sy = clamp(Math.floor(oy), 0, mapCv.height);
+  const sw = clamp(Math.ceil(VW)+2, 0, mapCv.width - sx), sh = clamp(Math.ceil(VH)+2, 0, mapCv.height - sy);
+  if(sw > 0 && sh > 0) ctx.drawImage(mapCv, sx, sy, sw, sh, sx, sy, sw, sh);
+
+  drawDoors(ctx);
+  drawBodies(ctx);
+  drawLockers(ctx);
+  drawCandles(ctx);
+  drawItems(ctx);
+  drawGenerator(ctx);
+  drawExit(ctx);
+  drawFlares(ctx);
+  drawTendrils(ctx);
+  drawPhantoms(ctx);
+  drawHollow(ctx);
+  drawClimber(ctx);
+  drawPlayer(ctx);
+  ctx.restore();
+
+  /* ---- light layer ---- */
+  buildLight(ox, oy);
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  ctx.drawImage(lightCv, 0, 0, VW, VH);
+  ctx.restore();
+
+  /* ---- additive glows drawn on top of the darkness ---- */
+  ctx.save();
+  ctx.translate(-ox,-oy);
+  ctx.globalCompositeOperation = "lighter";
+  drawGlows(ctx);
+  ctx.restore();
+
+  /* ---- noise rings (diegetic feedback) ---- */
+  ctx.save();
+  ctx.translate(-ox,-oy);
+  for(const n of G.noiseRings){
+    const a = n.life * 0.10 * (n.max/(TILE*10));
+    if(a <= 0.004) continue;
+    ctx.strokeStyle = `rgba(190,205,225,${clamp(a,0,0.22)})`;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, TAU); ctx.stroke();
+  }
+  ctx.restore();
+
+  postFX();
+  if(G.showMap) drawMinimap();
+  drawHUD();
+
+  // one frame of something you will spend the next minute doubting
+  if(G.subliminal > 0) drawFace(0.94, 0.44);
+  if(G.deathFace > 0){
+    G.deathFace -= G.dt;
+    drawFace(clamp(G.deathFace/0.4, 0, 1), lerp(0.34, 0.95, 1 - clamp(G.deathFace/1.6, 0, 1)));
+  }
+}
+
+function drawFace(a, scale){
+  const cx = VW/2, cy = VH*0.47;
+  const R = Math.min(VW,VH) * (scale || 0.42);
+  ctx.save();
+  ctx.globalAlpha = clamp(a, 0, 1);
+  ctx.fillStyle = "#08080b"; ctx.fillRect(0,0,VW,VH);
+  const g = ctx.createRadialGradient(cx, cy - R*0.1, R*0.12, cx, cy, R*1.05);
+  g.addColorStop(0, "#d2c9b3"); g.addColorStop(0.55, "#7a7263");
+  g.addColorStop(0.85, "#26241f"); g.addColorStop(1, "#08080b");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(cx, cy, R*0.60, R, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.ellipse(cx - R*0.25, cy - R*0.20, R*0.145, R*0.215, 0.18, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + R*0.25, cy - R*0.20, R*0.145, R*0.215, -0.18, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx, cy + R*0.46, R*0.16, R*0.31, 0, 0, TAU); ctx.fill();
+  // it is not quite symmetrical, and you cannot say why that is worse
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.beginPath(); ctx.ellipse(cx + R*0.05, cy + R*0.12, R*0.06, R*0.10, 0.4, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+/* ------ world entity drawing ------ */
+function drawDoors(c){
+  for(const d of G.doors){
+    const x = d.x*TILE, y = d.y*TILE;
+    const sw = d.open ? 1 : 0;
+    c.save();
+    c.translate(x + TILE/2, y + TILE/2);
+    if(d.horiz) c.rotate(Math.PI/2);
+    const openness = d.broken ? 1 : (d.open ? 1 : 0);
+    if(d.broken){
+      c.fillStyle = "#2a2018";
+      c.fillRect(-TILE/2, -5, TILE*0.28, 10);
+      c.fillRect(TILE*0.22, -5, TILE*0.28, 10);
+      // splinters
+      c.strokeStyle="#4a3a28"; c.lineWidth=1;
+      c.beginPath(); c.moveTo(-TILE*0.22,-4); c.lineTo(-TILE*0.06,2); c.lineTo(-TILE*0.20,4); c.stroke();
+    } else if(d.open){
+      c.save(); c.translate(-TILE/2, 0); c.rotate(-1.15);
+      c.fillStyle = "#3a2d20"; c.fillRect(0,-4, TILE*0.94, 8);
+      c.fillStyle = "#4a3a2a"; c.fillRect(0,-4, TILE*0.94, 3);
+      c.strokeStyle="#1a1410"; c.lineWidth=1; c.strokeRect(0,-4,TILE*0.94,8);
+      c.restore();
+    } else {
+      c.fillStyle = "#3c2f22"; c.fillRect(-TILE/2, -5, TILE, 10);
+      c.fillStyle = "#4d3d2c"; c.fillRect(-TILE/2, -5, TILE, 3.5);
+      c.fillStyle = "#241b13"; c.fillRect(-TILE*0.42, -3, TILE*0.84, 5);
+      c.fillStyle = "#8a7a55"; c.fillRect(TILE*0.24, -1.5, 3, 3);
+      c.strokeStyle="#14100c"; c.lineWidth=1; c.strokeRect(-TILE/2,-5,TILE,10);
+    }
+    c.restore();
+  }
+}
+
+function drawLockers(c){
+  for(const L of G.lockers){
+    const x = L.x*TILE, y = L.y*TILE;
+    c.save(); c.translate(x,y);
+    c.fillStyle = "#2a2f31"; c.fillRect(3, 2, TILE-6, TILE-4);
+    c.fillStyle = "#343a3c"; c.fillRect(3, 2, TILE-6, 5);
+    c.fillStyle = "#20262a"; c.fillRect(5, 8, (TILE-10)/2 - 1, TILE-12);
+    c.fillStyle = "#1c2226"; c.fillRect(5 + (TILE-10)/2 + 1, 8, (TILE-10)/2 - 1, TILE-12);
+    c.fillStyle = "#5c6265"; c.fillRect(TILE/2 - 3, TILE*0.5, 2, 6); c.fillRect(TILE/2 + 1, TILE*0.5, 2, 6);
+    if(L.rust > 0.5){ c.fillStyle = `rgba(90,50,25,${(L.rust-0.5)*0.5})`;
+      c.fillRect(4, TILE*0.6, TILE-8, TILE*0.3); }
+    c.strokeStyle = "#101416"; c.lineWidth = 1; c.strokeRect(3,2,TILE-6,TILE-4);
+    c.restore();
+  }
+}
+
+function drawItems(c){
+  const t = G.t;
+  for(const it of G.items){
+    if(it.taken) continue;
+    const bob = Math.sin(t*1.7 + it.bob)*1.4;
+    c.save(); c.translate(it.x, it.y + bob);
+    if(it.type === "oil"){
+      c.fillStyle="#4a3b1c"; c.fillRect(-5,-7,10,14);
+      c.fillStyle="#6b5526"; c.fillRect(-5,-7,10,3);
+      c.fillStyle="#2b2210"; c.fillRect(-3,-2,6,5);
+      c.fillStyle="#b08b3a"; c.fillRect(-1.5,-10,3,3);
+    } else if(it.type === "flare"){
+      c.fillStyle="#7a2620"; c.fillRect(-2.5,-8,5,16);
+      c.fillStyle="#c0503a"; c.fillRect(-2.5,-8,5,4);
+      c.fillStyle="#d8d0b0"; c.fillRect(-2.5,4,5,3);
+    } else if(it.type === "fuse"){
+      c.fillStyle="#8a7a54"; c.fillRect(-6,-4,12,8);
+      c.fillStyle="#c9b47a"; c.fillRect(-6,-4,12,2.5);
+      c.fillStyle="#3a2f1a"; c.fillRect(-2,-4,4,8);
+      c.fillStyle="#d8c98e"; c.fillRect(-7,-2,2,4); c.fillRect(5,-2,2,4);
+    } else if(it.type === "sedative"){
+      c.fillStyle="#6a6a72"; c.fillRect(-4,-6,8,12);
+      c.fillStyle="#9aa0aa"; c.fillRect(-4,-6,8,3);
+      c.fillStyle="#39424c"; c.fillRect(-2.5,-1,5,5);
+    } else if(it.type === "note"){
+      c.rotate(Math.sin(it.bob)*0.3);
+      c.fillStyle="#b8ae94"; c.fillRect(-6,-8,12,16);
+      c.fillStyle="#8a8068"; c.fillRect(-6,-8,12,1.5);
+      c.strokeStyle="#6e6550"; c.lineWidth=0.7;
+      for(let k=0;k<4;k++){ c.beginPath(); c.moveTo(-4,-4+k*3.4); c.lineTo(4,-4+k*3.4); c.stroke(); }
+    }
+    c.restore();
+  }
+}
+
+// bodies are drawn live, not baked into the map, because they change once you
+// have taken what you came for
+function drawBodies(c){
+  for(const co of G.corpses){
+    if(!co.body) continue;
+    c.save();
+    c.translate(co.px, co.py); c.rotate(co.a);
+    if(co.rendered){
+      // a sheet, and less under it than there was
+      c.fillStyle="#3a382f"; c.fillRect(-11,-6,22,12);
+      c.fillStyle="#2a2822"; c.fillRect(-11,-6,22,3);
+      c.strokeStyle="#15140f"; c.lineWidth=1; c.strokeRect(-11,-6,22,12);
+      c.fillStyle="rgba(70,52,26,0.55)";
+      c.beginPath(); c.ellipse(4,5,7,3,0,0,TAU); c.fill();
+    } else {
+      c.fillStyle="#4a4438"; c.fillRect(-12,-5,24,10);      // torso under cloth
+      c.fillStyle="#5a5244"; c.fillRect(-12,-5,24,3);
+      c.fillStyle="#6a6252"; c.beginPath(); c.arc(-13,0,4.2,0,TAU); c.fill();  // head
+      c.fillStyle="#3a352c"; c.fillRect(8,-4,7,3); c.fillRect(8,1,7,3);        // feet
+      c.strokeStyle="#1a1814"; c.lineWidth=1; c.strokeRect(-12,-5,24,10);
+    }
+    c.restore();
+  }
+}
+
+function drawCandles(c){
+  for(const cd of G.candles){
+    c.save(); c.translate(cd.x, cd.y);
+    const h = 4 + 5*clamp(cd.wax/CANDLE_WAX, 0, 1);
+    // puddle + stub
+    c.fillStyle="rgba(200,186,150,0.16)";
+    c.beginPath(); c.ellipse(0,1,5.5,2.4,0,0,TAU); c.fill();
+    c.fillStyle = cd.lit ? "#d8cba4" : "#8a8470";
+    c.fillRect(-2, -h, 4, h+1);
+    c.fillStyle = cd.lit ? "#efe4c0" : "#9a947e";
+    c.fillRect(-2, -h, 4, 1.5);
+    if(cd.lit){
+      const fl = 0.75 + Math.sin(G.t*9 + cd.flick)*0.25;
+      c.fillStyle = `rgba(255,214,150,${0.85})`;
+      c.beginPath(); c.ellipse(0, -h-2.4*fl, 1.5, 3.0*fl, 0, 0, TAU); c.fill();
+      c.fillStyle = "rgba(255,246,210,0.95)";
+      c.beginPath(); c.ellipse(0, -h-1.8*fl, 0.7, 1.5*fl, 0, 0, TAU); c.fill();
+    } else {
+      // a thread of smoke, for a little while after
+      const age = G.t - cd.changedT;
+      if(age < 3.5){
+        const a = (1 - age/3.5)*0.30;
+        c.strokeStyle = `rgba(170,170,178,${a})`;
+        c.lineWidth = 1;
+        c.beginPath(); c.moveTo(0,-h);
+        for(let k=1;k<=4;k++)
+          c.lineTo(Math.sin(G.t*2.2 + k*0.9 + cd.flick)*k*0.9, -h - k*3.2);
+        c.stroke();
+      }
+    }
+    c.restore();
+  }
+}
+
+function drawGenerator(c){
+  const g = G.generator;
+  c.save(); c.translate(g.x, g.y);
+  c.fillStyle = G.powered ? "#3a4238" : "#33352f";
+  c.fillRect(-20,-16,40,32);
+  c.fillStyle = "#22241f"; c.fillRect(-16,-12,32,24);
+  c.fillStyle = "#4a4c44"; c.fillRect(-20,-16,40,5);
+  // fuse sockets
+  for(let i=0;i<5;i++){
+    const fx = -14 + i*7, fy = -6;
+    const filled = G.powered || i < G.fuses;
+    c.fillStyle = filled ? "#c9a24a" : "#15170f";
+    c.fillRect(fx, fy, 5, 9);
+    c.strokeStyle="#0c0d0a"; c.lineWidth=1; c.strokeRect(fx,fy,5,9);
+  }
+  c.fillStyle = G.powered ? "#5ad07a" : "#8a2a22";
+  c.fillRect(-4, 6, 8, 5);
+  c.strokeStyle="#0c0d0a"; c.lineWidth=1.5; c.strokeRect(-20,-16,40,32);
+  c.restore();
+}
+
+function drawExit(c){
+  const e = G.exit;
+  c.save(); c.translate(e.px, e.py);
+  if(!G.powered){
+    // closed shutter
+    c.fillStyle="#2a2c30"; c.fillRect(-26,-26,52,52);
+    for(let i=0;i<7;i++){ c.fillStyle = i%2 ? "#33363b":"#292c30"; c.fillRect(-26,-26+i*7.4,52,7); }
+    c.fillStyle="#8a2a22"; c.fillRect(-6,-3,12,6);
+    c.strokeStyle="#14161a"; c.lineWidth=2; c.strokeRect(-26,-26,52,52);
+  } else {
+    c.fillStyle="#1a1c20"; c.fillRect(-26,-26,52,52);
+    c.fillStyle="#2a2c30"; c.fillRect(-26,-30,52,7);
+    for(let i=0;i<5;i++){ c.fillStyle=`rgb(${30+i*8},${30+i*8},${34+i*8})`;
+      c.fillRect(-22, -20+i*9, 44, 8); }
+    c.fillStyle="#5ad07a"; c.fillRect(-6,-30,12,4);
+  }
+  c.restore();
+}
+
+function drawFlares(c){
+  for(const f of G.flares){
+    const t = G.t*20 + f.flick;
+    c.save(); c.translate(f.x, f.y);
+    c.fillStyle="#5a1e18"; c.fillRect(-2.5,-1.5,5,3);
+    c.restore();
+  }
+}
+
+function drawPhantoms(c){
+  for(const ph of G.phantoms){
+    c.save();
+    c.globalAlpha = clamp(ph.life,0,1) * 0.55;
+    c.translate(ph.x, ph.y);
+    drawFigure(c, ph.anim, 0.9, "#0a0a0c", "#242430");
+    c.restore();
+  }
+}
+
+function drawFigure(c, anim, scale, bodyCol, headCol){
+  c.save(); c.scale(scale, scale);
+  const sway = Math.sin(anim*4.5)*2.2;
+  // long limbs
+  c.strokeStyle = bodyCol; c.lineWidth = 4; c.lineCap="round";
+  c.beginPath();
+  c.moveTo(-3, 4); c.lineTo(-6 + sway*0.6, 15);
+  c.moveTo(3, 4);  c.lineTo(6 - sway*0.6, 15);
+  c.stroke();
+  c.lineWidth = 3.2;
+  c.beginPath();
+  c.moveTo(-6, -4); c.lineTo(-12 - sway, 9);
+  c.moveTo(6, -4);  c.lineTo(12 + sway, 9);
+  c.stroke();
+  // torso
+  c.fillStyle = bodyCol;
+  c.beginPath();
+  c.moveTo(-7,-9); c.quadraticCurveTo(0,-14, 7,-9);
+  c.lineTo(5, 6); c.quadraticCurveTo(0, 9, -5, 6);
+  c.closePath(); c.fill();
+  // head — long, pale, tilted
+  c.save();
+  c.translate(0, -13); c.rotate(Math.sin(anim*1.7)*0.14);
+  c.fillStyle = headCol;
+  c.beginPath(); c.ellipse(0, 0, 4.4, 6.2, 0, 0, TAU); c.fill();
+  c.restore();
+  c.restore();
+}
+
+function drawHollow(c){
+  const h = G.hollow, p = G.player;
+  const d = dist(h.x,h.y,p.x,p.y);
+  c.save();
+  c.translate(h.x, h.y);
+  c.rotate(h.ang + Math.PI/2);
+  const jitter = h.state === "hunt" ? 1.4 : 0.5;
+  c.translate(Math.sin(G.t*40)*jitter*0.4, Math.cos(G.t*33)*jitter*0.4);
+  // ground shadow
+  c.globalAlpha = 0.55;
+  c.fillStyle = "#000";
+  c.beginPath(); c.ellipse(0, 8, 13, 6, 0, 0, TAU); c.fill();
+  c.globalAlpha = 1;
+  drawFigure(c, h.anim * (h.state==="hunt"?1.9:1), 1.25, "#0b0b10", "#b9b3a4");
+  c.restore();
+}
+
+function drawPlayer(c){
+  const p = G.player;
+  if(p.hideIn) return;
+  c.save();
+  c.translate(p.x, p.y);
+  c.globalAlpha = 0.5; c.fillStyle="#000";
+  c.beginPath(); c.ellipse(0,5,10,5,0,0,TAU); c.fill();
+  c.globalAlpha = 1;
+  c.rotate(p.aim + Math.PI/2);
+  const bob = Math.sin(p.stepPhase*TAU)*1.1 * (p.crouch?0.4:1);
+  const sc = p.crouch ? 0.82 : 1;
+  c.scale(sc, sc);
+  // coat
+  c.fillStyle = "#33302b";
+  c.beginPath();
+  c.moveTo(-7,-6); c.quadraticCurveTo(0,-10, 7,-6);
+  c.lineTo(6, 8 + bob); c.quadraticCurveTo(0, 11+bob, -6, 8+bob);
+  c.closePath(); c.fill();
+  c.fillStyle = "#3f3b34";
+  c.beginPath(); c.moveTo(-7,-6); c.quadraticCurveTo(0,-10,7,-6); c.lineTo(5,-1); c.lineTo(-5,-1); c.closePath(); c.fill();
+  // head
+  c.fillStyle = "#8a7f6c";
+  c.beginPath(); c.arc(0,-7,4.4,0,TAU); c.fill();
+  // lantern arm (points along aim)
+  c.strokeStyle="#2b2823"; c.lineWidth=3; c.lineCap="round";
+  c.beginPath(); c.moveTo(4,-3); c.lineTo(7,-11); c.stroke();
+  c.fillStyle = p.lamp ? "#d9a94a" : "#3a352c";
+  c.fillRect(5,-15,5,6);
+  c.strokeStyle="#1b1814"; c.lineWidth=1; c.strokeRect(5,-15,5,6);
+  c.restore();
+}
+
+function drawGlows(c){
+  const p = G.player, h = G.hollow;
+  drawPitDepths(c);
+  // flare cores
+  for(const f of G.flares){
+    const inten = clamp(f.life/2.5, 0, 1) * (0.85 + Math.sin(G.t*29+f.flick)*0.15);
+    const r = 46*inten;
+    const g = c.createRadialGradient(f.x,f.y,0, f.x,f.y,r);
+    g.addColorStop(0, `rgba(255,215,170,${0.95*inten})`);
+    g.addColorStop(0.25, `rgba(255,120,50,${0.55*inten})`);
+    g.addColorStop(1, "rgba(255,60,20,0)");
+    c.fillStyle = g; c.beginPath(); c.arc(f.x,f.y,r,0,TAU); c.fill();
+  }
+  // candle flames
+  for(const cd of G.candles){
+    if(!cd.lit) continue;
+    const fl = 0.78 + Math.sin(G.t*9 + cd.flick)*0.22;
+    const hh = 4 + 5*clamp(cd.wax/CANDLE_WAX, 0, 1);
+    const r = 13*fl;
+    const g = c.createRadialGradient(cd.x,cd.y-hh-2,0, cd.x,cd.y-hh-2,r);
+    g.addColorStop(0, `rgba(255,222,168,${0.80*fl})`);
+    g.addColorStop(0.35, `rgba(230,150,70,${0.30*fl})`);
+    g.addColorStop(1, "rgba(140,70,20,0)");
+    c.fillStyle=g; c.beginPath(); c.arc(cd.x,cd.y-hh-2,r,0,TAU); c.fill();
+  }
+  // lantern flame
+  if(p.lamp && !p.hideIn){
+    const fl = 0.8 + Math.sin(G.t*17)*0.12 + Math.sin(G.t*41)*0.06;
+    const lx = p.x + Math.cos(p.aim)*9, ly = p.y + Math.sin(p.aim)*9;
+    const r = (p.focus?26:18)*fl;
+    const g = c.createRadialGradient(lx,ly,0, lx,ly,r);
+    g.addColorStop(0, "rgba(255,225,170,0.85)");
+    g.addColorStop(0.4, "rgba(255,160,70,0.35)");
+    g.addColorStop(1, "rgba(255,120,40,0)");
+    c.fillStyle=g; c.beginPath(); c.arc(lx,ly,r,0,TAU); c.fill();
+  }
+  // powered ceiling lamps
+  for(const l of G.lights){
+    if(l.broken) continue;
+    const on = G.powered || l.kind === "emergency";
+    if(!on) continue;
+    const fl = 0.85 + Math.sin(G.t*(G.powered?9:3.1) + l.flick)*0.15;
+    const r = 16*fl;
+    const g = c.createRadialGradient(l.x,l.y,0, l.x,l.y,r);
+    if(G.powered){ g.addColorStop(0,"rgba(230,240,255,0.7)"); g.addColorStop(1,"rgba(180,210,255,0)"); }
+    else { g.addColorStop(0,"rgba(255,90,70,0.55)"); g.addColorStop(1,"rgba(255,40,30,0)"); }
+    c.fillStyle=g; c.beginPath(); c.arc(l.x,l.y,r,0,TAU); c.fill();
+  }
+  // the eyes — visible even in total darkness
+  const d = dist(h.x,h.y,p.x,p.y)/TILE;
+  if(d < 20 && hasLOS(h.x,h.y,p.x,p.y)){
+    const k = clamp(1 - d/20, 0, 1);
+    const hunting = h.state === "hunt";
+    const flick = 0.75 + Math.sin(G.t*11)*0.25;
+    const a = k * (hunting ? 0.95 : 0.42) * flick;
+    const ea = h.ang;
+    for(let s=-1;s<=1;s+=2){
+      const ex = h.x + Math.cos(ea)*3 - Math.sin(ea)*s*3.1;
+      const ey = h.y + Math.sin(ea)*3 + Math.cos(ea)*s*3.1;
+      const g = c.createRadialGradient(ex,ey,0, ex,ey,9);
+      g.addColorStop(0, hunting ? `rgba(255,120,90,${a})` : `rgba(210,200,190,${a*0.8})`);
+      g.addColorStop(1, "rgba(255,60,40,0)");
+      c.fillStyle=g; c.beginPath(); c.arc(ex,ey,9,0,TAU); c.fill();
+    }
+  }
+  // a wet glint on a limb that is already moving toward you — your only warning
+  if(G.pit){
+    for(const t of G.pit.tendrils){
+      if(t.state !== "strike" || t.len < 0.4) continue;
+      const tx = t.bx + Math.cos(t.aim)*t.len*TILE;
+      const ty = t.by + Math.sin(t.aim)*t.len*TILE;
+      const dd = dist(tx,ty,p.x,p.y)/TILE;
+      if(dd > 5) continue;
+      const a = clamp(1 - dd/5, 0, 1) * 0.30;
+      const g = c.createRadialGradient(tx,ty,0, tx,ty,11);
+      g.addColorStop(0, `rgba(180,170,185,${a})`);
+      g.addColorStop(1, "rgba(120,110,130,0)");
+      c.fillStyle = g; c.beginPath(); c.arc(tx,ty,11,0,TAU); c.fill();
+    }
+  }
+
+  // interaction prompt highlight
+  const n = nearestInteractable();
+  if(n && !G.player.hideIn){
+    let tx, ty;
+    if(n.kind === "item"){ tx=n.ref.x; ty=n.ref.y; }
+    else if(n.kind === "door"){ tx=(n.ref.x+0.5)*TILE; ty=(n.ref.y+0.5)*TILE; }
+    else if(n.kind === "locker"){ tx=(n.ref.x+0.5)*TILE; ty=(n.ref.y+0.5)*TILE; }
+    else if(n.kind === "generator"){ tx=n.ref.x; ty=n.ref.y; }
+    else { tx=n.ref.px; ty=n.ref.py; }
+    const a = 0.18 + Math.sin(G.t*6)*0.06;
+    c.strokeStyle = `rgba(230,200,140,${a})`;
+    c.lineWidth = 1.5;
+    c.beginPath(); c.arc(tx, ty, 17, 0, TAU); c.stroke();
+  }
+}
+
+/* -------------------------------- lighting -------------------------------- */
+function buildLight(ox, oy){
+  const c = lctx, S = LIGHT_SCALE;
+  const W = lightCv.width, H = lightCv.height;
+  c.setTransform(1,0,0,1,0,0);
+  c.globalCompositeOperation = "source-over";
+
+  // base darkness (never pure black — a hair of moonlight)
+  c.fillStyle = "#050508";
+  c.fillRect(0,0,W,H);
+
+  // remembered geometry — barely there. you do not get to keep the map.
+  c.fillStyle = "rgba(26,32,48,0.07)";
+  const tx0 = Math.max(0, Math.floor(ox/TILE)), tx1 = Math.min(GW-1, Math.ceil((ox+VW)/TILE));
+  const ty0 = Math.max(0, Math.floor(oy/TILE)), ty1 = Math.min(GH-1, Math.ceil((oy+VH)/TILE));
+  for(let y=ty0;y<=ty1;y++) for(let x=tx0;x<=tx1;x++){
+    if(!G.seen[idx(x,y)]) continue;
+    c.fillRect((x*TILE-ox)*S, (y*TILE-oy)*S, TILE*S+1, TILE*S+1);
+  }
+
+  c.globalCompositeOperation = "lighter";
+
+  // static lamps in view
+  let budget = 6;
+  for(const l of G.lights){
+    if(l.broken || budget <= 0) continue;
+    const on = G.powered || l.kind === "emergency";
+    if(!on) continue;
+    const R = (G.powered ? l.r*1.35 : l.r);
+    if(l.x + R*TILE < ox || l.x - R*TILE > ox+VW || l.y + R*TILE < oy || l.y - R*TILE > oy+VH) continue;
+    budget--;
+    const flick = G.powered
+      ? 0.92 + Math.sin(G.t*7.3 + l.flick)*0.06 + (Math.sin(G.t*53+l.flick)>0.985 ? -0.5 : 0)
+      : 0.62 + Math.sin(G.t*2.1 + l.flick)*0.16 + (Math.sin(G.t*31+l.flick)>0.96 ? -0.35 : 0);
+    const poly = visPoly(l.x, l.y, R);
+    c.save();
+    pathPoly(c, poly, ox, oy, S);
+    c.clip();
+    const px = (l.x-ox)*S, py = (l.y-oy)*S, pr = R*TILE*S;
+    const g = c.createRadialGradient(px,py,0, px,py,pr);
+    if(G.powered){
+      g.addColorStop(0, `rgba(196,214,238,${0.98*flick})`);
+      g.addColorStop(0.45, `rgba(120,140,170,${0.44*flick})`);
+      g.addColorStop(1, "rgba(20,26,40,0)");
+    } else {
+      g.addColorStop(0, `rgba(170,58,44,${0.92*flick})`);
+      g.addColorStop(0.4, `rgba(96,26,22,${0.42*flick})`);
+      g.addColorStop(1, "rgba(20,6,6,0)");
+    }
+    c.fillStyle = g;
+    c.fillRect(px-pr, py-pr, pr*2, pr*2);
+    c.restore();
+  }
+
+  // candles — small, warm, and completely at the mercy of anything that walks past
+  let cbudget = 6;
+  for(const cd of G.candles){
+    if(!cd.lit || cbudget <= 0) continue;
+    const R = CANDLE_R * (0.75 + 0.25*clamp(cd.wax/40,0,1));
+    if(cd.x + R*TILE < ox || cd.x - R*TILE > ox+VW || cd.y + R*TILE < oy || cd.y - R*TILE > oy+VH) continue;
+    cbudget--;
+    const fl = 0.80 + Math.sin(G.t*5.3 + cd.flick)*0.13 + Math.sin(G.t*17.1 + cd.flick)*0.07;
+    const poly = visPoly(cd.x, cd.y, R);
+    c.save(); pathPoly(c, poly, ox, oy, S); c.clip();
+    const px=(cd.x-ox)*S, py=(cd.y-oy)*S, pr=R*TILE*S;
+    const g = c.createRadialGradient(px,py,0, px,py,pr);
+    g.addColorStop(0,    `rgba(255,206,142,${0.86*fl})`);
+    g.addColorStop(0.30, `rgba(186,124,62,${0.40*fl})`);
+    g.addColorStop(1,    "rgba(24,14,8,0)");
+    c.fillStyle=g; c.fillRect(px-pr,py-pr,pr*2,pr*2);
+    c.restore();
+  }
+
+  // flares
+  for(const f of G.flares){
+    if(f.x + 8*TILE < ox || f.x - 8*TILE > ox+VW || f.y + 8*TILE < oy || f.y - 8*TILE > oy+VH) continue;
+    const inten = clamp(f.life/2.5, 0, 1) * (0.86 + Math.sin(G.t*23+f.flick)*0.14);
+    const R = 7.2;
+    const poly = visPoly(f.x, f.y, R);
+    c.save(); pathPoly(c, poly, ox, oy, S); c.clip();
+    const px=(f.x-ox)*S, py=(f.y-oy)*S, pr=R*TILE*S;
+    const g = c.createRadialGradient(px,py,0, px,py,pr);
+    g.addColorStop(0, `rgba(255,190,130,${1.0*inten})`);
+    g.addColorStop(0.35, `rgba(220,96,44,${0.55*inten})`);
+    g.addColorStop(1, "rgba(60,14,4,0)");
+    c.fillStyle=g; c.fillRect(px-pr,py-pr,pr*2,pr*2);
+    c.restore();
+  }
+
+  // the lantern
+  const p = G.player;
+  if(p.lamp && !p.hideIn){
+    const focus = p.focus;
+    const beamR = focus ? BEAM_FOCUS_R : BEAM_R;
+    const arc   = beamArc();
+    let flick = 0.90 + Math.sin(G.t*13.7)*0.06 + Math.sin(G.t*31.1)*0.04;
+    let lowOil = p.oil < 18 ? (0.55 + 0.45*Math.abs(Math.sin(G.t*6))) : 1;
+    // the flame is dying — a stutter of almost nothing
+    if(p.lampFail > 0){
+      const s = Math.sin(G.t*47) * Math.sin(G.t*19.3);
+      lowOil *= clamp(0.05 + 0.22*Math.max(0, s), 0.03, 0.30);
+      flick *= 0.8;
+    }
+    const poly = visPoly(p.x, p.y, Math.max(beamR, LANTERN_R));
+    c.save();
+    pathPoly(c, poly, ox, oy, S);
+    c.clip();
+    const px=(p.x-ox)*S, py=(p.y-oy)*S;
+
+    // ambient bubble
+    const ar = LANTERN_R*TILE*S;
+    const ga = c.createRadialGradient(px,py,0, px,py,ar);
+    const amp = flick*lowOil;
+    ga.addColorStop(0, `rgba(255,214,158,${0.92*amp})`);
+    ga.addColorStop(0.32, `rgba(190,140,86,${0.46*amp})`);
+    ga.addColorStop(1, "rgba(30,20,12,0)");
+    c.fillStyle = ga; c.fillRect(px-ar,py-ar,ar*2,ar*2);
+
+    // directional beam — layered wedges for soft edges
+    const br = beamR*TILE*S;
+    for(let k=0;k<3;k++){
+      const kk = k/2;
+      const wide = arc * (1 + kk*1.5);
+      const alpha = (focus ? 0.80 : 0.62) * (1-kk*0.62) * amp;
+      const gb = c.createRadialGradient(px,py,ar*0.25, px,py,br);
+      gb.addColorStop(0, `rgba(255,228,180,${alpha})`);
+      gb.addColorStop(0.5, `rgba(210,166,108,${alpha*0.5})`);
+      gb.addColorStop(1, "rgba(40,28,16,0)");
+      c.fillStyle = gb;
+      c.beginPath();
+      c.moveTo(px,py);
+      c.arc(px,py,br, p.aim - wide, p.aim + wide);
+      c.closePath();
+      c.fill();
+    }
+    c.restore();
+  } else if(p.hideIn){
+    // slit of light through the locker vents
+    const px=(p.x-ox)*S, py=(p.y-oy)*S, pr=TILE*1.6*S;
+    const g = c.createRadialGradient(px,py,0,px,py,pr);
+    g.addColorStop(0,"rgba(60,64,74,0.55)"); g.addColorStop(1,"rgba(0,0,0,0)");
+    c.fillStyle=g; c.fillRect(px-pr,py-pr,pr*2,pr*2);
+  }
+
+  /* --- things that take light away ------------------------------------- */
+  c.globalCompositeOperation = "multiply";
+
+  // the pit swallows every lumen you point into it
+  if(G.pit){
+    const P = G.pit;
+    const px = (P.cx-ox)*S, py = (P.cy-oy)*S;
+    const rx = P.rx*S, ry = P.ry*S;
+    if(px + rx > 0 && px - rx < W && py + ry > 0 && py - ry < H){
+      c.save();
+      c.translate(px, py); c.scale(rx, ry);
+      const g = c.createRadialGradient(0,0,0, 0,0,1);
+      g.addColorStop(0,    "rgb(0,0,0)");
+      g.addColorStop(0.72, "rgb(0,0,0)");
+      g.addColorStop(0.94, "rgb(150,150,158)");
+      g.addColorStop(1,    "rgb(255,255,255)");
+      c.fillStyle = g;
+      c.beginPath(); c.arc(0,0,1,0,TAU); c.fill();
+      c.restore();
+    }
+  }
+
+  // the Hollow drinks it too — you are never allowed a clear look
+  {
+    const h = G.hollow;
+    const px = (h.x-ox)*S, py = (h.y-oy)*S, pr = TILE*1.15*S;
+    if(px+pr > 0 && px-pr < W && py+pr > 0 && py-pr < H){
+      const g = c.createRadialGradient(px,py,0, px,py,pr);
+      g.addColorStop(0,    "rgb(6,6,9)");
+      g.addColorStop(0.55, "rgb(70,68,78)");
+      g.addColorStop(1,    "rgb(255,255,255)");
+      c.fillStyle = g;
+      c.beginPath(); c.arc(px,py,pr,0,TAU); c.fill();
+    }
+  }
+
+  c.globalCompositeOperation = "source-over";
+}
+
+/* ------------------------------- post effects ----------------------------- */
+function postFX(){
+  const p = G.player;
+  const san = p.sanity/100;
+  const madness = 1 - san;
+
+  // vignette
+  const vg = ctx.createRadialGradient(VW/2,VH/2, Math.min(VW,VH)*0.24, VW/2,VH/2, Math.max(VW,VH)*0.72);
+  vg.addColorStop(0,"rgba(0,0,0,0)");
+  vg.addColorStop(1, `rgba(0,0,0,${0.62 + madness*0.28})`);
+  ctx.fillStyle = vg; ctx.fillRect(0,0,VW,VH);
+
+  // madness tint & pulse
+  if(madness > 0.3){
+    const pulse = (Math.sin(G.t*2.4)*0.5+0.5) * (madness-0.3)/0.7;
+    ctx.fillStyle = `rgba(60,10,18,${pulse*0.16})`;
+    ctx.fillRect(0,0,VW,VH);
+  }
+
+  // hurt / grab flash
+  if(G.flashRed > 0){
+    ctx.fillStyle = `rgba(120,10,8,${G.flashRed*0.42})`;
+    ctx.fillRect(0,0,VW,VH);
+  }
+
+  // film grain
+  if(grainCvs.length){
+    const gc = grainCvs[(G.frame>>1) % grainCvs.length];
+    ctx.save();
+    ctx.globalCompositeOperation = "overlay";
+    ctx.globalAlpha = 0.055 + madness*0.10;
+    const s = 128;
+    for(let y=0;y<VH;y+=s) for(let x=0;x<VW;x+=s) ctx.drawImage(gc, x, y);
+    ctx.restore();
+  }
+
+  // hunted edge glow
+  if(G.hollow.state === "hunt"){
+    const d = dist(G.hollow.x,G.hollow.y,p.x,p.y)/TILE;
+    const k = clamp(1 - d/16, 0, 1);
+    if(k > 0.01){
+      const g = ctx.createRadialGradient(VW/2,VH/2, Math.min(VW,VH)*0.3, VW/2,VH/2, Math.max(VW,VH)*0.7);
+      g.addColorStop(0,"rgba(0,0,0,0)");
+      g.addColorStop(1, `rgba(110,12,8,${0.30*k*(0.75+Math.sin(G.t*5)*0.25)})`);
+      ctx.fillStyle=g; ctx.fillRect(0,0,VW,VH);
+    }
+  }
+
+  // --- the dark closing in ---
+  if(G.darkT > 3){
+    const k = clamp((G.darkT - 3)/19, 0, 1);
+    const inner = Math.min(VW,VH) * lerp(0.30, 0.012, k);
+    const vg2 = ctx.createRadialGradient(VW/2,VH/2, inner, VW/2,VH/2, Math.min(VW,VH)*lerp(0.75,0.16,k));
+    vg2.addColorStop(0,"rgba(0,0,0,0)");
+    vg2.addColorStop(1,`rgba(0,0,0,${0.55 + k*0.45})`);
+    ctx.fillStyle = vg2; ctx.fillRect(0,0,VW,VH);
+    if(k > 0.45){
+      ctx.textAlign = "center";
+      ctx.font = "11px 'Courier New', monospace";
+      ctx.fillStyle = `rgba(120,110,100,${(k-0.45)*0.9})`;
+      ctx.fillText("FIND  LIGHT", VW/2, VH*0.62);
+    }
+  }
+
+  // --- inside the locker: two inches of the world through a vent ---
+  if(p.hideIn){
+    const slit = VH*0.13;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, VW, VH/2 - slit/2);
+    ctx.fillRect(0, VH/2 + slit/2, VW, VH);
+    const fade = ctx.createLinearGradient(0, VH/2 - slit/2, 0, VH/2 + slit/2);
+    fade.addColorStop(0, "rgba(0,0,0,0.92)");
+    fade.addColorStop(0.28, "rgba(0,0,0,0.10)");
+    fade.addColorStop(0.72, "rgba(0,0,0,0.10)");
+    fade.addColorStop(1, "rgba(0,0,0,0.92)");
+    ctx.fillStyle = fade; ctx.fillRect(0, VH/2 - slit/2, VW, slit);
+    // vent bars
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    for(let y = VH/2 - slit/2; y < VH/2 + slit/2; y += 7) ctx.fillRect(0, y, VW, 2.5);
+    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillRect(0, 0, VW*0.24, VH); ctx.fillRect(VW*0.76, 0, VW*0.24, VH);
+    // chest tightening
+    if(p.holding){
+      const k = 1 - p.breath/100;
+      const vg3 = ctx.createRadialGradient(VW/2,VH/2, Math.min(VW,VH)*lerp(0.34,0.06,k),
+                                           VW/2,VH/2, Math.min(VW,VH)*0.6);
+      vg3.addColorStop(0,"rgba(0,0,0,0)"); vg3.addColorStop(1,`rgba(10,0,0,${0.35+k*0.6})`);
+      ctx.fillStyle = vg3; ctx.fillRect(0,0,VW,VH);
+    }
+  }
+
+  // grab overlay
+  if(G.grabbed > 0){
+    ctx.fillStyle = `rgba(0,0,0,${0.30 + (1-G.grabbed/2.6)*0.5})`;
+    ctx.fillRect(0,0,VW,VH);
+    if(G.escapesLeft > 0){
+      ctx.textAlign = "center";
+      ctx.font = "bold 30px 'Courier New', monospace";
+      ctx.fillStyle = "#e8d9b0";
+      ctx.fillText("MASH  SPACE", VW/2, VH*0.44);
+      const bw = 320, bx = VW/2 - bw/2, by = VH*0.48;
+      ctx.fillStyle="rgba(0,0,0,0.7)"; ctx.fillRect(bx,by,bw,14);
+      ctx.fillStyle="#c0402c"; ctx.fillRect(bx+2,by+2, (bw-4)*clamp(G.grabMash/14,0,1), 10);
+      ctx.strokeStyle="#7a6a4a"; ctx.lineWidth=1; ctx.strokeRect(bx,by,bw,14);
+    }
+  }
+}
+
+/* ---------------------------------- HUD ----------------------------------- */
+function bar(x, y, w, h, v, col, bg, label){
+  ctx.fillStyle = bg || "rgba(0,0,0,0.55)"; ctx.fillRect(x,y,w,h);
+  ctx.fillStyle = col; ctx.fillRect(x+1, y+1, (w-2)*clamp(v,0,1), h-2);
+  ctx.strokeStyle = "rgba(150,140,115,0.35)"; ctx.lineWidth = 1;
+  ctx.strokeRect(x+0.5, y+0.5, w-1, h-1);
+  if(label){
+    ctx.font = "10px 'Courier New', monospace"; ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(190,178,150,0.8)";
+    ctx.fillText(label, x, y - 5);
+  }
+}
+
+function drawHUD(){
+  const p = G.player;
+  ctx.save();
+  ctx.textAlign = "left";
+
+  const lie = G.hudLie;
+  const shownOil = lie ? lie.oil : p.oil;
+  const shownFuses = lie ? lie.fuses : G.fuses;
+
+  const bx = 22, by = VH - 78, bw = 190;
+  // oil
+  const oilLow = shownOil < 20;
+  bar(bx, by, bw, 11, shownOil/OIL_MAX,
+      oilLow ? (Math.sin(G.t*8)>0 ? "#d8622c" : "#8a3a18") : "#c9903a", null,
+      `OIL  ${Math.round(shownOil)}%`);
+  // sanity
+  bar(bx, by+26, bw, 11, p.sanity/100,
+      p.sanity < 30 ? "#8e2b3a" : "#5e7a8a", null,
+      `NERVE  ${Math.round(p.sanity)}%`);
+
+  // breath — only matters when you are folded into a metal box
+  if(p.hideIn){
+    const brY = by - 44;
+    const crit = p.breath < 32;
+    bar(bx, brY, bw, 13, p.breath/100,
+        p.holding ? (crit ? (Math.sin(G.t*14)>0 ? "#c8402c" : "#6a1c12") : "#8a5a6a") : "#4a6a70",
+        null, p.holding ? `BREATH  ${Math.round(p.breath)}%` : "BREATHING  [HOLD SPACE]");
+  }
+  // stamina
+  bar(bx, by+52, bw, 7, p.stamina/100, "#6a7a5a", null, null);
+
+  // right column
+  ctx.textAlign = "right";
+  ctx.font = "13px 'Courier New', monospace";
+  const rx = VW - 22;
+  let ry = VH - 78;
+  ctx.fillStyle = shownFuses >= G.fusesNeeded ? "#d8c07a" : "#a89a78";
+  ctx.fillText(`FUSES   ${shownFuses} / ${G.fusesNeeded}`, rx, ry);
+  ctx.fillStyle = "#a89a78";
+  ctx.fillText(`FLARES  ${p.flares}   [Q]`, rx, ry+20);
+  ctx.fillStyle = p.candles > 0 ? "#c9b47a" : "#7a7264";
+  ctx.fillText(`CANDLES ${p.candles}   [F]`, rx, ry+40);
+  ctx.fillStyle = "#a89a78";
+  ctx.fillText(`SEDATIVE ${p.sedatives}  [R]`, rx, ry+60);
+  if(DIFFS[G.diff].escapes > 0){
+    ctx.fillStyle = G.escapesLeft > 0 ? "#8a9a7a" : "#8e2b22";
+    ctx.fillText(G.escapesLeft > 0 ? `STRENGTH TO FIGHT: ${G.escapesLeft}` : "NO STRENGTH LEFT", rx, ry+80);
+  }
+
+  // rendering progress — the longest you will ever stand still on purpose
+  if(p.rendering){
+    ctx.textAlign = "left";
+    bar(bx, by - 26, bw, 11, p.rendering.t/p.rendering.dur, "#9a7a4a", null,
+        "RENDERING TALLOW   [E] STOP");
+  }
+
+  // objective line
+  ctx.textAlign = "center";
+  ctx.font = "12px 'Courier New', monospace";
+  ctx.fillStyle = "rgba(180,166,132,0.72)";
+  let obj;
+  if(lie){ obj = lie.text; ctx.fillStyle = "rgba(150,60,50,0.85)"; }
+  else if(!G.powered && G.fuses < G.fusesNeeded) obj = `FIND ${G.fusesNeeded - G.fuses} MORE FUSE${G.fusesNeeded-G.fuses>1?"S":""}`;
+  else if(!G.powered) obj = "REACH THE GENERATOR";
+  else obj = "GET TO THE STAIRWELL";
+  ctx.fillText(obj, VW/2, 30);
+
+  // interaction prompt
+  const n = nearestInteractable();
+  if((n || p.hideIn) && !p.rendering){
+    let label = "";
+    if(p.hideIn) label = "[SPACE] HOLD BREATH      [E] CLIMB OUT";
+    else if(n.kind === "corpse") label = p.lamp ? "[E]  RENDER TALLOW" : "[E]  RENDER TALLOW — NEEDS THE FLAME";
+    else if(n.kind === "item"){
+      const t = n.ref.type;
+      label = "[E]  " + (t==="oil"?"TAKE LAMP OIL": t==="fuse"?"TAKE FUSE": t==="flare"?"TAKE FLARE":
+                          t==="sedative"?"TAKE SEDATIVE":"READ PAGE");
+    }
+    else if(n.kind === "door") label = n.ref.open ? "[E]  CLOSE DOOR" : "[E]  OPEN DOOR";
+    else if(n.kind === "locker") label = "[E]  HIDE INSIDE";
+    else if(n.kind === "generator") label = G.fuses >= G.fusesNeeded ? "[E]  RESTORE POWER" : `[E]  GENERATOR  (${G.fuses}/${G.fusesNeeded})`;
+    else if(n.kind === "exit") label = G.powered ? "[E]  ESCAPE" : "[E]  SHUTTER — NO POWER";
+    ctx.fillStyle = "rgba(224,206,160,0.92)";
+    ctx.font = "13px 'Courier New', monospace";
+    ctx.fillText(label, VW/2, VH - 40);
+  }
+
+  // crosshair
+  if(!p.hideIn){
+    ctx.strokeStyle = "rgba(210,190,150,0.35)"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(mouseX, mouseY, 5, 0, TAU); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(mouseX-9, mouseY); ctx.lineTo(mouseX-6, mouseY);
+    ctx.moveTo(mouseX+6, mouseY); ctx.lineTo(mouseX+9, mouseY);
+    ctx.moveTo(mouseX, mouseY-9); ctx.lineTo(mouseX, mouseY-6);
+    ctx.moveTo(mouseX, mouseY+6); ctx.lineTo(mouseX, mouseY+9);
+    ctx.stroke();
+  }
+
+  // lamp off warning
+  if(!p.lamp){
+    ctx.fillStyle = `rgba(150,140,120,${0.35+Math.sin(G.t*3)*0.12})`;
+    ctx.font = "11px 'Courier New', monospace";
+    ctx.fillText("LANTERN DOUSED   [L]", VW/2, 52);
+  }
+  ctx.restore();
+}
+
+function drawMinimap(){
+  const scale = Math.min(3, Math.max(2, Math.floor(Math.min(VW,VH)/260)));
+  const w = GW*scale, h = GH*scale;
+  const ox = VW/2 - w/2, oy = VH/2 - h/2;
+  ctx.save();
+  ctx.fillStyle = "rgba(4,5,7,0.90)"; ctx.fillRect(ox-12,oy-12,w+24,h+34);
+  ctx.strokeStyle = "#38322a"; ctx.lineWidth=1; ctx.strokeRect(ox-12,oy-12,w+24,h+34);
+  for(let y=0;y<GH;y++) for(let x=0;x<GW;x++){
+    if(!G.seen[idx(x,y)]) continue;
+    const tt = G.grid[idx(x,y)];
+    if(tt === T_FLOOR){ ctx.fillStyle = "#3b4048"; }
+    else if(tt === T_PIT){ ctx.fillStyle = "#000"; }
+    else {
+      let touches=false;
+      for(let dy=-1;dy<=1&&!touches;dy++) for(let dx=-1;dx<=1;dx++) if(isOpen(x+dx,y+dy)){touches=true;break;}
+      if(!touches) continue;
+      ctx.fillStyle = "#1a1d22";
+    }
+    ctx.fillRect(ox+x*scale, oy+y*scale, scale, scale);
+  }
+  // doors
+  for(const d of G.doors){
+    if(!G.seen[idx(d.x,d.y)]) continue;
+    ctx.fillStyle = d.broken ? "#5a3020" : d.open ? "#6a5a3a" : "#8a7a4a";
+    ctx.fillRect(ox+d.x*scale, oy+d.y*scale, scale, scale);
+  }
+  // the pit, if you have seen any of its rim
+  if(G.pit){
+    const P = G.pit;
+    let seenAny = false;
+    for(let y=P.room.y; y<P.room.y+P.room.h && !seenAny; y++)
+      for(let x=P.room.x; x<P.room.x+P.room.w; x++)
+        if(G.seen[idx(x,y)] && G.grid[idx(x,y)] === T_PIT){ seenAny = true; break; }
+    if(seenAny){
+      ctx.save();
+      ctx.translate(ox + (P.cx/TILE)*scale, oy + (P.cy/TILE)*scale);
+      ctx.beginPath();
+      ctx.ellipse(0,0,(P.rx/TILE)*scale,(P.ry/TILE)*scale,0,0,TAU);
+      ctx.strokeStyle = "rgba(140,40,30,0.65)"; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.font="9px 'Courier New',monospace"; ctx.textAlign="center";
+      ctx.fillStyle="rgba(150,50,40,0.8)";
+      ctx.fillText("?", 0, 3);
+      ctx.restore();
+    }
+  }
+
+  // markers
+  function mark(tx,ty,col,txt){
+    ctx.fillStyle = col;
+    ctx.fillRect(ox+tx*scale-scale, oy+ty*scale-scale, scale*3, scale*3);
+    if(txt){ ctx.font="9px 'Courier New',monospace"; ctx.textAlign="center"; ctx.fillStyle=col;
+      ctx.fillText(txt, ox+tx*scale+scale/2, oy+ty*scale-scale*2); }
+  }
+  if(G.seen[idx(G.generator.tx,G.generator.ty)]) mark(G.generator.tx, G.generator.ty, G.powered?"#5ad07a":"#c98a3a", "GEN");
+  if(G.seen[idx(G.exit.x,G.exit.y)]) mark(G.exit.x, G.exit.y, "#7ab0d0", "EXIT");
+  for(const it of G.items){
+    if(it.taken || it.type !== "fuse") continue;
+    if(G.seen[idx(it.tx,it.ty)]) mark(it.tx, it.ty, "#d8c07a", null);
+  }
+  for(const f of G.flares) mark(Math.floor(f.x/TILE), Math.floor(f.y/TILE), "#d05a30", null);
+  // your candles. gold is still burning. grey is not, and something put it out.
+  for(const cd of G.candles){
+    const cx = ox + cd.x/TILE*scale, cy = oy + cd.y/TILE*scale;
+    if(cd.lit){
+      const fl = 0.75 + Math.sin(G.t*5 + cd.flick)*0.25;
+      ctx.fillStyle = `rgba(232,190,110,${0.55+0.45*fl})`;
+      ctx.fillRect(cx-scale*0.7, cy-scale*0.7, scale*1.4, scale*1.4);
+    } else {
+      ctx.strokeStyle = "rgba(120,116,126,0.75)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx-scale*0.7, cy-scale*0.7, scale*1.4, scale*1.4);
+    }
+  }
+  // player
+  const p = G.player;
+  mark(Math.floor(p.x/TILE), Math.floor(p.y/TILE), "#e8e0c8", null);
+  ctx.font="10px 'Courier New',monospace"; ctx.textAlign="center"; ctx.fillStyle="#6a6252";
+  ctx.fillText("WHAT YOU HAVE WALKED   [TAB]", ox+w/2, oy+h+18);
+  ctx.restore();
+}
+
+/* --------------------------------- update -------------------------------- */
+function update(dt){
+  G.t += dt; G.dt = dt; G.frame++;
+  const p = G.player;
+
+  // timers
+  if(G.msgTimer > 0){ G.msgTimer -= dt; if(G.msgTimer <= 0) $("toast").style.opacity = 0; }
+  if(G.subTimer > 0){ G.subTimer -= dt; if(G.subTimer <= 0) $("subs").style.opacity = 0; }
+
+  if(G.mode !== "play") return;
+  G.timeAlive += dt;
+  if(G.grabCool > 0) G.grabCool -= dt;
+  if(G.flashRed > 0) G.flashRed = Math.max(0, G.flashRed - dt*1.6);
+
+  updatePlayer(dt);
+  if(G.mode !== "play") return;
+  // shared flow field toward the player (the climber navigates by it)
+  G.playerFieldT -= dt;
+  if(G.playerFieldT <= 0 || !G.playerField){
+    G.playerFieldT = 0.4;
+    G.playerField = bfsField(Math.floor(p.x/TILE), Math.floor(p.y/TILE));
+  }
+
+  updateHollow(dt);
+  if(G.mode !== "play") return;
+  updatePit(dt);
+  if(G.mode !== "play") return;
+  updateClimber(dt);
+  if(G.mode !== "play") return;
+
+  // enforced silence — the building holds its breath before something happens
+  if(G.silence > 0) G.silence -= dt;
+
+  // a footstep behind you, a half beat late
+  if(G.mirrorT > 0){
+    G.mirrorT -= dt;
+    if(G.mirrorT <= 0) Audio_.echoStep(G.mirrorPan);
+  }
+
+  // the readouts stop being reliable long before you do
+  if(G.hudLieT > 0) G.hudLieT -= dt;
+  if(G.hudLie){ G.hudLie.t -= dt; if(G.hudLie.t <= 0) G.hudLie = null; }
+  if(G.hudLieT <= 0 && p.sanity < 48 && !G.hudLie){
+    G.hudLieT = 7 + rng()*16;
+    G.hudLie = {
+      t: 0.4 + rng()*0.7,
+      oil: rng()*100, fuses: rndi(6),
+      text: pick(["IT IS BEHIND YOU", "DO NOT TURN AROUND", "YOU HAVE BEEN HERE BEFORE",
+                  "STOP LOOKING FOR THE FUSES", "IT IS WEARING YOUR COAT",
+                  "THERE IS NO STAIRWELL", "COUNT TO TWO HUNDRED"]),
+    };
+  }
+
+  // one frame of a face. you will not be sure.
+  if(G.subliminal > 0) G.subliminal--;
+  else if(p.sanity < 58 && rng() < dt*0.11*(1 - p.sanity/58)) G.subliminal = 2;
+
+  // flares
+  for(let i=G.flares.length-1;i>=0;i--){
+    const f = G.flares[i];
+    f.life -= dt;
+    if(f.life <= 0) G.flares.splice(i,1);
+  }
+
+  /* --- candles ----------------------------------------------------------
+     A candle is a fact: lit means nothing has been through there. Which is
+     exactly why the building will not let the facts stay clean. Below about
+     half nerve, flames start going out with nothing near them, and flames you
+     watched die start burning again the moment you are not looking. Neither
+     lie fires while you can see the candle — you are never shown the moment,
+     only the result, which is the part you cannot argue with.
+     --------------------------------------------------------------------- */
+  const madness_ = 1 - p.sanity/100;
+  const lying = madness_ >= 0.42;
+  for(const cd of G.candles){
+    if(cd.lit){
+      cd.wax -= dt;
+      if(cd.wax <= 0){ cd.wax = 0; cd.spent = true; snuffCandle(cd, false); continue; }
+    }
+    if(!lying || G.t - cd.changedT < 6) continue;
+    // roll first, then pay for the line-of-sight check — this runs every frame
+    const roll = rng();
+    if(cd.lit){
+      if(roll < dt*0.016*madness_ && !beingWatched(cd.x, cd.y)) snuffCandle(cd, false);
+    } else if(!cd.spent){
+      if(roll < dt*0.011*madness_ && !beingWatched(cd.x, cd.y)){
+        cd.lit = true; cd.byIt = false; cd.changedT = G.t;
+        cd.wax = Math.max(cd.wax, 30);
+      }
+    }
+  }
+  // noise rings
+  for(let i=G.noiseRings.length-1;i>=0;i--){
+    const n = G.noiseRings[i];
+    n.r += dt * 460;
+    n.life = 1 - n.r/n.max;
+    if(n.r >= n.max) G.noiseRings.splice(i,1);
+  }
+  // doors swing anim
+  for(const d of G.doors) if(d.swing > 0) d.swing = Math.max(0, d.swing - dt*3);
+
+  // camera — follow with a little lead toward the mouse
+  const leadX = clamp((mouseX - VW/2)*0.18, -110, 110);
+  const leadY = clamp((mouseY - VH/2)*0.18, -110, 110);
+  const k = 1 - Math.pow(0.002, dt);
+  G.camX = lerp(G.camX, p.x + leadX, k);
+  G.camY = lerp(G.camY, p.y + leadY, k);
+
+  // shake
+  if(G.shake > 0){
+    G.shake = Math.max(0, G.shake - dt*2.2);
+    const m = G.shake*G.shake*10;
+    G.shakeX = (Math.random()-0.5)*m; G.shakeY = (Math.random()-0.5)*m;
+  } else { G.shakeX = G.shakeY = 0; }
+
+  // periodic flow-field refresh (cheap insurance if the AI target went stale)
+  G.distFieldTimer += dt;
+  if(G.distFieldTimer > 1.2){
+    setAITarget(G.distFieldTarget[0], G.distFieldTarget[1]);
+  }
+
+  // heartbeat
+  const hd = dist(G.hollow.x,G.hollow.y,p.x,p.y)/TILE;
+  const cl = G.climber;
+  const cdT = (cl && cl.active && cl.rise <= 0) ? dist(cl.x,cl.y,p.x,p.y)/TILE : 99;
+  let prox = clamp(1 - hd/16, 0, 1) * (G.hollow.state === "hunt" ? 1 : G.hollow.state === "watch" ? 0.85 : 0.5);
+  prox = Math.max(prox, clamp(1 - cdT/14, 0, 1) * 0.95);
+  if(p.hideIn) prox = Math.max(prox, 0.55);
+  const fear = clamp(prox*0.78 + (1 - p.sanity/100)*0.45 + clamp(G.darkT/22,0,1)*0.5, 0, 1);
+  const rate = lerp(1.35, 0.30, fear);
+  G.heartAcc += dt;
+  // the heart does not stop for the silence. that is the point of the silence.
+  if(G.heartAcc >= rate && (fear > 0.16 || p.sanity < 45 || G.silence > 0)){
+    G.heartAcc = 0;
+    Audio_.heartbeat(G.silence > 0 ? Math.max(fear, 0.55) : fear);
+  }
+  if(G.silence > 0) Audio_.setDrone(0);
+  else Audio_.setDrone(0.42 + prox*0.5);
+
+  // whispers & hallucinations at low nerve
+  const madness = 1 - p.sanity/100;
+  G.whisperTimer -= dt * (0.4 + madness*2.6);
+  if(G.whisperTimer <= 0 && G.silence <= 0){
+    G.whisperTimer = 5 + rng()*9;
+    if(madness > 0.25){
+      Audio_.whisper(rnd(1,-1));
+      if(rng() < 0.35) sub(pick([
+        "…you already walked this hall…",
+        "…it is standing behind the door you did not open…",
+        "…count to two hundred…",
+        "…the lamp is not helping…",
+        "…do not run, running is a bell…",
+        "…there were six of us…",
+      ]), 3.2);
+    }
+  }
+  // Phantoms obey exactly the same rule as the thing from the pit: they only
+  // move when you are not looking at them. So you can never tell which is which.
+  for(let i=G.phantoms.length-1;i>=0;i--){
+    const ph = G.phantoms[i];
+    ph.anim += dt;
+    if(beingWatched(ph.x, ph.y)){
+      ph.seen += dt;
+      ph.life -= dt*0.10;
+      if(ph.seen > ph.stare && rng() < dt*1.1) ph.life = 0;   // it goes the moment you doubt it
+    } else {
+      ph.life -= dt*0.20;
+      const a = Math.atan2(p.y-ph.y, p.x-ph.x);
+      const sp = ph.chase ? 215 : 90;
+      const nx = ph.x + Math.cos(a)*sp*dt, ny = ph.y + Math.sin(a)*sp*dt;
+      if(!collides(nx,ny,8)){ ph.x = nx; ph.y = ny; }
+    }
+    if(dist(ph.x,ph.y,p.x,p.y) < TILE*0.78){
+      G.phantoms.splice(i,1);
+      p.sanity = clamp(p.sanity - 13, 0, 100);
+      G.subliminal = 3; G.shake = Math.max(G.shake, 0.85); G.flashRed = 0.65;
+      Audio_.stinger();
+      sub("There is nothing there.");
+      continue;
+    }
+    if(ph.life <= 0) G.phantoms.splice(i,1);
+  }
+  const doubt = Math.max(madness, (cl && cl.active) ? 0.5 : 0);
+  if(doubt > 0.32 && G.phantoms.length < 3 && rng() < dt*0.34*doubt){
+    // it forms just past the edge of what you can see
+    const a = p.aim + rnd(2.4,-2.4);
+    const d = castRay(p.x/TILE,p.y/TILE, Math.cos(a), Math.sin(a), 9) - 0.6;
+    if(d > 3.2){
+      G.phantoms.push({ x:p.x+Math.cos(a)*d*TILE, y:p.y+Math.sin(a)*d*TILE,
+                        life: 7, anim:0, seen:0, stare: 2.0 + rng()*3.0,
+                        chase: doubt > 0.65 && rng() < 0.45 });
+      if(rng()<0.4 && G.silence<=0)
+        Audio_.burst({freq:1800,q:5,dur:0.25,vol:0.06,pan:panFor(p.x+Math.cos(a)*d*TILE)});
+    }
+  }
+
+  // ambient building sounds
+  if(G.silence <= 0) G.ambientEvent -= dt;
+  if(G.ambientEvent <= 0 && G.silence <= 0){
+    G.ambientEvent = 11 + rng()*20;
+    const r = rng();
+    const pan = rnd(1,-1);
+    if(r < 0.32) Audio_.burst({freq:150+rng()*120, q:0.8, dur:0.5, vol:0.06, rate:0.4, pan});   // settling
+    else if(r < 0.55) Audio_.door(rng()<0.5, pan);                                              // distant door
+    else if(r < 0.72) Audio_.tone({wave:"sine", f0:60+rng()*40, f1:40, dur:1.6, vol:0.05, atk:0.5, pan});
+    else Audio_.burst({freq:2200+rng()*900, q:7, dur:0.35, vol:0.035, pan});                     // pipe tick
+  }
+
+  // dying of nothing but the dark? no — but total darkness with no oil is its own doom
+  if(p.sanity <= 0 && !p.lamp && G.flares.length === 0 && p.oil <= 0 && p.flares === 0){
+    // nothing forced; the Hollow will find you. Left as flavour.
+  }
+}
+
+/* ---------------------------------- loop --------------------------------- */
+let lastT = performance.now();
+function loop(now){
+  const dt = Math.min(0.05, (now - lastT)/1000);
+  lastT = now;
+  update(dt);
+  if(G.mode === "play" || G.mode === "paused" || G.mode === "note" || G.mode === "dying") render();
+  requestAnimationFrame(loop);
+}
+
+/* ---------------------------------- menu --------------------------------- */
+$("diffRow").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  G.diff = parseInt(b.dataset.d, 10);
+  [...$("diffRow").children].forEach(x=>x.classList.toggle("sel", x===b));
+  $("diffDesc").textContent = DIFFS[G.diff].desc;
+});
+$("btnStart").addEventListener("click", ()=>{ Audio_.init(); startGame(); });
+$("btnHelp").addEventListener("click", ()=>{ $("titleScreen").classList.add("hidden"); $("helpScreen").classList.remove("hidden"); });
+$("btnBack").addEventListener("click", ()=>{ $("helpScreen").classList.add("hidden"); $("titleScreen").classList.remove("hidden"); });
+$("btnResume").addEventListener("click", ()=> pause(false));
+$("btnQuit").addEventListener("click", ()=>{
+  $("pauseScreen").classList.add("hidden"); $("titleScreen").classList.remove("hidden");
+  G.mode = "menu"; Audio_.stopDrone(); document.body.style.cursor="default";
+});
+$("btnCloseNote").addEventListener("click", closeNote);
+$("btnRetry").addEventListener("click", ()=>{ $("endScreen").classList.add("hidden"); startGame(); });
+$("btnMenu").addEventListener("click", ()=>{
+  $("endScreen").classList.add("hidden"); $("titleScreen").classList.remove("hidden");
+  G.mode = "menu"; document.body.style.cursor="default";
+});
+
+/* --------------------------------- boot ---------------------------------- */
+resize();
+buildGrain();
+$("diffDesc").textContent = DIFFS[G.diff].desc;
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

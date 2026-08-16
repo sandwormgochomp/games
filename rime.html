@@ -1,0 +1,2946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RIME — Halden Sublevel 8</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#05070a;color:#9fb3bd;font:13px/1.5 "Consolas","DejaVu Sans Mono",monospace;overflow:hidden;user-select:none}
+#wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#view{display:block;width:100%;height:100%;image-rendering:pixelated;background:#000;cursor:crosshair}
+
+/* ---------- screens ---------- */
+.screen{position:fixed;inset:0;display:none;overflow-y:auto;background:radial-gradient(ellipse at 50% 30%,#0b131a 0%,#04070a 70%);z-index:20}
+.screen.on{display:block}
+.pane{max-width:860px;margin:0 auto;padding:46px 30px 70px}
+h1{font-size:52px;letter-spacing:16px;color:#cfe6f0;text-align:center;font-weight:400;text-shadow:0 0 24px #2b6c86,0 0 60px #14384a}
+h1 small{display:block;font-size:12px;letter-spacing:6px;color:#4c6e7e;margin-top:12px;text-shadow:none}
+h2{font-size:15px;letter-spacing:5px;color:#8ecbe4;margin:26px 0 12px;font-weight:400;border-bottom:1px solid #1b2e3a;padding-bottom:6px}
+p{margin:9px 0;color:#8299a5;max-width:70ch}
+.dim{color:#556974}
+.warn{color:#c96a5a}
+.good{color:#7fc9a0}
+.cold{color:#79b6e0}
+.menu{display:flex;flex-direction:column;gap:11px;align-items:center;margin-top:40px}
+.btn{background:#0d1a22;border:1px solid #24444f;color:#9fd0e0;padding:11px 26px;font:13px/1 inherit;letter-spacing:4px;cursor:pointer;min-width:290px;text-align:center;transition:background .12s,border-color .12s,color .12s}
+.btn:hover{background:#153039;border-color:#4d8fa6;color:#ddf1fa}
+.btn:active{background:#1d4250}
+.btn.sm{min-width:0;padding:7px 16px;letter-spacing:2px;font-size:12px}
+.btn.back{margin-top:32px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px;margin-top:14px}
+.lvbtn{background:#0b161d;border:1px solid #1f3a45;color:#8fb6c6;padding:9px;cursor:pointer;font:12px/1.4 inherit;text-align:left}
+.lvbtn:hover{border-color:#4d8fa6;background:#14262f;color:#dff1fa}
+.lvbtn b{display:block;color:#bfe3f2;letter-spacing:2px;font-weight:400}
+.lvbtn i{font-style:normal;color:#4f6b78;font-size:11px}
+table.keys{border-collapse:collapse;margin-top:10px;width:100%}
+table.keys td{padding:5px 10px 5px 0;vertical-align:top;border-bottom:1px solid #101d25}
+table.keys td.k{color:#cfe6f0;white-space:nowrap;width:120px}
+.beast{display:flex;gap:18px;align-items:flex-start;border:1px solid #16272f;background:#080f14;padding:14px;margin:12px 0}
+.beast canvas{background:#04080b;border:1px solid #16272f;flex:0 0 auto;image-rendering:pixelated}
+.beast h3{color:#d8b0a4;font-size:14px;letter-spacing:4px;font-weight:400;margin-bottom:6px}
+.tag{display:inline-block;border:1px solid #2b4a57;color:#6f97a8;padding:1px 7px;font-size:11px;letter-spacing:1px;margin:0 5px 5px 0}
+.tag.blind{border-color:#3a5a2f;color:#8fbe72}
+.tag.danger{border-color:#5e2c26;color:#c9705e}
+
+/* ---------- HUD ---------- */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;display:none}
+#hud.on{display:block}
+.hb{position:absolute;font-size:12px;letter-spacing:2px;text-shadow:0 0 8px #000,0 1px 2px #000}
+#hLeft{left:18px;bottom:16px;width:260px}
+#hRight{right:18px;bottom:16px;width:230px;text-align:right}
+#hTop{left:0;right:0;top:14px;text-align:center;color:#7fa4b5}
+.bar{height:7px;background:#0a1319;border:1px solid #1e3540;margin:3px 0 9px;position:relative;overflow:hidden}
+.bar i{display:block;height:100%;transition:width .12s linear}
+.bar span{position:absolute;top:-1px;bottom:-1px;width:1px;background:#3a5a68}
+.lab{display:flex;justify-content:space-between;font-size:11px;color:#5e7a87;letter-spacing:3px}
+#noiseWrap .lab b{font-weight:400}
+#hint{position:absolute;left:0;right:0;top:56%;text-align:center;color:#cfe6f0;font-size:13px;letter-spacing:3px;text-shadow:0 0 10px #000}
+#toast{position:absolute;left:0;right:0;top:24%;text-align:center;color:#a9e0f2;font-size:14px;letter-spacing:4px;opacity:0;transition:opacity .3s;text-shadow:0 0 12px #000}
+#toast.on{opacity:1}
+#mapwrap{position:absolute;right:16px;top:14px;border:1px solid #1c333e;background:rgba(4,9,12,.72);padding:4px;transition:all .15s}
+#mapwrap.big{right:50%;top:50%;transform:translate(50%,-50%);border-color:#3d7186;background:rgba(3,7,10,.95);padding:10px}
+#mapc{display:block;image-rendering:pixelated}
+#reticle{position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;background:#8fd6ee;opacity:.55;border-radius:50%}
+#slidecue{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:220px;height:220px;margin-top:0;opacity:0;transition:opacity .2s}
+#logbox{position:fixed;inset:0;display:none;z-index:22;background:rgba(3,6,9,.93);align-items:center;justify-content:center}
+#logbox.on{display:flex}
+#logbox .inner{max-width:620px;border:1px solid #2b4c5a;background:#070d12;padding:26px 30px}
+#logbox h3{color:#9fd8ee;letter-spacing:5px;font-weight:400;font-size:14px;margin-bottom:4px}
+#logbox .meta{color:#4a6672;font-size:11px;letter-spacing:2px;margin-bottom:14px}
+#logbox pre{white-space:pre-wrap;color:#8fa8b4;font:13px/1.65 inherit}
+#logbox .cont{margin-top:18px;color:#4a6672;font-size:11px;letter-spacing:3px}
+#dmgflash{position:fixed;inset:0;pointer-events:none;z-index:11;background:radial-gradient(ellipse at center,rgba(150,20,20,0) 40%,rgba(160,20,20,.55) 100%);opacity:0;transition:opacity .35s}
+#vig{position:fixed;inset:0;pointer-events:none;z-index:9;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 45%,rgba(0,0,0,.72) 100%)}
+.center{text-align:center}
+.tiny{font-size:11px;color:#43606c;letter-spacing:2px}
+#glyphs{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;margin-top:12px}
+.gl{display:flex;gap:10px;align-items:flex-start;border:1px solid #142530;padding:8px;background:#070d11}
+.gl canvas{flex:0 0 auto;image-rendering:pixelated;border:1px solid #16272f}
+.gl b{color:#cfe6f0;font-weight:400;letter-spacing:2px;display:block;font-size:12px}
+.gl span{font-size:11px;color:#5f7c88;line-height:1.45}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="view"></canvas></div>
+<div id="vig"></div>
+<div id="dmgflash"></div>
+
+<div id="hud">
+  <div id="reticle"></div>
+  <div id="mapwrap"><canvas id="mapc" width="150" height="150"></canvas></div>
+  <div class="hb" id="hTop"></div>
+  <div class="hb" id="hLeft">
+    <div id="noiseWrap">
+      <div class="lab"><b>NOISE</b><b id="noiseTxt">0</b></div>
+      <div class="bar"><i id="noiseBar" style="width:0%;background:#c8563f"></i><span style="left:25%"></span><span style="left:75%"></span></div>
+    </div>
+    <div class="lab"><b>CORE TEMP</b><b id="tempTxt">36.5</b></div>
+    <div class="bar"><i id="tempBar" style="width:100%;background:#5aa8d8"></i></div>
+    <div class="lab"><b>CONDITION</b><b id="hpTxt">100</b></div>
+    <div class="bar"><i id="hpBar" style="width:100%;background:#7fc9a0"></i></div>
+  </div>
+  <div class="hb" id="hRight">
+    <div id="rStance">STANDING</div>
+    <div id="rLamp" class="dim">LAMP OFF</div>
+    <div class="lab" style="justify-content:flex-end;gap:8px"><b>CELL</b><b id="battTxt">100</b></div>
+    <div class="bar"><i id="battBar" style="width:100%;background:#d8c25a"></i></div>
+    <div id="rKit" class="dim"></div>
+    <div id="rTask" style="margin-top:6px;color:#9fd0e0"></div>
+  </div>
+  <div class="hb" id="hint"></div>
+  <div class="hb" id="toast"></div>
+</div>
+
+<div id="logbox"><div class="inner">
+  <h3 id="logTitle"></h3>
+  <div class="meta" id="logMeta"></div>
+  <pre id="logBody"></pre>
+  <div class="cont">[E] / [ESC] CLOSE</div>
+</div></div>
+
+<!-- ============ MENU ============ -->
+<div class="screen on" id="sMenu"><div class="pane">
+  <h1>RIME<small>HALDEN DEEP · SUBLEVEL 8 · CRYOGENIC WING</small></h1>
+  <div class="menu">
+    <button class="btn" id="bStart">BEGIN DESCENT</button>
+    <button class="btn" id="bSel">SUBLEVEL SELECT</button>
+    <button class="btn" id="bBrief">BRIEFING</button>
+    <button class="btn" id="bBest">BESTIARY</button>
+    <button class="btn" id="bGlyph">DECK SURFACES</button>
+    <button class="btn" id="bKeys">CONTROLS</button>
+  </div>
+  <p class="center tiny" style="margin-top:34px">The coolant loop failed eleven days ago. Everything down here is frozen, and everything down here is blind.</p>
+</div></div>
+
+<div class="screen" id="sBrief"><div class="pane">
+  <h2>BRIEFING</h2>
+  <p>Halden Deep was sealed after the VITRIS-9 incident. Sublevel 8 — the cryogenic wing — was the last section to lose power, and when the coolant loop ruptured it did not burn. It froze. Eleven metres of standing meltwater flash-froze across every deck plate in the wing.</p>
+  <p><span class="cold">The deck is black ice.</span> You cannot walk on it. You push off, and you keep going until something stops you: a bulkhead, a patch of grit, a drum, the far wall. You do not choose where you stop. You only choose which way you leave.</p>
+  <p><span class="warn">Everything that lives down here is blind.</span> There is no light budget for eyes eleven levels under. They hunt by sound, and on ice every single thing you do is a sound — the push, the run of your boots over plate seams, and worst of all the stop.</p>
+  <p>A slide that ends on grit is a whisper. A slide that ends against a bulkhead at full speed is a drumbeat through the entire wing.</p>
+  <p class="dim">Recover what you can from the wing. There is a lift at the far end of every deck. Twenty-four maintenance logs survived the freeze; how much of Halden you leave understanding is up to you.</p>
+  <button class="btn back sm" data-back>&lt; BACK</button>
+</div></div>
+
+<div class="screen" id="sBest"><div class="pane">
+  <h2>BESTIARY</h2>
+  <p class="dim">Reconstructed from acoustic survey. No visual record exists.</p>
+  <div id="bestList"></div>
+  <button class="btn back sm" data-back>&lt; BACK</button>
+</div></div>
+
+<div class="screen" id="sGlyph"><div class="pane">
+  <h2>DECK SURFACES</h2>
+  <p class="dim">What stops you, and what does not.</p>
+  <div id="glyphs"></div>
+  <button class="btn back sm" data-back>&lt; BACK</button>
+</div></div>
+
+<div class="screen" id="sKeys"><div class="pane">
+  <h2>CONTROLS</h2>
+  <table class="keys">
+    <tr><td class="k">MOUSE</td><td>Look. You may look anywhere at any time, including while sliding.</td></tr>
+    <tr><td class="k">W A S D</td><td>Push off. Snaps to the deck seam nearest your heading. <span class="dim">You cannot steer once you are moving.</span></td></tr>
+    <tr><td class="k">SPACE</td><td><span class="warn">SPIKE.</span> Drive a crampon into the ice and stop at the next seam. Consumes a spike. Extremely loud.</td></tr>
+    <tr><td class="k">C</td><td>Toggle CREEP. Push off gently — same distance, half the speed, a quarter of the noise.</td></tr>
+    <tr><td class="k">B / RIGHT-MOUSE</td><td>Hold breath. Halves the noise you emit. Drains, then a forced gasp.</td></tr>
+    <tr><td class="k">R</td><td>Throw a coupling bolt. It is loud <em>where it lands</em>, not where you are.</td></tr>
+    <tr><td class="k">F</td><td>Headlamp. Drains the cell. Nothing down here can see it.</td></tr>
+    <tr><td class="k">E</td><td>Interact — logs, cells, the lift.</td></tr>
+    <tr><td class="k">M</td><td>Survey map. Does not pause.</td></tr>
+    <tr><td class="k">TAB</td><td>Hold: preview the slide you are about to commit to.</td></tr>
+    <tr><td class="k">ESC</td><td>Pause.</td></tr>
+  </table>
+  <button class="btn back sm" data-back>&lt; BACK</button>
+</div></div>
+
+<div class="screen" id="sSel"><div class="pane">
+  <h2>SUBLEVEL SELECT</h2>
+  <p class="dim">Every deck is generated from a fixed seed and is identical every run.</p>
+  <div class="grid2" id="selList"></div>
+  <button class="btn back sm" data-back>&lt; BACK</button>
+</div></div>
+
+<div class="screen" id="sIntro"><div class="pane">
+  <h1 id="introName" style="font-size:34px;letter-spacing:10px"></h1>
+  <p class="center dim" id="introSub" style="letter-spacing:4px"></p>
+  <p id="introBody" style="margin:34px auto;max-width:62ch"></p>
+  <div class="menu"><button class="btn" id="bIntroGo">SEAL SUIT · DESCEND</button></div>
+</div></div>
+
+<div class="screen" id="sPause"><div class="pane">
+  <h1 style="font-size:30px;letter-spacing:12px">PAUSED</h1>
+  <div class="menu">
+    <button class="btn" id="bResume">RESUME</button>
+    <button class="btn" id="bPauseRestart">RESTART DECK</button>
+    <button class="btn" id="bPauseMenu">ABANDON · MAIN MENU</button>
+  </div>
+  <p class="center tiny" id="pauseStat" style="margin-top:30px"></p>
+</div></div>
+
+<div class="screen" id="sDead"><div class="pane">
+  <h1 style="font-size:30px;letter-spacing:12px;color:#c9705e;text-shadow:0 0 24px #6b2018" id="deadTitle">SIGNAL LOST</h1>
+  <p class="center" id="deadWhy" style="margin-top:20px"></p>
+  <div class="menu">
+    <button class="btn" id="bRetry">RE-ENTER DECK</button>
+    <button class="btn" id="bDeadMenu">MAIN MENU</button>
+  </div>
+</div></div>
+
+<div class="screen" id="sWin"><div class="pane">
+  <h1 style="font-size:30px;letter-spacing:10px" id="winTitle">SURFACE</h1>
+  <div id="winBody" style="margin-top:24px"></div>
+  <div class="menu"><button class="btn" id="bWinMenu">MAIN MENU</button></div>
+</div></div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   RIME — a first-person raycast horror where the deck is ice.
+   Momentum-committed grid sliding (glide) inside a blind, noise-hunted
+   facility (halden). Single file, no dependencies.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- utility */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function clamp(v,a,b){return v<a?a:v>b?b:v;}
+function lerp(a,b,t){return a+(b-a)*t;}
+function dist2(ax,ay,bx,by){var dx=ax-bx,dy=ay-by;return dx*dx+dy*dy;}
+function angDiff(a,b){var d=a-b;while(d>Math.PI)d-=Math.PI*2;while(d<-Math.PI)d+=Math.PI*2;return d;}
+function el(id){return document.getElementById(id);}
+function shuffle(arr,rnd){for(var i=arr.length-1;i>0;i--){var j=(rnd()*(i+1))|0;var t=arr[i];arr[i]=arr[j];arr[j]=t;}return arr;}
+
+/* ------------------------------------------------------------ tile table */
+/* Data-driven so the solver, the generator and the renderer all read one
+   source of truth. `solid` blocks rays and slides. `stop` ends a slide on
+   entry. `redirect` rewrites heading on entry. `bounce` reverses it. */
+var T={
+  VOID:0, WALL:1, ICE:2, GRIT:3, THIN:4, HOLE:5, DRUM:6,
+  VANE_E:7, VANE_S:8, VANE_W:9, VANE_N:10,
+  MIRR_A:11, MIRR_B:12, LOCK:13, SLUSH:14, GLASS:15, LIFT:16, HEAT:17, PLATE:18
+};
+var DX=[1,0,-1,0], DY=[0,1,0,-1];
+var DIRNAME=["EAST","SOUTH","WEST","NORTH"];
+var MIRA=[3,2,1,0];   /* '/'  E->N  S->W  W->S  N->E */
+var MIRB=[1,0,3,2];   /* '\'  E->S  S->E  W->N  N->W */
+
+var TILE={};
+TILE[T.VOID] ={name:"VOID",     solid:1};
+TILE[T.WALL] ={name:"BULKHEAD", solid:1};
+TILE[T.ICE]  ={name:"BLACK ICE",desc:"Frictionless. You will not stop here."};
+TILE[T.GRIT] ={name:"GRIT",     stop:1, quiet:1, desc:"Rust and grit frozen into the plate. Stops you, and stops you quietly."};
+TILE[T.THIN] ={name:"FRACTURE", thin:1, desc:"Crossing it once opens it. Stopping on it drops you through."};
+TILE[T.HOLE] ={name:"OPEN SHAFT", fatal:1, desc:"Eleven levels of nothing."};
+TILE[T.DRUM] ={name:"COOLANT DRUM", solid:1, bounce:1, desc:"Reverses you and you keep going. Rings like a bell."};
+TILE[T.VANE_E]={name:"STEAM JET",redirect:0,vane:1,desc:"A live jet. Forces your heading, whatever you arrived doing."};
+TILE[T.VANE_S]={name:"STEAM JET",redirect:1,vane:1};
+TILE[T.VANE_W]={name:"STEAM JET",redirect:2,vane:1};
+TILE[T.VANE_N]={name:"STEAM JET",redirect:3,vane:1};
+TILE[T.MIRR_A]={name:"CANTED PLATE",mirror:1,desc:"Buckled plating. Deflects you a quarter turn — which way depends on how you arrive."};
+TILE[T.MIRR_B]={name:"CANTED PLATE",mirror:2};
+TILE[T.LOCK] ={name:"SEALED HATCH", solid:1, lock:1, desc:"Solid until you spend a keycard. Then open for good."};
+TILE[T.SLUSH]={name:"MELTWATER", stop:1, wet:1, desc:"Not frozen through. Drags you to a halt, soaks you, and carries every sound."};
+TILE[T.GLASS]={name:"SHATTERED PANE", loud:1, desc:"You pass straight over it. The whole wing hears you do it."};
+TILE[T.LIFT] ={name:"SERVICE LIFT", stop:1, quiet:1, exit:1, desc:"Up."};
+TILE[T.HEAT] ={name:"HEAT VENT", stop:1, quiet:1, warm:1, desc:"Still bleeding warmth from somewhere. Stops you. Thaws you."};
+TILE[T.PLATE]={name:"KEY PLATE", stop:1, quiet:1, desc:"Tread plate from the machine shop, laid down where a body fell. Whatever they were carrying is still on it, and it will stop you quietly enough to pick it up."};
+
+function isSolidTile(t,openedSet,idx){
+  if(t===T.LOCK) return !(openedSet&&openedSet.has(idx));
+  var d=TILE[t]; return !!(d&&d.solid);
+}
+
+/* --------------------------------------------------------------- noise */
+var NOISE_NOTICE=25, NOISE_CHARGE=75;
+var WATER_NOISE=2.6;
+var N_PUSH=9, N_PUSH_CREEP=3;
+var N_RUNTILE=2.2, N_RUNTILE_CREEP=0.6;
+var N_WALL_MIN=30, N_WALL_MAX=72;
+var N_GRIT=6, N_DRUM=68, N_GLASS=84, N_SPIKE=71, N_SLUSH=44;
+var N_BOLT_DRY=84, N_BOLT_WET=54, N_GASP=70, N_SHIVER=38;
+
+/* --------------------------------------------------------------- tuning */
+var SLIDE_SPEED=7.4, SLIDE_SPEED_CREEP=3.5;
+var TEMP_MAX=36.5, TEMP_MIN=27.0;
+var TEMP_DRAIN=0.105, TEMP_DRAIN_WET=0.44, TEMP_WARM=2.6;
+/* Meltwater is the signature brake on two decks and the intro text tells you
+   to use it — so one dunk costing 3.3 of your 9.5 degrees, flat, with a hard
+   cliff at 7.5s and a full refresh on every re-entry, was punishing the thing
+   the level teaches. It still hurts; it just tapers as you dry, accumulates
+   to a cap instead of resetting, and a heat vent now actually dries you. */
+var WET_SOAK=6.0, WET_MAX=9.0, WET_FLOOR=0.34, WET_DRY_ON_HEAT=3.2;
+var BATT_DRAIN=1.55;
+var SPIKE_START=3, BOLT_START=2;
+
+/* --------------------------------------------------------- global state */
+var state="menu";
+var L=null;             /* current deck */
+var P=null;             /* player */
+/* deepest is the furthest deck reached this session and survives a restart —
+   -1 so that "nothing reached yet" is distinguishable from "reached deck 1" */
+var G={level:0, logsRead:0, seenLogs:{}, deaths:0, deepest:-1, time:0, spikesUsed:0};
+var keys={}, mouseDown={};
+var lastT=0, acc=0;
+
+/* ==========================================================================
+   DECKS — definition, generation, and the solver that proves each one.
+   ========================================================================== */
+var LEVELS=[
+ {name:"INTAKE HALL",     sub:"SL8-A", seed:80101, w:23,h:19, style:"hall",
+  mechs:[], sig:null, grit:0.085, mons:{walker:1}, logs:2, minPar:6, maxPar:26,
+  intro:"The lift doors open onto a mirror. Eleven days of meltwater went to glass across the whole intake floor, and your first step takes you four metres whether you wanted it or not.\n\nThere is grit where the deck rusted through. Aim for it."},
+
+ {name:"RUPTURE GALLERY", sub:"SL8-B", seed:80207, w:25,h:21, style:"gallery",
+  mechs:["thin","hole"], sig:"thin", grit:0.07, mons:{walker:2}, logs:2, minPar:8, maxPar:30,
+  intro:"The freeze did not take evenly here. Some plate is eleven inches of clear ice and some is a skin over an open shaft.\n\nYou can cross a fracture exactly once. You cannot stop on one."},
+
+ {name:"COOLANT STORE",   sub:"SL8-C", seed:80311, w:25,h:21, style:"store",
+  mechs:["thin","hole","drum"], sig:"drum", grit:0.06, mons:{walker:2,skitter:1}, logs:2, minPar:9, maxPar:32,
+  intro:"Nine hundred sealed drums, frozen to the deck, still full. They do not stop you. They send you back the way you came, and they ring the entire wing while they do it.\n\nSomething small and fast is on this deck. It slides the way you do."},
+
+ {name:"JET WALK",        sub:"SL8-D", seed:80419, w:27,h:21, style:"walk",
+  mechs:["thin","hole","vane"], sig:"vane", grit:0.055, mons:{walker:2,skitter:1}, logs:2, minPar:10, maxPar:34,
+  intro:"The relief jets never shut off; they just froze open. Each one throws you the way it faces regardless of how you arrived.\n\nThey are the only thing down here louder than you are, and that is worth something."},
+
+ {name:"CANTED SPAN",     sub:"SL8-E", seed:80523, w:27,h:23, style:"span",
+  mechs:["thin","hole","drum","mirror"], sig:"mirror", grit:0.05, mons:{walker:2,skitter:1,hanger:1}, logs:2, minPar:11, maxPar:36,
+  intro:"The span buckled when the loop went. Whole plates stand canted at forty-five degrees, and hitting one turns you a quarter — which quarter depends entirely on how you came in.\n\nThere is frost growing downward from the ceiling in places. Do not walk under it."},
+
+ {name:"THE ATRIUM",      sub:"SL8-F", seed:80629, w:27,h:23, style:"atrium",
+  mechs:["thin","hole","drum","glass"], sig:null, grit:0.05, mons:{walker:2,skitter:2,hanger:1}, logs:2, minPar:11, maxPar:36,
+  intro:"Every observation pane in the atrium blew inward and froze where it landed. You will slide straight over the shards without slowing at all.\n\nThe entire wing will know the exact second you do."},
+
+ {name:"MELTWATER FLOOR", sub:"SL8-G", seed:80733, w:27,h:23, style:"melt",
+  mechs:["thin","hole","slush","glass"], sig:"slush", grit:0.04, mons:{walker:3,skitter:1,hanger:1}, logs:2, minPar:12, maxPar:38,
+  intro:"Something below is still warm enough to keep this floor from setting. The meltwater drags you down inside a metre — the most reliable brake on this deck and the loudest surface on it.\n\nIt will also take your core temperature apart."},
+
+ {name:"SECURE ROW",      sub:"SL8-H", seed:80839, w:29,h:23, style:"row",
+  mechs:["thin","hole","drum","lock"], sig:"lock", grit:0.05, mons:{walker:3,skitter:2,hanger:1}, logs:2, minPar:14, maxPar:44,
+  intro:"Containment row sealed itself when the alarm went. The hatches are still holding, and the cards that open them are still on the bodies that were carrying them.\n\nA card opens one hatch, once, for good."},
+
+ {name:"THE CAROUSEL",    sub:"SL8-I", seed:80947, w:29,h:25, style:"span",
+  mechs:["thin","hole","drum","mirror","vane"], sig:"mirror", grit:0.04, mons:{walker:3,skitter:2,hanger:2}, logs:2, minPar:14, maxPar:46,
+  intro:"Jets and canted plate together. Half the routes through here are rides you cannot get off.\n\nWork the map. Commit only when you have counted the whole run."},
+
+ {name:"DEEP PLATE",      sub:"SL8-J", seed:81051, w:29,h:25, style:"melt",
+  mechs:["thin","hole","drum","slush","glass","vane"], sig:"slush", grit:0.035, mons:{walker:3,skitter:2,hanger:2}, logs:2, minPar:15, maxPar:48,
+  intro:"You are below the water table now. The deck is neither frozen nor liquid and neither is anything else down here.\n\nYour hands have stopped hurting, which is the part of hypothermia you are supposed to be afraid of."},
+
+ {name:"THE SPINE",       sub:"SL8-K", seed:81163, w:31,h:25, style:"walk",
+  mechs:["thin","hole","drum","mirror","vane","glass","lock"], sig:"lock", grit:0.03, mons:{walker:4,skitter:2,hanger:2}, logs:2, minPar:16, maxPar:52,
+  intro:"The service spine runs the length of the wing. It is the fastest ground in Halden and there is nothing on it to stop you but the ends.\n\nWhatever is at the far end has heard every stop you have made since the intake hall."},
+
+ {name:"LOOP TERMINUS",   sub:"SL8-L", seed:81277, w:31,h:27, style:"atrium",
+  mechs:["thin","hole","drum","mirror","vane","glass","slush","lock"], sig:null, grit:0.03, mons:{walker:4,skitter:3,hanger:2}, logs:2, minPar:16, maxPar:56,
+  intro:"The coolant loop terminates here, and so does the wing. Past the terminus there is a shaft, and the shaft goes up.\n\nEleven days. Whatever you have understood by now is what you are taking with you."}
+];
+
+/* ------------------------------------------------------------- datapads */
+var LOGS=[
+ {t:"INTAKE 1 — SHIFT HANDOVER", by:"K. ODUYA, DECK TECH", b:"Loop pressure is down again overnight and nobody upstairs wants to sign for a shutdown. I logged it. I am logging it every night this week so that when it lets go there is a paper trail with somebody else's name on the approval line and mine on the warning."},
+ {t:"INTAKE 4 — SURFACE ICE", by:"K. ODUYA, DECK TECH", b:"Whoever specified sealed plate for a cryo wing floor has never stood on it. There is no tread on this deck at all. We have been scattering swarf and rust sweepings from the machine shop just to have something to stop against.\n\nDo not clean it up. I mean it. Those grit patches are the only brakes in the wing."},
+ {t:"CRYO 2 — VANCE VISIT", by:"K. ODUYA, DECK TECH", b:"Dr Vance came down to 8 today. Wanted to know the lowest sustained temperature we can hold in a specimen bay and for how long. I told him indefinitely, that is the point of a cryo wing.\n\nHe asked what happens to the specimen if the loop fails. I said it thaws. He said: and then. And then nothing, doctor, it is dead, it thawed.\n\nHe wrote that down."},
+ {t:"CRYO 5 — BAY ALLOCATION", by:"ADMIN, AUTOMATED", b:"BAY 8-14 REASSIGNED — REQUESTOR: E. VANCE — CONTENTS: BIOLOGICAL, LIVE, CLASS 3\nBAY 8-15 REASSIGNED — REQUESTOR: E. VANCE — CONTENTS: BIOLOGICAL, LIVE, CLASS 3\nBAY 8-16 REASSIGNED — REQUESTOR: E. VANCE — CONTENTS: BIOLOGICAL, LIVE, CLASS 4\n\nCLASS 4 REQUIRES DIRECTORATE COUNTERSIGN. COUNTERSIGN ON FILE: E. VANCE."},
+ {t:"RUPTURE — INCIDENT 1", by:"SAFETY BOARD, PRELIM", b:"At 03:11 the return line failed at the gallery weld. Wing temperature at the point of failure was minus sixty-one. The escaping coolant met eleven metres of standing meltwater from the level above.\n\nIt did not flood. It set. The board finding is that Sublevel 8 is now a single continuous casting of ice with a facility inside it."},
+ {t:"RUPTURE — INCIDENT 2", by:"SAFETY BOARD, PRELIM", b:"Nineteen personnel were on 8 at the time of failure. Eleven reached the lift.\n\nOf the remaining eight, six were recovered. Two were not, and the board notes without further comment that the acoustic survey run four days later returned considerably more than two moving contacts."},
+ {t:"FRACTURE SURVEY", by:"STRUCTURAL, AUTOMATED", b:"Ice thickness across the gallery deck is not uniform. Where the plate below was already open — drain runs, cable troughs, the shaft mouths — the freeze bridged the gap with a skin rather than filling it.\n\nA skin will take a crossing. It will not take a stop. Do not stand still on clear plate."},
+ {t:"COOLANT STORE — MANIFEST", by:"STORES", b:"Nine hundred and six drums, all charged, all frozen to the deck at the base. Structural says they will not move for anything short of a cutting torch.\n\nThey will however ring. Standing in the store when the loop was purging was like standing inside a bell. We wore ear protection down here. Nobody left down here now has ears to protect, which I understand is a joke in poor taste."},
+ {t:"ACOUSTIC SURVEY 1", by:"DR. M. FELD", b:"I want to correct a misconception in the board language. The contacts on 8 are not blind because it is dark. They are blind because they have no eyes. I have the imaging. The orbits are filled in with the same tissue as everything else.\n\nThey navigate on sound alone and they do it better than our array does. Under twenty-five decibels referenced to the deck they do not respond at all. Above it they walk toward you. Above about seventy-five they run."},
+ {t:"ACOUSTIC SURVEY 2", by:"DR. M. FELD", b:"The thing nobody on the board has said out loud: the ice is a drum head. Sound does not attenuate on 8 the way it does anywhere else in Halden. A boot landing badly at the intake hall registers at the terminus.\n\nAnyone we send down there is not sneaking through a facility. They are playing an instrument they cannot put down."},
+ {t:"ACOUSTIC SURVEY 3", by:"DR. M. FELD", b:"Follow-up on the fix behaviour. This is important and I want it on the record before anyone goes down.\n\nThey do not track. They fix. A contact that hears an event moves to where the event happened and searches there. It does not update toward the source as the source moves. Everything a person on that deck does is a pin in a map, and the pins do not follow them.\n\nThis is survivable. It is only survivable if you understand it."},
+ {t:"JET WALK — MAINTENANCE", by:"K. ODUYA, DECK TECH", b:"Relief jets on the walk froze open at full flow. There is no valve left to close; the valve is inside the ice.\n\nOn the one hand, you cannot cross the walk without being thrown wherever the jet says. On the other hand a jet is the loudest continuous thing in the wing, and everything is already listening to it instead of you. Take your crossings under a jet."},
+ {t:"WALKER — FIELD NOTE", by:"DR. M. FELD", b:"Largest of the 8 contacts. Grown claws that go through the ice to the plate underneath, which is why it does not slide and you do.\n\nIt is slow. On any deck with room to run you are faster than it is by half. The problem is never the walker speed. The problem is that you cannot choose where you stop and it can."},
+ {t:"SKITTER — FIELD NOTE", by:"DR. M. FELD", b:"Smaller, and it has not grown claws. It has adapted the other way: it committed to the ice.\n\nIt hunts the way the deck makes you hunt — one long slide down a lane until something stops it, then a decision, then another. It slams into bulkheads at speed and does not appear to care.\n\nWhich means it can be aimed. Give it a lane with a shaft at the end of it."},
+ {t:"HANGER — FIELD NOTE", by:"DR. M. FELD", b:"The third one does not move at all until it does. It goes up into the ceiling ice and freezes in, and the only tell is the frost — it grows downward in spires from a body heat that ought not to be up there.\n\nIt drops on sound underneath it. Look up. That is the entire counter, and on a deck this dark it is not much of one."},
+ {t:"BLOOM — FIELD NOTE", by:"DR. M. FELD", b:"Not an animal. A stalk with a light organ, rooted through the plate, and the only reason anyone can see anything on 8.\n\nIt shuts when it hears you. A loud stop anywhere near a bloom closes it for a minute or more, and a deck where you have been careless is a deck you cross in the dark.\n\nThe wing lights itself in proportion to how quietly you move through it. I do not think anything designed that. I think it is just true."},
+ {t:"ATRIUM — GLASS", by:"K. ODUYA, DECK TECH", b:"Panes went inward. All of them, in about a second and a half, when the pressure differential hit.\n\nThe shards froze into the surface where they landed so the atrium floor is glass in ice. You will not slow down on it and you will not cut yourself on it. You will simply announce yourself."},
+ {t:"MELT FLOOR — WARNING", by:"STRUCTURAL, AUTOMATED", b:"HAZARD — STANDING MELTWATER — SUBLEVEL 8 SECTOR G\nSurface not frozen through. Personnel entering will experience rapid deceleration and immersion.\n\nCORE TEMPERATURE ADVISORY: exposure at this depth without a sealed suit reduces safe working time to under nine minutes. Shivering onset should be treated as a hard abort criterion, not a warning."},
+ {t:"SECURE ROW — HATCH LOG", by:"SECURITY, AUTOMATED", b:"ALL HATCHES SECURE ROW: SEALED 03:12, AUTOMATIC, PRESSURE EVENT\nCARDS ISSUED AND NOT RETURNED: 4\nLAST CARD MOVEMENT: 03:19, HATCH 8-H-3, INBOUND\n\nNo outbound movement is recorded on any card after 03:19."},
+ {t:"SPINE — RUN NOTE", by:"K. ODUYA, DECK TECH", b:"You can cross the whole wing on the spine in two pushes. I have done it. It is the best thing about working down here, honestly, that long clean run with the lights going past.\n\nI do not think I would do it now. Two pushes means two stops, and both of them are against a bulkhead at the end of a hundred-metre run, and I have heard what that sounds like from the far end."},
+ {t:"VANCE — PERSONAL 1", by:"DR. E. VANCE", b:"The compound holds in the cold. That is the entire finding and it is enormous. Tissue that would necrose in an hour at ambient sits indefinitely at minus sixty and resumes on thaw as though no time passed at all.\n\nWhat I have not written in the formal record: it does not simply resume. It resumes changed, and the change is in the direction the tissue was already going."},
+ {t:"VANCE — PERSONAL 2", by:"DR. E. VANCE", b:"Feld asked me today what happens to the specimen if the loop fails. I gave her the truthful answer, which is that it thaws, and I watched her decide that meant it dies.\n\nI have had a bay on 8 for nine weeks. Nothing in it is dying. Everything in it is waiting, and it is waiting very well."},
+ {t:"VANCE — PERSONAL 3", by:"DR. E. VANCE", b:"They will write that the loop failure was an accident and that the wing was lost. Both statements are administratively true.\n\nWhat actually happened is that the coldest room in Halden opened and everything I had been keeping in it went out into eleven metres of new ice with nothing to eat and no light and no sound but the plate, and it has had eleven days to learn the floor.\n\nI would very much like to know what it has learned. I am not going to go and find out."},
+ {t:"TERMINUS — LAST ENTRY", by:"K. ODUYA, DECK TECH", b:"Made it to the terminus. Lift is dead, obviously, but the shaft ladder is clear and I can hear air moving up there.\n\nI am going to write down the thing I worked out, in case somebody comes down after me and finds this before they find out the hard way.\n\nIt is not about being quiet. You cannot be quiet, the deck will not let you. It is about being loud somewhere you are not. Throw something. Set a jet going. Then move while the whole wing is looking at the place you threw it.\n\nGood luck. Take the grit patches. Always take the grit patches."}
+];
+
+/* --------------------------------------------------------- deck helpers */
+function inB(l,x,y){return x>=0&&y>=0&&x<l.w&&y<l.h;}
+function tileAt(l,x,y,broken){
+  if(!inB(l,x,y)) return T.WALL;
+  var i=y*l.w+x, t=l.map[i];
+  if(t===T.THIN){ var b=l.thinBit[i]; if(b!==undefined && (broken>>>b)&1) return T.HOLE; }
+  return t;
+}
+
+/* ---------------------------------------------------------- THE SLIDE
+   One implementation, used by both the BFS solver and the live game. If
+   these ever diverge, the puzzle stops being the puzzle you were shown. */
+/* Cycle detection scratch. A stamped buffer instead of a fresh object per
+   call — this runs a few million times per deck build and the allocation was
+   most of the cost. Bumping the stamp is exactly `seen={}`. */
+var _vis=null, _visN=0, _stamp=0;
+function visBuf(n){
+  if(!_vis||_visN<n){ _vis=new Int32Array(n); _visN=n; _stamp=0; }
+  if(_stamp>2000000000){ _vis.fill(0); _stamp=0; }
+  return _vis;
+}
+function stepSlide(l,st,d){
+  var x=st.x, y=st.y, broken=st.broken, opened=st.opened, kmask=st.kmask;
+  var kused=st.kused||0;
+  var vis=visBuf(l.w*l.h*4), stamp=++_stamp;
+  var path=[], steps=0, ev=[];
+  var stopKind="none", dead=null, spin=false;
+  for(;;){
+    if(++steps>420){ spin=true; break; }
+    var vk=(y*l.w+x)*4+d;
+    if(vis[vk]===stamp){ spin=true; break; }
+    vis[vk]=stamp;
+
+    var nx=x+DX[d], ny=y+DY[d];
+    var nt=tileAt(l,nx,ny,broken);
+
+    /* sealed hatch — a card opens it, and you stop against it either way */
+    if(nt===T.LOCK){
+      var li=l.lockBit[ny*l.w+nx];
+      if(li!==undefined && !((opened>>>li)&1)){
+        if(kmask){
+          var kb=0; while(kb<24 && !((kmask>>>kb)&1)) kb++;
+          kmask&=~(1<<kb); opened|=(1<<li);
+          stopKind="unlock"; ev.push({k:"unlock",x:nx,y:ny});
+        } else { stopKind="wall"; }
+        break;
+      }
+    } else if(TILE[nt].solid){
+      if(TILE[nt].bounce){ d=(d+2)&3; ev.push({k:"drum",x:nx,y:ny}); continue; }
+      stopKind="wall"; break;
+    }
+
+    /* leaving a fracture opens it behind you */
+    var ci=y*l.w+x;
+    if(l.map[ci]===T.THIN){
+      var cb=l.thinBit[ci];
+      if(cb!==undefined && !((broken>>>cb)&1)){ broken|=(1<<cb); ev.push({k:"crack",x:x,y:y}); stamp=++_stamp; }
+    }
+
+    x=nx; y=ny;
+    path.push({x:x,y:y,d:d});
+
+    if(nt===T.HOLE){ dead="shaft"; break; }
+    if(nt===T.GLASS) ev.push({k:"glass",x:x,y:y});
+
+    /* a card lying on the deck is taken in passing */
+    var kk=l.keyBit?l.keyBit[y*l.w+x]:undefined;
+    if(kk!==undefined && !((kmask>>>kk)&1) && !((kused>>>kk)&1)){ kmask|=(1<<kk); kused|=(1<<kk); ev.push({k:"key",x:x,y:y}); }
+
+    var td=TILE[nt];
+    if(td.stop){
+      stopKind = nt===T.LIFT?"lift" : nt===T.SLUSH?"slush" : nt===T.HEAT?"heat" : "grit";
+      break;
+    }
+    if(td.vane){ if(td.redirect!==d){ d=td.redirect; ev.push({k:"vane",x:x,y:y}); } }
+    else if(td.mirror){ var nd=(td.mirror===1?MIRA:MIRB)[d]; if(nd!==d){ d=nd; ev.push({k:"mirror",x:x,y:y}); } }
+  }
+  /* stopping on a fracture drops you through it */
+  if(!dead && !spin && l.map[y*l.w+x]===T.THIN) dead="collapse";
+  return {path:path, x:x, y:y, dir:d, broken:broken, opened:opened, kmask:kmask, kused:kused,
+          stop:stopKind, dead:dead, spin:spin, ev:ev, len:path.length};
+}
+
+/* -------------------------------------------------------------- SOLVER
+   Breadth-first over (position, fractures opened, hatches opened, cards
+   held). Returns exact par, plus every tile a legal route ever touches —
+   which is what item placement uses, so nothing can land where you cannot
+   reach it. */
+/* State key packed into one exact integer: position (10 bits) | fractures
+   opened (16) | hatches opened (8) | cards held (8). Comfortably inside the
+   53-bit exact-integer range, and a Set of numbers beats a map of strings by
+   enough to pay for the refinement pass below. */
+function stateKey(l,s){
+  return (s.y*l.w+s.x) + s.broken*1024 + s.opened*67108864 + s.kmask*17179869184;
+}
+function solveDeck(l,cap){
+  cap=cap||120000;
+  var start={x:l.spawn.x,y:l.spawn.y,broken:0,opened:0,kmask:0,kused:0};
+  var seen=new Set(), q=[{s:start,n:0}], head=0, nodes=0, best=-1;
+  seen.add(stateKey(l,start));
+  var reach={}; reach[l.spawn.y*l.w+l.spawn.x]=1;
+  while(head<q.length){
+    var cur=q[head++];
+    if(++nodes>cap) return {par:best,over:true,reach:reach,nodes:nodes};
+    /* the queue is FIFO so cur.n never decreases — once a route this short
+       cannot exist, no later state can beat it either */
+    if(best>=0 && cur.n>=best) break;
+    for(var d=0;d<4;d++){
+      var r=stepSlide(l,cur.s,d);
+      if(r.spin||r.len===0) continue;
+      for(var i=0;i<r.path.length;i++) reach[r.path[i].y*l.w+r.path[i].x]=1;
+      if(r.dead) continue;
+      if(r.stop==="lift"){ if(best<0||cur.n+1<best) best=cur.n+1; continue; }
+      var ns={x:r.x,y:r.y,broken:r.broken,opened:r.opened,kmask:r.kmask,kused:r.kused};
+      var k=stateKey(l,ns);
+      if(!seen.has(k)){ seen.add(k); q.push({s:ns,n:cur.n+1}); }
+    }
+  }
+  return {par:best,reach:reach,nodes:nodes};
+}
+
+/* ------------------------------------------------------------- SAFETY
+   solveDeck proves a route exists FROM THE SPAWN. It does not prove you
+   cannot destroy that route, and on this deck you can — permanently and
+   with no way to tell:
+
+     · a fracture is one-way. Cross one going after a datapad and it is a
+       shaft behind you, and it may have been the only way back to the lift.
+     · a sealed hatch is something you STOP AGAINST. Spend a card on it and
+       you now slide straight through where your brake used to be.
+
+   Both are irreversible and invisible. Measured on the decks as they shipped,
+   56% of every state reachable on SECURE ROW could no longer reach the lift —
+   you wander a dead deck until the cold takes you, and the cold gets blamed.
+
+   So: enumerate every state reachable from the spawn, walk the graph BACKWARDS
+   from every state that can step onto the lift, and count what the reverse
+   walk never touches. Those are the dead states. A deck ships with none. */
+function deadStates(l,cap){
+  cap=cap||30000;
+  var idx=new Map(), st=[], edge=[], toLift=[];
+  function idOf(s){
+    var k=stateKey(l,s);
+    var v=idx.get(k);
+    if(v!==undefined) return v;
+    v=st.length; idx.set(k,v); st.push(s); edge.push([]); toLift.push(false);
+    return v;
+  }
+  var q=[idOf({x:l.spawn.x,y:l.spawn.y,broken:0,opened:0,kmask:0,kused:0})], head=0;
+  while(head<q.length){
+    if(st.length>cap) return -1;          /* too big to judge — treat as unproved */
+    var i=q[head++], s=st[i];
+    for(var d=0;d<4;d++){
+      var r=stepSlide(l,s,d);
+      if(r.spin||r.len===0||r.dead) continue;
+      if(r.stop==="lift"){ toLift[i]=true; continue; }
+      var before=st.length;
+      var j=idOf({x:r.x,y:r.y,broken:r.broken,opened:r.opened,kmask:r.kmask,kused:r.kused});
+      edge[i].push(j);
+      if(j>=before) q.push(j);
+    }
+  }
+  var rev=[]; for(var i=0;i<st.length;i++) rev.push([]);
+  for(var i=0;i<st.length;i++) for(var e=0;e<edge[i].length;e++) rev[edge[i][e]].push(i);
+  var good=[], q2=[];
+  for(var i=0;i<st.length;i++){ good[i]=!!toLift[i]; if(good[i]) q2.push(i); }
+  for(var h=0;h<q2.length;h++){
+    var back=rev[q2[h]];
+    for(var b=0;b<back.length;b++) if(!good[back[b]]){ good[back[b]]=true; q2.push(back[b]); }
+  }
+  var dead=0;
+  for(var i=0;i<st.length;i++) if(!good[i]) dead++;
+  return dead;
+}
+
+/* ============================ GENERATION =================================
+   Carve, sprinkle, prove. A deck only ships if the solver walks it. */
+function carve(l,rnd,style){
+  var w=l.w,h=l.h,m=l.map;
+  for(var i=0;i<w*h;i++) m[i]=T.WALL;
+  var rooms=[];
+  function room(x,y,rw,rh){
+    x=clamp(x,1,w-2); y=clamp(y,1,h-2);
+    rw=Math.min(rw,w-1-x); rh=Math.min(rh,h-1-y);
+    if(rw<2||rh<2) return null;
+    for(var yy=y;yy<y+rh;yy++) for(var xx=x;xx<x+rw;xx++) m[yy*w+xx]=T.ICE;
+    var r={x:x,y:y,w:rw,h:rh,cx:(x+(rw>>1)),cy:(y+(rh>>1))};
+    rooms.push(r); return r;
+  }
+  function corr(ax,ay,bx,by,thick){
+    thick=thick||1;
+    var x=ax,y=ay,guard=0;
+    while((x!==bx||y!==by)&&guard++<600){
+      if(x!==bx) x+=Math.sign(bx-x); else y+=Math.sign(by-y);
+      for(var t=0;t<thick;t++){
+        var yy=clamp(y+t,1,h-2), xx=clamp(x+t,1,w-2);
+        m[yy*w+x]=T.ICE; m[y*w+xx]=T.ICE;
+      }
+    }
+  }
+  if(style==="hall"){
+    room(2,2,w-4,h-4);
+    for(var i=0;i<7;i++){
+      var bx=2+((rnd()*(w-8))|0), by=2+((rnd()*(h-8))|0);
+      var bw=2+((rnd()*4)|0), bh=2+((rnd()*4)|0);
+      for(var yy=by;yy<by+bh&&yy<h-2;yy++) for(var xx=bx;xx<bx+bw&&xx<w-2;xx++) m[yy*w+xx]=T.WALL;
+    }
+  } else if(style==="gallery"){
+    var n=5+((rnd()*3)|0);
+    for(var i=0;i<n;i++){
+      var rw=4+((rnd()*7)|0), rh=4+((rnd()*6)|0);
+      room(1+((rnd()*(w-rw-2))|0), 1+((rnd()*(h-rh-2))|0), rw, rh);
+    }
+    for(var i=1;i<rooms.length;i++) corr(rooms[i-1].cx,rooms[i-1].cy,rooms[i].cx,rooms[i].cy,1);
+  } else if(style==="store"){
+    room(2,2,w-4,h-4);
+    for(var ax=4;ax<w-4;ax+=3){
+      for(var yy=3;yy<h-3;yy++) if(rnd()<0.72) m[yy*w+ax]=T.WALL;
+    }
+  } else if(style==="walk"){
+    var sy=(h>>1)-1;
+    room(2,sy,w-4,3);
+    for(var i=0;i<5;i++){
+      var rw=4+((rnd()*6)|0), rh=3+((rnd()*4)|0);
+      var r=room(2+((rnd()*(w-rw-4))|0), rnd()<0.5?2:h-rh-2, rw, rh);
+      if(r) corr(r.cx,r.cy,r.cx,sy+1,1);
+    }
+  } else if(style==="span"){
+    var n=4+((rnd()*3)|0);
+    for(var i=0;i<n;i++){
+      var rw=5+((rnd()*7)|0), rh=5+((rnd()*6)|0);
+      room(1+((rnd()*(w-rw-2))|0), 1+((rnd()*(h-rh-2))|0), rw, rh);
+    }
+    for(var i=1;i<rooms.length;i++) corr(rooms[i-1].cx,rooms[i-1].cy,rooms[i].cx,rooms[i].cy,2);
+  } else if(style==="atrium"){
+    room(3,3,w-6,h-6);
+    room(1,(h>>1)-1,w-2,3);
+    room((w>>1)-1,1,3,h-2);
+    for(var i=0;i<9;i++){
+      var bx=4+((rnd()*(w-9))|0), by=4+((rnd()*(h-9))|0);
+      var bw=1+((rnd()*3)|0), bh=1+((rnd()*3)|0);
+      for(var yy=by;yy<by+bh&&yy<h-2;yy++) for(var xx=bx;xx<bx+bw&&xx<w-2;xx++) m[yy*w+xx]=T.WALL;
+    }
+  } else if(style==="melt"){
+    var n=4+((rnd()*3)|0);
+    for(var i=0;i<n;i++){
+      var rw=6+((rnd()*7)|0), rh=5+((rnd()*6)|0);
+      room(1+((rnd()*(w-rw-2))|0), 1+((rnd()*(h-rh-2))|0), rw, rh);
+    }
+    for(var i=1;i<rooms.length;i++) corr(rooms[i-1].cx,rooms[i-1].cy,rooms[i].cx,rooms[i].cy,2);
+    room(2,h-5,w-4,3);
+  } else { /* row */
+    room(2,(h>>1)-1,w-4,3);
+    for(var cx=4;cx<w-4;cx+=5){
+      room(cx,2,4,(h>>1)-3);
+      room(cx,(h>>1)+2,4,(h>>1)-4);
+      corr(cx+1,(h>>1),cx+1,3,1);
+      corr(cx+1,(h>>1),cx+1,h-4,1);
+    }
+  }
+  /* seal the shell */
+  for(var x=0;x<w;x++){ m[x]=T.WALL; m[(h-1)*w+x]=T.WALL; }
+  for(var y=0;y<h;y++){ m[y*w]=T.WALL; m[y*w+w-1]=T.WALL; }
+  l.rooms=rooms;
+}
+
+function floodFloor(l,sx,sy){
+  var seenF={}, q=[[sx,sy]], out=[];
+  seenF[sy*l.w+sx]=1;
+  while(q.length){
+    var c=q.pop(); out.push(c);
+    for(var d=0;d<4;d++){
+      var nx=c[0]+DX[d], ny=c[1]+DY[d];
+      if(!inB(l,nx,ny)) continue;
+      var i=ny*l.w+nx;
+      if(seenF[i]) continue;
+      if(TILE[l.map[i]].solid) continue;
+      seenF[i]=1; q.push([nx,ny]);
+    }
+  }
+  return {cells:out,set:seenF};
+}
+
+/* --------------------------------------------------------- deck builder */
+function neutralize(l,kind){
+  var c={w:l.w,h:l.h,map:new Uint8Array(l.map),spawn:l.spawn,lift:l.lift,
+         thinBit:l.thinBit,lockBit:l.lockBit,keyBit:l.keyBit};
+  var repl={thin:[T.THIN,T.ICE],drum:[T.DRUM,T.WALL],vane:[-1,T.ICE],
+            mirror:[-2,T.ICE],slush:[T.SLUSH,T.ICE],lock:[T.LOCK,T.ICE]}[kind];
+  if(!repl) return null;
+  for(var i=0;i<c.map.length;i++){
+    var t=c.map[i];
+    if(repl[0]===-1){ if(TILE[t].vane) c.map[i]=T.ICE; }
+    else if(repl[0]===-2){ if(TILE[t].mirror) c.map[i]=T.ICE; }
+    else if(t===repl[0]) c.map[i]=repl[1];
+  }
+  if(kind==="thin"){ c.thinBit={}; }
+  if(kind==="lock"){ c.lockBit={}; }
+  return c;
+}
+
+/* ---------------------------------------------------------- REFINEMENT
+   A random sprinkle almost never produces a long route. Open ice means the
+   lift is four pushes away, and waiting for a draw that happens to be
+   sixteen means waiting forever — the strict par window was unreachable on
+   every deck past the atrium, and the spine never hit it at all.
+
+   So: hill-climb instead of re-roll. Take a deck the solver already walks,
+   weld a bulkhead (or scatter grit, or stand a drum) across a lane some
+   legal route uses, and re-prove it. Keep the change only if proved par went
+   UP and the deck still solves inside the window. Nothing here weakens the
+   guarantee — the deck that ships is still one the solver walked end to end.
+   Refinement only changes which proved deck that is. */
+function refineDeck(l,rnd,sol,minPar,maxPar,budget){
+  var cur=sol, used=0, fails=0;
+  var hasDrum=l.def.mechs.indexOf("drum")>=0;
+  while(cur.par<minPar && used<budget && fails<60){
+    /* only tiles a legal route actually crosses are worth touching */
+    var cand=[];
+    for(var k in cur.reach){
+      var i=+k;
+      if(l.map[i]!==T.ICE) continue;
+      if(l.keyBit[i]!==undefined) continue;
+      var x=i%l.w, y=(i/l.w)|0;
+      if(Math.abs(x-l.spawn.x)<=1&&Math.abs(y-l.spawn.y)<=1) continue;
+      if(Math.abs(x-l.lift.x)<=1&&Math.abs(y-l.lift.y)<=1) continue;
+      cand.push(i);
+    }
+    if(!cand.length) break;
+    var ix=cand[(rnd()*cand.length)|0], was=l.map[ix], roll=rnd();
+    l.map[ix] = roll<0.62 ? T.WALL : (roll<0.86||!hasDrum) ? T.GRIT : T.DRUM;
+    var ns=solveDeck(l); used++;
+    if(ns.par<0||ns.over||ns.par<cur.par||ns.par>maxPar){ l.map[ix]=was; fails++; }
+    else if(ns.par===cur.par){
+      /* plateau. Keeping some no-change welds is what lets the climb walk out
+         of a layout where every single weld happens to be neutral — without
+         it the search stalls a few pushes short on exactly the big decks that
+         need the length most. Still counted as a failure so it terminates. */
+      if(rnd()<0.5) cur=ns; else l.map[ix]=was;
+      fails++;
+    }
+    else { cur=ns; fails=0; }
+  }
+  cur.used=used;
+  return cur;
+}
+
+function buildDeck(li){
+  var def=LEVELS[li];
+  var attempt=0, l=null;
+  /* shared across the whole build so a run of hopeless seeds cannot stall */
+  var refineLeft=5200;
+  /* Staged relaxation. Solvability and a proved par are NEVER relaxed; only
+     the essentiality screen and the par window are, and only after the strict
+     stage has had a fair run. The decks with five mechanics on them cannot
+     always satisfy every screen at once. */
+  while(attempt<340){
+    var rnd=mulberry32(def.seed+attempt*7919);
+    attempt++;
+    /* Stage 2 drops the unbreakability proof, so it is worth searching a long
+       time before settling for it — a deck you can soft-lock is a worse deck
+       than a short one. THE SPINE needs most of this budget. */
+    var stage = attempt<=80?0 : attempt<=300?1 : 2;
+    var minPar=def.minPar, maxPar=def.maxPar;
+    if(stage===2){ minPar=Math.max(4,Math.round(def.minPar*0.62)); maxPar=Math.round(def.maxPar*1.5); }
+    l={idx:li,def:def,w:def.w,h:def.h,map:new Uint8Array(def.w*def.h),
+       thinBit:{},lockBit:{},keyBit:{},lamps:[],items:[],mons:[],hangers:[],
+       broken:0,opened:0,name:def.name,sub:def.sub};
+    carve(l,rnd,def.style);
+
+    /* keep only the largest connected floor region */
+    var floors=[];
+    for(var i=0;i<l.map.length;i++) if(!TILE[l.map[i]].solid) floors.push(i);
+    if(floors.length<70) continue;
+    var bestSet=null,bestN=0,claimed={};
+    for(var fi=0;fi<floors.length;fi++){
+      var f=floors[fi]; if(claimed[f]) continue;
+      var ff=floodFloor(l,f%l.w,(f/l.w)|0);
+      for(var c=0;c<ff.cells.length;c++) claimed[ff.cells[c][1]*l.w+ff.cells[c][0]]=1;
+      if(ff.cells.length>bestN){ bestN=ff.cells.length; bestSet=ff; }
+    }
+    if(!bestSet||bestN<60) continue;
+    for(var i=0;i<l.map.length;i++) if(!TILE[l.map[i]].solid && !bestSet.set[i]) l.map[i]=T.WALL;
+    var open=bestSet.cells.slice();
+
+    /* spawn and lift, as far apart as a few samples can manage */
+    var sp=open[(rnd()*open.length)|0], bestD=-1, lift=null;
+    for(var t=0;t<Math.min(open.length,220);t++){
+      var c2=open[(rnd()*open.length)|0];
+      var dd=dist2(sp[0],sp[1],c2[0],c2[1]);
+      if(dd>bestD){ bestD=dd; lift=c2; }
+    }
+    if(!lift||bestD<64) continue;
+    l.spawn={x:sp[0],y:sp[1]}; l.lift={x:lift[0],y:lift[1]};
+    l.map[sp[1]*l.w+sp[0]]=T.GRIT;
+    l.map[lift[1]*l.w+lift[0]]=T.LIFT;
+
+    /* sprinkle. order matters: brakes first, then hazards, then routers */
+    var pool=[];
+    for(var ci=0;ci<open.length;ci++){
+      var cx=open[ci][0],cy=open[ci][1],idx=cy*l.w+cx;
+      if(l.map[idx]!==T.ICE) continue;
+      if(Math.abs(cx-sp[0])<=1&&Math.abs(cy-sp[1])<=1) continue;
+      if(Math.abs(cx-lift[0])<=1&&Math.abs(cy-lift[1])<=1) continue;
+      pool.push(idx);
+    }
+    shuffle(pool,rnd);
+    var pi=0;
+    function take(n){ var out=[]; while(n-->0&&pi<pool.length) out.push(pool[pi++]); return out; }
+    var M=def.mechs, has=function(k){return M.indexOf(k)>=0;};
+
+    take(Math.round(pool.length*def.grit)).forEach(function(ix){ l.map[ix]=T.GRIT; });
+    if(has("thin")){
+      var tn=Math.min(13,4+((rnd()*7)|0)), b=0;
+      take(tn).forEach(function(ix){ l.map[ix]=T.THIN; l.thinBit[ix]=b++; });
+    }
+    if(has("hole")) take(2+((rnd()*4)|0)).forEach(function(ix){ l.map[ix]=T.HOLE; });
+    if(has("drum")) take(5+((rnd()*8)|0)).forEach(function(ix){ l.map[ix]=T.DRUM; });
+    if(has("slush")){
+      /* Six to fifteen pools read as standing water everywhere rather than as
+         a hazard you route around. Roughly halved — and halved again on the
+         decks where meltwater is not the signature and was just clutter. */
+      var sn=(def.sig==="slush") ? 3+((rnd()*4)|0) : 2+((rnd()*3)|0);
+      take(sn).forEach(function(ix){ l.map[ix]=T.SLUSH; });
+    }
+    if(has("glass")) take(5+((rnd()*9)|0)).forEach(function(ix){ l.map[ix]=T.GLASS; });
+    if(has("vane")) take(3+((rnd()*4)|0)).forEach(function(ix){ l.map[ix]=T.VANE_E+((rnd()*4)|0); });
+    if(has("mirror")) take(4+((rnd()*5)|0)).forEach(function(ix){ l.map[ix]=rnd()<0.5?T.MIRR_A:T.MIRR_B; });
+    if(has("lock")){
+      var ln=2+((rnd()*2)|0), lb=0, kb=0;
+      take(ln).forEach(function(ix){ l.map[ix]=T.LOCK; l.lockBit[ix]=lb++; });
+      /* Cards go where a route carrying no card can already get to. Opening a
+         hatch only ever adds reach, never takes it away, so ground you can
+         cross with the row sealed is still ground you can cross once it is
+         not — which makes every card on the deck collectable by construction
+         rather than by luck. Scattering them blind put four of them on
+         SECURE ROW where nothing could ever touch them. */
+      var pre=solveDeck(l,60000), want=ln+1;
+      for(var t=pi;t<pool.length&&want>0;t++){
+        var kx=pool[t];
+        if(l.map[kx]!==T.ICE||!pre.reach[kx]) continue;
+        /* Lay the card on plate. T.PLATE had a texture, a map colour and a
+           renderer case and was generated nowhere — this is what it was for:
+           a card you can see from across the deck and stop on quietly instead
+           of one you can only snatch while sliding past. Converting the tile
+           cannot strand the card, since a route that crossed it still enters
+           it; it just stops there now. The solve below is the authority. */
+        l.keyBit[kx]=kb++; l.map[kx]=T.PLATE; want--;
+      }
+      if(want>0) continue;   /* not enough reachable ground to lay the cards on */
+    }
+
+    /* prove it */
+    var sol=solveDeck(l);
+    if(sol.par<0||sol.over) continue;
+    if(sol.par>maxPar) continue;
+    /* Screen for breakability BEFORE spending any climb budget on this seed —
+       an unbreakable deck is far rarer than an in-window one, so testing it
+       first is what keeps the search affordable. */
+    if(stage<2 && deadStates(l,30000)!==0) continue;
+    if(sol.par<minPar){
+      /* a one-push deck is not worth climbing from; it has no route to lengthen */
+      if(sol.par<2||refineLeft<=0) continue;
+      sol=refineDeck(l,rnd,sol,minPar,maxPar,Math.min(140,refineLeft));
+      refineLeft-=sol.used||0;
+      if(sol.par<minPar||sol.par>maxPar) continue;
+      /* welding lanes shut can strand you where the base deck could not */
+      if(stage<2 && deadStates(l,30000)!==0) continue;
+    }
+
+    /* and prove the signature mechanic is load-bearing */
+    if(def.sig&&stage===0){
+      var nl=neutralize(l,def.sig);
+      if(nl){
+        var ns=solveDeck(nl,60000);
+        if(ns.par>=0 && !ns.over && ns.par>=sol.par) continue;
+      }
+    }
+    /* Refinement welds lanes shut, and it can weld one shut behind a card.
+       Drop anything stranded — a pickup nothing reaches is a lie on the map,
+       and dropping it cannot change a route that never touched it — then
+       insist the row can still be opened at all. */
+    var kAll=0,kReach=0;
+    for(var kk in l.keyBit){ kAll++; if(sol.reach[kk]) kReach++; else delete l.keyBit[kk]; }
+    if(kAll && kReach<Object.keys(l.lockBit).length) continue;
+
+    l.safe=(stage<2);   /* proved unbreakable above; stage 2 leans on the runtime net */
+
+    l.par=sol.par; l.reach=sol.reach;
+    l.attempts=attempt; l.stage=stage;
+    dressDeck(l,rnd);
+    /* dressing must be semantics-free: the deck you play is the deck proved */
+    var re=solveDeck(l);
+    if(re.par!==sol.par) continue;
+    return l;
+  }
+  /* never ship an unproved deck: fall back to a plain hall that always works */
+  return buildFallback(li);
+}
+
+function buildFallback(li){
+  var def=LEVELS[li];
+  var l={idx:li,def:def,w:21,h:17,map:new Uint8Array(21*17),
+         thinBit:{},lockBit:{},keyBit:{},lamps:[],items:[],mons:[],hangers:[],
+         broken:0,opened:0,name:def.name,sub:def.sub,fallback:true};
+  for(var i=0;i<l.map.length;i++) l.map[i]=T.WALL;
+  for(var y=1;y<16;y++) for(var x=1;x<20;x++) l.map[y*21+x]=T.ICE;
+  /* a hand-laid ladder of brakes: E, S, E, S, E — five pushes, always works */
+  l.spawn={x:2,y:2}; l.lift={x:19,y:15};
+  l.map[2*21+2]=T.GRIT;
+  l.map[2*21+10]=T.GRIT;
+  l.map[8*21+10]=T.GRIT;
+  l.map[8*21+18]=T.GRIT;
+  l.map[15*21+19]=T.LIFT;
+  var sol=solveDeck(l);
+  l.par=sol.par>0?sol.par:5; l.reach=sol.reach; l.attempts=0; l.stage=9;
+  dressDeck(l,mulberry32(def.seed));
+  return l;
+}
+
+/* ------------------------------------ props, light, monsters, pickups */
+function dressDeck(l,rnd){
+  var def=l.def;
+  /* every tile a legal route can touch — nothing may be placed off it */
+  var reach=[];
+  for(var k in l.reach){ var i=+k; if(!TILE[l.map[i]].solid) reach.push(i); }
+  shuffle(reach,rnd);
+  var used={};
+  used[l.spawn.y*l.w+l.spawn.x]=1; used[l.lift.y*l.w+l.lift.x]=1;
+  function pick(minFromSpawn){
+    for(var t=0;t<reach.length;t++){
+      var ix=reach[t]; if(used[ix]) continue;
+      var x=ix%l.w, y=(ix/l.w)|0;
+      if(TILE[l.map[ix]].solid) continue;
+      if(l.map[ix]===T.HOLE||l.map[ix]===T.LIFT) continue;
+      if(l.keyBit[ix]!==undefined) continue;
+      if(minFromSpawn && dist2(x,y,l.spawn.x,l.spawn.y)<minFromSpawn*minFromSpawn) continue;
+      used[ix]=1; return {x:x,y:y,i:ix};
+    }
+    return null;
+  }
+
+  /* cards on the deck, from the structural placement */
+  for(var kk in l.keyBit){
+    var ix=+kk;
+    l.items.push({type:"key",x:ix%l.w+0.5,y:((ix/l.w)|0)+0.5,got:false,bit:l.keyBit[ix]});
+  }
+
+  /* maintenance logs */
+  var base=(l.idx*2)%LOGS.length;
+  for(var n=0;n<def.logs;n++){
+    var p=pick(3); if(!p) break;
+    l.items.push({type:"log",x:p.x+0.5,y:p.y+0.5,got:false,log:(base+n)%LOGS.length});
+  }
+  /* kit */
+  var nSpike=2+((rnd()*2)|0), nBolt=1+((rnd()*2)|0), nCell=1+((rnd()*2)|0);
+  for(var n=0;n<nSpike;n++){ var p=pick(2); if(p) l.items.push({type:"spike",x:p.x+0.5,y:p.y+0.5,got:false}); }
+  for(var n=0;n<nBolt;n++){ var p=pick(2); if(p) l.items.push({type:"bolt",x:p.x+0.5,y:p.y+0.5,got:false}); }
+  for(var n=0;n<nCell;n++){ var p=pick(2); if(p) l.items.push({type:"cell",x:p.x+0.5,y:p.y+0.5,got:false}); }
+  if(l.idx>=3){ var p=pick(4); if(p) l.items.push({type:"med",x:p.x+0.5,y:p.y+0.5,got:false}); }
+
+  /* Heat vents — the only way back up in temperature. They are cut from GRIT
+     and never from ice: grit and heat both stop you quietly, so the deck the
+     solver proved is byte-for-byte the deck you are handed. Dressing a proved
+     level must never change what a slide does. */
+  /* Vents were counted off depth alone, so MELTWATER FLOOR — the deck built
+     entirely around soaking you — got two. Count the meltwater as well. */
+  var nSlush=0;
+  for(var si=0;si<l.map.length;si++) if(l.map[si]===T.SLUSH) nSlush++;
+  var nHeat=1+((l.idx/4)|0)+((nSlush/4)|0);
+  for(var t=0;t<reach.length&&nHeat>0;t++){
+    var ix=reach[t];
+    if(used[ix]||l.map[ix]!==T.GRIT) continue;
+    var hx=ix%l.w, hy=(ix/l.w)|0;
+    if(dist2(hx,hy,l.spawn.x,l.spawn.y)<16) continue;
+    l.map[ix]=T.HEAT; used[ix]=1; nHeat--;
+  }
+
+  /* blooms: living light. quiet play keeps them open. */
+  var nB=3+((l.w*l.h)/190)|0;
+  for(var n=0;n<nB;n++){
+    var p=pick(0); if(!p) break;
+    if(l.map[p.i]!==T.ICE&&l.map[p.i]!==T.GRIT) continue;
+    l.lamps.push({x:p.x+0.5,y:p.y+0.5,r:7.4+rnd()*2.6,cr:1.0,cg:0.82,cb:0.42,
+                  mode:"bloom",shut:0,phase:rnd()*7});
+  }
+  /* a handful of emergency fixtures that nothing can close */
+  var nE=2+((l.idx/3)|0);
+  for(var n=0;n<nE;n++){
+    var p=pick(0); if(!p) break;
+    l.lamps.push({x:p.x+0.5,y:p.y+0.5,r:5.2,cr:0.42,cg:0.62,cb:1.0,mode:"emerg",shut:0,phase:rnd()*7});
+  }
+  /* the lift always announces itself */
+  l.lamps.push({x:l.lift.x+0.5,y:l.lift.y+0.5,r:6.5,cr:0.55,cg:1.0,cb:0.72,mode:"lift",shut:0,phase:0});
+
+  /* monsters, well away from where you wake up */
+  var mons=def.mons||{};
+  function far(minD){
+    for(var t=0;t<reach.length;t++){
+      var ix=reach[t], x=ix%l.w, y=(ix/l.w)|0;
+      if(TILE[l.map[ix]].solid||l.map[ix]===T.HOLE) continue;
+      if(dist2(x,y,l.spawn.x,l.spawn.y)<minD*minD) continue;
+      if(used["m"+ix]) continue;
+      used["m"+ix]=1; return {x:x+0.5,y:y+0.5};
+    }
+    return null;
+  }
+  for(var n=0;n<(mons.walker||0);n++){
+    var p=far(11); if(!p) break;
+    l.mons.push(makeMon("walker",p.x,p.y,rnd));
+  }
+  for(var n=0;n<(mons.skitter||0);n++){
+    var p=far(13); if(!p) break;
+    l.mons.push(makeMon("skitter",p.x,p.y,rnd));
+  }
+  for(var n=0;n<(mons.hanger||0);n++){
+    var p=far(9); if(!p) break;
+    var m=makeMon("hanger",p.x,p.y,rnd);
+    m.fused=true; l.mons.push(m);
+    l.hangers.push(((p.y|0)*l.w+(p.x|0)));
+  }
+  buildLightmap(l);
+}
+
+var MONDEF={
+  walker: {hp:1, spd:1.55, huntSpd:2.35, hear:1.0, dmg:34, r:0.42, name:"RIMEWALKER"},
+  skitter:{hp:1, spd:2.2,  huntSpd:6.6,  hear:1.35,dmg:22, r:0.30, name:"SKITTER"},
+  hanger: {hp:1, spd:0.95, huntSpd:1.5,  hear:1.15,dmg:40, r:0.38, name:"HANGER"}
+};
+function makeMon(kind,x,y,rnd){
+  var d=MONDEF[kind];
+  return {kind:kind,x:x,y:y,tx:x,ty:y,mode:"wander",spd:d.spd,r:d.r,
+          anim:rnd?rnd()*6:0, cool:0, fused:false, drop:0, slide:null, sp:0,
+          lost:0, dir:(rnd?(rnd()*4)|0:0), voice:2+ (rnd?rnd()*4:0)};
+}
+
+/* ------------------------------------------------------------ lightmap
+   Bakes the top two visible contributors per tile once; updateLamps()
+   resolves them to live colour every frame so a bloom shutting is cheap. */
+function buildLightmap(l){
+  var n=l.w*l.h;
+  l.lmA=new Int16Array(n); l.lmB=new Int16Array(n);
+  l.lmAv=new Float32Array(n); l.lmBv=new Float32Array(n);
+  l.lmR=new Float32Array(n); l.lmG=new Float32Array(n); l.lmB3=new Float32Array(n);
+  for(var i=0;i<n;i++){ l.lmA[i]=-1; l.lmB[i]=-1; }
+  for(var li=0;li<l.lamps.length;li++) addLampToLightmap(l,li);
+  updateLamps(l,0);
+}
+function addLampToLightmap(l,li){
+  var lp=l.lamps[li], r=lp.r|0;
+  var x0=Math.max(0,(lp.x|0)-r), x1=Math.min(l.w-1,(lp.x|0)+r);
+  var y0=Math.max(0,(lp.y|0)-r), y1=Math.min(l.h-1,(lp.y|0)+r);
+  for(var y=y0;y<=y1;y++) for(var x=x0;x<=x1;x++){
+    var dx=(x+0.5)-lp.x, dy=(y+0.5)-lp.y;
+    var d=Math.sqrt(dx*dx+dy*dy);
+    if(d>lp.r) continue;
+    if(!losClear(l,lp.x,lp.y,x+0.5,y+0.5)) continue;
+    var v=1-(d/lp.r); v*=v;
+    var i=y*l.w+x;
+    if(v>l.lmAv[i]){ l.lmB[i]=l.lmA[i]; l.lmBv[i]=l.lmAv[i]; l.lmA[i]=li; l.lmAv[i]=v; }
+    else if(v>l.lmBv[i]){ l.lmB[i]=li; l.lmBv[i]=v; }
+  }
+}
+function losClear(l,ax,ay,bx,by){
+  var dx=bx-ax, dy=by-ay, n=Math.max(Math.abs(dx),Math.abs(dy))*2.4;
+  if(n<1) return true;
+  var sx=dx/n, sy=dy/n, x=ax, y=ay;
+  for(var i=0;i<n;i++){
+    x+=sx; y+=sy;
+    var tx=x|0, ty=y|0;
+    if(!inB(l,tx,ty)) return false;
+    var t=l.map[ty*l.w+tx];
+    if(TILE[t].solid && !(t===T.LOCK && ((l.opened>>>(l.lockBit[ty*l.w+tx]||0))&1))) {
+      if(Math.abs(tx-(bx|0))<1 && Math.abs(ty-(by|0))<1) return true;
+      return false;
+    }
+  }
+  return true;
+}
+function lampPower(lp,t){
+  if(lp.shut>0) return 0;
+  if(lp.mode==="bloom") return 0.86+0.14*Math.sin(t*1.15+lp.phase);
+  if(lp.mode==="emerg") return 0.55+0.45*(Math.sin(t*2.6+lp.phase)>0.55?1:0.35);
+  if(lp.mode==="lift") return 0.9+0.1*Math.sin(t*3.1);
+  return 1;
+}
+function updateLamps(l,t){
+  var pw=[];
+  for(var i=0;i<l.lamps.length;i++) pw[i]=lampPower(l.lamps[i],t);
+  var n=l.w*l.h;
+  for(var i=0;i<n;i++){
+    var r=0,g=0,b=0;
+    var a=l.lmA[i];
+    if(a>=0){ var lp=l.lamps[a], v=l.lmAv[i]*pw[a]; r+=lp.cr*v; g+=lp.cg*v; b+=lp.cb*v; }
+    var b2=l.lmB[i];
+    if(b2>=0){ var lp2=l.lamps[b2], v2=l.lmBv[i]*pw[b2]*0.7; r+=lp2.cr*v2; g+=lp2.cg*v2; b+=lp2.cb*v2; }
+    l.lmR[i]=r; l.lmG[i]=g; l.lmB3[i]=b;
+  }
+}
+
+/* ==========================================================================
+   BAKED ART — every texture and sprite is drawn once into a canvas and read
+   out as a Uint32Array the software renderer can sample directly.
+   ========================================================================== */
+var bakeCv=null,bakeCx=null;
+function bake(w,h,fn){
+  if(!bakeCv){ bakeCv=document.createElement("canvas"); }
+  bakeCv.width=w; bakeCv.height=h;
+  bakeCx=bakeCv.getContext("2d");
+  if(!bakeCx) return {w:w,h:h,d:new Uint32Array(w*h)};
+  bakeCx.clearRect(0,0,w,h);
+  fn(bakeCx,w,h);
+  var out=new Uint32Array(w*h);
+  try{
+    var id=bakeCx.getImageData(0,0,w,h), p=id.data;
+    for(var i=0;i<w*h;i++){
+      out[i]=(p[i*4+3]<<24)|(p[i*4+2]<<16)|(p[i*4+1]<<8)|p[i*4];
+    }
+  }catch(e){}
+  return {w:w,h:h,d:out};
+}
+function rgb(r,g,b){return "rgb("+(r|0)+","+(g|0)+","+(b|0)+")";}
+function noiseFill(c,w,h,r,g,b,amt,rnd){
+  var id=c.createImageData(w,h),p=id.data;
+  for(var i=0;i<w*h;i++){
+    var n=(rnd()-0.5)*amt;
+    p[i*4]=clamp(r+n,0,255); p[i*4+1]=clamp(g+n,0,255); p[i*4+2]=clamp(b+n,0,255); p[i*4+3]=255;
+  }
+  c.putImageData(id,0,0);
+}
+
+var TEX={}, SPR={};
+function buildArt(){
+  var R=mulberry32(9182736);
+
+  /* ---- walls ---- */
+  TEX.wall=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,44,54,62,26,R);
+    for(var y=0;y<h;y+=16){
+      c.fillStyle="rgba(16,22,28,.75)"; c.fillRect(0,y,w,1);
+      c.fillStyle="rgba(96,116,128,.16)"; c.fillRect(0,y+1,w,1);
+    }
+    for(var x=0;x<w;x+=32){ c.fillStyle="rgba(16,22,28,.6)"; c.fillRect(x,0,1,h); }
+    for(var i=0;i<26;i++){ /* rivets */
+      var x=4+((R()*56)|0), y=4+((R()*56)|0);
+      c.fillStyle="rgba(120,140,152,.35)"; c.fillRect(x,y,2,2);
+      c.fillStyle="rgba(10,14,18,.5)"; c.fillRect(x,y+2,2,1);
+    }
+    /* rime creeping up from the floor */
+    for(var i=0;i<70;i++){
+      var x=(R()*64)|0, y=64-((R()*R()*40)|0);
+      c.fillStyle="rgba(196,224,240,"+(0.05+R()*0.16).toFixed(2)+")";
+      c.fillRect(x,y,1+((R()*3)|0),1+((R()*2)|0));
+    }
+  });
+  TEX.hatch=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,38,44,50,16,R);
+    c.strokeStyle="rgba(150,120,60,.55)"; c.lineWidth=3;
+    c.strokeRect(6,6,52,52);
+    c.fillStyle="rgba(20,26,32,.85)"; c.fillRect(10,10,44,44);
+    c.strokeStyle="rgba(190,150,70,.5)"; c.lineWidth=2;
+    c.beginPath(); c.arc(32,32,11,0,6.284); c.stroke();
+    c.beginPath(); c.moveTo(32,21); c.lineTo(32,43); c.moveTo(21,32); c.lineTo(43,32); c.stroke();
+    c.fillStyle="rgba(210,60,40,.55)"; c.fillRect(28,50,8,4);
+    for(var i=0;i<40;i++){ c.fillStyle="rgba(190,220,238,"+(0.04+R()*0.12).toFixed(2)+")";
+      c.fillRect((R()*64)|0,(R()*64)|0,1,1); }
+  });
+  TEX.drum=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,52,58,44,14,R);
+    for(var y=6;y<64;y+=18){ c.fillStyle="rgba(24,28,20,.7)"; c.fillRect(0,y,w,3);
+      c.fillStyle="rgba(130,148,110,.2)"; c.fillRect(0,y+3,w,1); }
+    c.fillStyle="rgba(180,160,50,.5)"; c.fillRect(8,26,48,12);
+    c.fillStyle="rgba(22,26,18,.8)"; c.font="bold 9px monospace"; c.textAlign="center";
+    c.fillText("CRYO-9",32,35);
+    for(var i=0;i<50;i++){ c.fillStyle="rgba(200,226,240,"+(0.05+R()*0.2).toFixed(2)+")";
+      c.fillRect((R()*64)|0,(R()*64)|0,1,2); }
+  });
+  TEX.lift=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,34,44,44,14,R);
+    c.fillStyle="rgba(90,240,180,.16)"; c.fillRect(8,4,48,56);
+    c.strokeStyle="rgba(120,255,200,.7)"; c.lineWidth=2; c.strokeRect(8,4,48,56);
+    c.fillStyle="rgba(120,255,200,.85)"; c.font="bold 10px monospace"; c.textAlign="center";
+    c.fillText("LIFT",32,34); c.fillText("UP",32,46);
+  });
+
+  /* ---- floors ---- */
+  function iceBase(c,w,h,r,g,b){
+    noiseFill(c,w,h,r,g,b,10,R);
+    for(var i=0;i<18;i++){ /* frozen swirl */
+      c.strokeStyle="rgba(180,220,244,"+(0.03+R()*0.07).toFixed(2)+")"; c.lineWidth=1;
+      c.beginPath();
+      var x=R()*64,y=R()*64;
+      c.moveTo(x,y);
+      for(var s=0;s<5;s++) c.lineTo(x+=(R()-0.5)*22, y+=(R()-0.5)*22);
+      c.stroke();
+    }
+  }
+  TEX.ice=bake(64,64,function(c,w,h){
+    iceBase(c,w,h,26,36,44);
+    for(var i=0;i<10;i++){ /* trapped bubbles */
+      c.fillStyle="rgba(200,236,255,"+(0.06+R()*0.1).toFixed(2)+")";
+      c.beginPath(); c.arc(R()*64,R()*64,0.6+R()*1.6,0,6.284); c.fill();
+    }
+    c.fillStyle="rgba(150,200,230,.05)"; c.fillRect(0,0,64,64);
+  });
+  TEX.grit=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,58,44,32,44,R);
+    for(var i=0;i<420;i++){
+      var v=(R()*90)|0;
+      c.fillStyle="rgba("+(70+v)+","+(48+v*0.6)+","+(30+v*0.3)+",.85)";
+      c.fillRect((R()*64)|0,(R()*64)|0,1+((R()*2)|0),1+((R()*2)|0));
+    }
+  });
+  TEX.thin=bake(64,64,function(c,w,h){
+    iceBase(c,w,h,20,30,40);
+    c.strokeStyle="rgba(210,240,255,.5)"; c.lineWidth=1.4;
+    for(var i=0;i<7;i++){
+      c.beginPath(); var x=32+(R()-0.5)*10,y=32+(R()-0.5)*10; c.moveTo(x,y);
+      var a=R()*6.284;
+      for(var s=0;s<4;s++){ x+=Math.cos(a)*10; y+=Math.sin(a)*10; a+=(R()-0.5)*1.5; c.lineTo(x,y); }
+      c.stroke();
+    }
+    c.fillStyle="rgba(6,10,16,.35)"; c.beginPath(); c.arc(32,32,15,0,6.284); c.fill();
+  });
+  TEX.hole=bake(64,64,function(c,w,h){
+    c.fillStyle="#010305"; c.fillRect(0,0,w,h);
+    for(var i=0;i<30;i++){
+      c.strokeStyle="rgba(90,120,140,"+(0.03+R()*0.06).toFixed(2)+")";
+      c.beginPath(); c.arc(32,32,6+i*1.1,0,6.284); c.stroke();
+    }
+    c.strokeStyle="rgba(190,225,242,.35)"; c.lineWidth=2;
+    c.beginPath(); c.arc(32,32,30,0,6.284); c.stroke();
+  });
+  TEX.slush=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,18,32,42,18,R);
+    for(var i=0;i<24;i++){
+      c.fillStyle="rgba(150,200,224,"+(0.06+R()*0.14).toFixed(2)+")";
+      c.beginPath(); c.ellipse(R()*64,R()*64,2+R()*7,1+R()*3,R()*3,0,6.284); c.fill();
+    }
+    c.fillStyle="rgba(30,70,96,.35)"; c.fillRect(0,0,64,64);
+  });
+  TEX.glass=bake(64,64,function(c,w,h){
+    iceBase(c,w,h,24,32,40);
+    for(var i=0;i<40;i++){
+      c.fillStyle="rgba(215,245,255,"+(0.12+R()*0.4).toFixed(2)+")";
+      c.save(); c.translate(R()*64,R()*64); c.rotate(R()*6.284);
+      c.beginPath(); c.moveTo(0,0); c.lineTo(3+R()*7,1+R()*3); c.lineTo(1+R()*4,4+R()*6); c.closePath(); c.fill();
+      c.restore();
+    }
+  });
+  TEX.heat=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,40,32,28,16,R);
+    for(var y=6;y<58;y+=8){ c.fillStyle="rgba(10,8,8,.8)"; c.fillRect(6,y,52,4);
+      c.fillStyle="rgba(255,150,60,.5)"; c.fillRect(6,y+4,52,2); }
+    c.strokeStyle="rgba(120,100,90,.6)"; c.lineWidth=2; c.strokeRect(4,4,56,56);
+  });
+  TEX.liftfloor=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,26,42,38,12,R);
+    c.strokeStyle="rgba(120,255,200,.55)"; c.lineWidth=3; c.strokeRect(5,5,54,54);
+    c.strokeStyle="rgba(120,255,200,.3)"; c.lineWidth=1; c.strokeRect(13,13,38,38);
+    for(var i=0;i<8;i++){ c.fillStyle="rgba(140,255,210,.3)"; c.fillRect(28,10+i*6,8,2); }
+  });
+  TEX.plate=bake(64,64,function(c,w,h){ noiseFill(c,w,h,42,48,54,16,R);
+    c.strokeStyle="rgba(120,140,152,.3)"; c.strokeRect(3,3,58,58); });
+  function vaneTex(rot){
+    return bake(64,64,function(c,w,h){
+      noiseFill(c,w,h,30,38,46,14,R);
+      c.save(); c.translate(32,32); c.rotate(rot);
+      c.fillStyle="rgba(12,16,20,.85)"; c.fillRect(-26,-26,52,52);
+      for(var i=-3;i<=3;i++){ c.fillStyle="rgba(120,150,170,.3)"; c.fillRect(-26,i*7,52,3); }
+      c.fillStyle="rgba(190,230,255,.55)";
+      for(var i=0;i<5;i++){
+        c.beginPath(); c.moveTo(-16+i*8,10); c.lineTo(-12+i*8,-14); c.lineTo(-8+i*8,10); c.closePath(); c.fill();
+      }
+      c.restore();
+    });
+  }
+  TEX.vane=[vaneTex(-Math.PI/2),vaneTex(0),vaneTex(Math.PI/2),vaneTex(Math.PI)];
+  function mirrTex(flip){
+    return bake(64,64,function(c,w,h){
+      noiseFill(c,w,h,30,36,44,12,R);
+      c.save(); c.translate(32,32); c.rotate(flip?-Math.PI/4:Math.PI/4);
+      c.fillStyle="rgba(150,180,200,.5)"; c.fillRect(-34,-7,68,14);
+      c.fillStyle="rgba(220,244,255,.55)"; c.fillRect(-34,-7,68,3);
+      c.fillStyle="rgba(10,14,18,.7)"; c.fillRect(-34,4,68,3);
+      c.restore();
+      c.strokeStyle="rgba(120,160,185,.25)"; c.strokeRect(2,2,60,60);
+    });
+  }
+  TEX.mirrA=mirrTex(true); TEX.mirrB=mirrTex(false);
+  TEX.ceil=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,17,21,26,12,R);
+    for(var x=0;x<64;x+=21){ c.fillStyle="rgba(8,10,13,.8)"; c.fillRect(x,0,2,64); }
+    for(var y=0;y<64;y+=21){ c.fillStyle="rgba(8,10,13,.8)"; c.fillRect(0,y,64,2); }
+    for(var i=0;i<40;i++){ c.fillStyle="rgba(150,190,215,"+(0.03+R()*0.08).toFixed(2)+")";
+      c.fillRect((R()*64)|0,(R()*64)|0,1,1+((R()*3)|0)); }
+  });
+  TEX.ceilFrost=bake(64,64,function(c,w,h){
+    noiseFill(c,w,h,20,24,28,10,R);
+    for(var i=0;i<24;i++){
+      var x=8+R()*48, len=6+R()*22;
+      c.strokeStyle="rgba(210,238,252,"+(0.25+R()*0.4).toFixed(2)+")"; c.lineWidth=1+R()*2;
+      c.beginPath(); c.moveTo(x,0); c.lineTo(x+(R()-0.5)*5,len); c.stroke();
+    }
+    c.fillStyle="rgba(120,60,60,.12)"; c.fillRect(0,0,64,64);
+  });
+
+  /* ---- sprites ---- */
+  function frostSkin(c,x,y,w2,h2,n){
+    for(var i=0;i<n;i++){
+      c.fillStyle="rgba(214,238,252,"+(0.08+R()*0.3).toFixed(2)+")";
+      c.fillRect(x+R()*w2,y+R()*h2,1,1+((R()*2)|0));
+    }
+  }
+  /* RIMEWALKER — big, clawed into the plate, no eyes at all */
+  function walkerSprite(step){
+    return bake(72,96,function(c,w,h){
+      var sw=Math.sin(step*1.6);
+      c.save(); c.translate(36,0);
+      /* legs — long, jointed, driven through the ice */
+      for(var i=0;i<4;i++){
+        var side=i<2?-1:1, o=(i%2)*1;
+        var hx=side*(9+o*4), hy=52+o*4;
+        var kx=side*(22+o*6)+sw*side*4, ky=68;
+        var fx=side*(26+o*7), fy=94;
+        c.strokeStyle="rgba(126,140,150,1)"; c.lineWidth=4.5;
+        c.beginPath(); c.moveTo(hx,hy); c.lineTo(kx,ky); c.lineTo(fx,fy); c.stroke();
+        c.strokeStyle="rgba(196,224,238,.5)"; c.lineWidth=1.4;
+        c.beginPath(); c.moveTo(hx,hy); c.lineTo(kx,ky); c.stroke();
+        /* claw */
+        c.fillStyle="rgba(232,244,252,.9)";
+        c.beginPath(); c.moveTo(fx-3,fy-3); c.lineTo(fx+3,fy-3); c.lineTo(fx,fy+2); c.closePath(); c.fill();
+      }
+      /* body */
+      c.fillStyle="rgba(96,110,120,1)";
+      c.beginPath(); c.ellipse(0,44,20,26,0,0,6.284); c.fill();
+      c.fillStyle="rgba(72,84,94,1)";
+      c.beginPath(); c.ellipse(0,54,17,17,0,0,6.284); c.fill();
+      /* hunched shoulders */
+      c.fillStyle="rgba(112,128,138,1)";
+      c.beginPath(); c.ellipse(-14,30,10,9,0.4,0,6.284); c.fill();
+      c.beginPath(); c.ellipse(14,30,10,9,-0.4,0,6.284); c.fill();
+      /* head: smooth, featureless, tilted listening */
+      c.save(); c.rotate(sw*0.09);
+      c.fillStyle="rgba(130,146,156,1)";
+      c.beginPath(); c.ellipse(0,20,12,14,0,0,6.284); c.fill();
+      c.fillStyle="rgba(58,66,74,1)";
+      c.beginPath(); c.ellipse(0,26,7,5,0,0,6.284); c.fill(); /* mouth seam only */
+      c.restore();
+      /* frost crust */
+      frostSkin(c,-22,14,44,58,120);
+      c.restore();
+      /* breath vapour */
+      c.fillStyle="rgba(200,225,240,.10)";
+      c.beginPath(); c.ellipse(36,30,14+Math.sin(step)*3,9,0,0,6.284); c.fill();
+    });
+  }
+  SPR.walker=[walkerSprite(0),walkerSprite(1),walkerSprite(2),walkerSprite(3)];
+
+  /* SKITTER — low, flat, committed to the ice */
+  function skitterSprite(step){
+    return bake(64,48,function(c,w,h){
+      var sw=Math.sin(step*2.2);
+      c.save(); c.translate(32,0);
+      for(var i=0;i<8;i++){
+        var side=i<4?-1:1, o=i%4;
+        c.strokeStyle="rgba(58,74,92,1)"; c.lineWidth=2.4;
+        c.beginPath(); c.moveTo(side*5,26+o*3);
+        c.lineTo(side*(15+o*2)+sw*side*3,34+o*2); c.lineTo(side*(17+o*2),46); c.stroke();
+      }
+      c.fillStyle="rgba(30,42,58,1)";
+      c.beginPath(); c.ellipse(0,30,17,12,0,0,6.284); c.fill();
+      c.fillStyle="rgba(52,72,96,1)";
+      c.beginPath(); c.ellipse(0,26,13,9,0,0,6.284); c.fill();
+      /* glossy sheen — the only thing that reads in the dark */
+      c.fillStyle="rgba(170,215,245,.30)";
+      c.beginPath(); c.ellipse(-4,23,7,3.5,-0.3,0,6.284); c.fill();
+      /* blunt eyeless head */
+      c.fillStyle="rgba(66,86,110,1)";
+      c.beginPath(); c.ellipse(0,17,8,7,0,0,6.284); c.fill();
+      c.fillStyle="rgba(180,60,50,.6)";
+      c.beginPath(); c.ellipse(0,20,4,2,0,0,6.284); c.fill();
+      frostSkin(c,-18,14,36,22,40);
+      c.restore();
+    });
+  }
+  SPR.skitter=[skitterSprite(0),skitterSprite(1),skitterSprite(2),skitterSprite(3)];
+
+  /* HANGER — fused above, and what it looks like once it is down */
+  SPR.hangerUp=bake(64,80,function(c,w,h){
+    c.save(); c.translate(32,0);
+    c.fillStyle="rgba(60,72,84,1)";
+    c.beginPath(); c.ellipse(0,14,16,14,0,0,6.284); c.fill();
+    for(var i=0;i<9;i++){
+      var x=-16+i*4;
+      c.strokeStyle="rgba(178,206,224,"+(0.55+R()*0.4).toFixed(2)+")"; c.lineWidth=1.6+R()*1.6;
+      c.beginPath(); c.moveTo(x,20); c.lineTo(x+(R()-0.5)*8,34+R()*30); c.stroke();
+    }
+    frostSkin(c,-18,2,36,30,60);
+    c.restore();
+  });
+  function hangerSprite(step){
+    return bake(64,64,function(c,w,h){
+      var sw=Math.sin(step*1.9);
+      c.save(); c.translate(32,0);
+      for(var i=0;i<6;i++){
+        var a=(i/6)*6.284+sw*0.2;
+        c.strokeStyle="rgba(84,96,108,1)"; c.lineWidth=3;
+        c.beginPath(); c.moveTo(0,40);
+        c.lineTo(Math.cos(a)*18,40+Math.sin(a)*8);
+        c.lineTo(Math.cos(a)*24,62); c.stroke();
+      }
+      c.fillStyle="rgba(70,80,92,1)";
+      c.beginPath(); c.ellipse(0,40,18,15,0,0,6.284); c.fill();
+      c.fillStyle="rgba(96,108,120,1)";
+      c.beginPath(); c.ellipse(0,32,11,10,0,0,6.284); c.fill();
+      c.fillStyle="rgba(150,40,36,.75)";
+      c.beginPath(); c.ellipse(0,36,6,3,0,0,6.284); c.fill();
+      frostSkin(c,-20,24,40,32,70);
+      c.restore();
+    });
+  }
+  SPR.hanger=[hangerSprite(0),hangerSprite(1),hangerSprite(2),hangerSprite(3)];
+
+  /* BLOOM — the light that listens */
+  function bloomSprite(open){
+    return bake(48,72,function(c,w,h){
+      c.save(); c.translate(24,0);
+      for(var i=0;i<7;i++){
+        var a=(i/7)*Math.PI+0.2;
+        c.strokeStyle="rgba(96,64,52,1)"; c.lineWidth=2;
+        c.beginPath(); c.moveTo(0,64); c.lineTo(Math.cos(a)*16,70); c.stroke();
+      }
+      c.strokeStyle="rgba(122,80,64,1)"; c.lineWidth=5;
+      c.beginPath(); c.moveTo(0,66); c.lineTo(0,26); c.stroke();
+      if(open){
+        var g=c.createRadialGradient(0,20,1,0,20,20);
+        g.addColorStop(0,"rgba(255,238,180,1)"); g.addColorStop(0.45,"rgba(240,190,80,.85)");
+        g.addColorStop(1,"rgba(200,140,40,0)");
+        c.fillStyle=g; c.beginPath(); c.arc(0,20,20,0,6.284); c.fill();
+        c.fillStyle="rgba(255,248,220,1)"; c.beginPath(); c.arc(0,20,6,0,6.284); c.fill();
+        for(var i=0;i<6;i++){
+          var a=(i/6)*6.284;
+          c.strokeStyle="rgba(240,200,110,.7)"; c.lineWidth=2;
+          c.beginPath(); c.moveTo(0,22); c.lineTo(Math.cos(a)*13,22+Math.sin(a)*11); c.stroke();
+        }
+      } else {
+        c.fillStyle="rgba(84,62,50,1)";
+        c.beginPath(); c.ellipse(0,22,7,11,0,0,6.284); c.fill();
+        c.fillStyle="rgba(120,92,70,.7)";
+        c.beginPath(); c.ellipse(-2,20,3,8,0,0,6.284); c.fill();
+      }
+      c.restore();
+    });
+  }
+  SPR.bloomOpen=bloomSprite(true); SPR.bloomShut=bloomSprite(false);
+  SPR.emerg=bake(32,32,function(c){
+    c.fillStyle="rgba(40,50,60,1)"; c.fillRect(8,4,16,20);
+    c.fillStyle="rgba(120,190,255,.85)"; c.fillRect(11,7,10,14);
+    c.fillStyle="rgba(200,232,255,1)"; c.fillRect(13,9,6,10);
+  });
+
+  /* items */
+  SPR.log=bake(32,32,function(c){
+    c.fillStyle="rgba(36,46,54,1)"; c.fillRect(7,9,18,15);
+    c.fillStyle="rgba(120,220,240,.9)"; c.fillRect(9,11,14,8);
+    c.fillStyle="rgba(20,28,34,1)"; c.fillRect(10,12,12,1); c.fillRect(10,14,9,1); c.fillRect(10,16,11,1);
+    c.fillStyle="rgba(180,200,214,1)"; c.fillRect(13,21,6,2);
+  });
+  SPR.spike=bake(32,32,function(c){
+    c.fillStyle="rgba(180,196,208,1)";
+    c.beginPath(); c.moveTo(16,5); c.lineTo(21,24); c.lineTo(11,24); c.closePath(); c.fill();
+    c.fillStyle="rgba(230,246,255,.85)";
+    c.beginPath(); c.moveTo(16,5); c.lineTo(18,24); c.lineTo(15,24); c.closePath(); c.fill();
+    c.fillStyle="rgba(70,84,94,1)"; c.fillRect(9,24,14,4);
+  });
+  SPR.bolt=bake(32,32,function(c){
+    c.fillStyle="rgba(150,140,110,1)"; c.fillRect(14,7,4,17);
+    c.fillStyle="rgba(200,190,150,1)"; c.fillRect(11,7,10,4);
+    c.fillStyle="rgba(100,92,70,1)"; c.fillRect(12,20,8,3);
+  });
+  SPR.cell=bake(32,32,function(c){
+    c.fillStyle="rgba(46,42,30,1)"; c.fillRect(10,8,12,16);
+    c.fillStyle="rgba(226,200,80,.9)"; c.fillRect(12,10,8,12);
+    c.fillStyle="rgba(30,28,20,1)"; c.fillRect(13,13,6,2); c.fillRect(13,17,6,2);
+    c.fillStyle="rgba(160,150,120,1)"; c.fillRect(13,5,6,3);
+  });
+  SPR.med=bake(32,32,function(c){
+    c.fillStyle="rgba(210,214,218,1)"; c.fillRect(8,10,16,13);
+    c.fillStyle="rgba(190,60,54,1)"; c.fillRect(14,13,4,7); c.fillRect(11,15,10,3);
+    c.fillStyle="rgba(140,146,152,1)"; c.fillRect(13,7,6,3);
+  });
+  SPR.key=bake(32,32,function(c){
+    c.fillStyle="rgba(200,168,70,1)"; c.fillRect(9,10,14,11);
+    c.fillStyle="rgba(40,34,20,1)"; c.fillRect(11,13,10,2);
+    c.fillStyle="rgba(240,220,140,.9)"; c.fillRect(11,17,6,2);
+    c.fillStyle="rgba(150,124,50,1)"; c.fillRect(20,12,3,3);
+  });
+  SPR.steam=bake(48,64,function(c){
+    for(var i=0;i<28;i++){
+      c.fillStyle="rgba(214,236,250,"+(0.05+R()*0.13).toFixed(2)+")";
+      c.beginPath(); c.arc(24+(R()-0.5)*26,10+R()*50,3+R()*9,0,6.284); c.fill();
+    }
+  });
+  SPR.boltThrown=bake(16,16,function(c){
+    c.fillStyle="rgba(190,180,140,1)"; c.fillRect(6,3,4,10);
+    c.fillStyle="rgba(120,112,84,1)"; c.fillRect(5,12,6,3);
+  });
+}
+
+/* ==========================================================================
+   AUDIO — procedural, no assets.
+   ========================================================================== */
+var Snd=(function(){
+  var ac=null, master=null, noiseBuf=null, slideSrc=null, slideGain=null, ready=false;
+  function init(){
+    if(ready) return;
+    try{
+      var AC=window.AudioContext||window.webkitAudioContext;
+      if(!AC) return;
+      ac=new AC();
+      master=ac.createGain(); master.gain.value=0.55; master.connect(ac.destination);
+      var n=ac.sampleRate*2; noiseBuf=ac.createBuffer(1,n,ac.sampleRate);
+      var d=noiseBuf.getChannelData(0);
+      for(var i=0;i<n;i++) d[i]=Math.random()*2-1;
+      ready=true;
+    }catch(e){ ready=false; }
+  }
+  function resume(){ init(); if(ac&&ac.state==="suspended"){ try{ac.resume();}catch(e){} } }
+  function env(g,t0,a,d2,peak){
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002,peak),t0+a);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+a+d2);
+  }
+  function tone(freq,a,d2,peak,type,slideTo,pan){
+    if(!ready) return;
+    var t0=ac.currentTime;
+    var o=ac.createOscillator(), g=ac.createGain();
+    o.type=type||"sine"; o.frequency.setValueAtTime(freq,t0);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20,slideTo),t0+a+d2);
+    env(g,t0,a,d2,peak);
+    o.connect(g); g.connect(master); o.start(t0); o.stop(t0+a+d2+0.05);
+  }
+  function noise(a,d2,peak,lo,hi,q){
+    if(!ready) return;
+    var t0=ac.currentTime;
+    var s=ac.createBufferSource(); s.buffer=noiseBuf; s.loop=true;
+    var f=ac.createBiquadFilter(); f.type="bandpass"; f.frequency.setValueAtTime(lo,t0);
+    if(hi) f.frequency.exponentialRampToValueAtTime(Math.max(30,hi),t0+a+d2);
+    f.Q.value=q||1.2;
+    var g=ac.createGain(); env(g,t0,a,d2,peak);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t0); s.stop(t0+a+d2+0.05);
+  }
+  return {
+    init:init, resume:resume, ok:function(){return ready;},
+    /* ---- movement ---- */
+    push:function(creep){ noise(0.02,creep?0.10:0.16,creep?0.07:0.16,creep?600:900,300,0.9); },
+    slideStart:function(){
+      if(!ready) return;
+      if(slideSrc) return;
+      slideSrc=ac.createBufferSource(); slideSrc.buffer=noiseBuf; slideSrc.loop=true;
+      var f=ac.createBiquadFilter(); f.type="bandpass"; f.frequency.value=1500; f.Q.value=0.7;
+      slideGain=ac.createGain(); slideGain.gain.value=0.0001;
+      slideSrc.connect(f); f.connect(slideGain); slideGain.connect(master);
+      slideSrc.start();
+    },
+    slideLevel:function(v){ if(slideGain){ try{slideGain.gain.setTargetAtTime(Math.max(0.0001,v),ac.currentTime,0.05);}catch(e){} } },
+    slideStop:function(){ if(slideSrc){ try{slideGain.gain.setTargetAtTime(0.0001,ac.currentTime,0.05); var s=slideSrc; setTimeout(function(){try{s.stop();}catch(e){}},260);}catch(e){} slideSrc=null; slideGain=null; } },
+    /* ---- stops ---- */
+    slam:function(v){ tone(58,0.005,0.42,0.34*v,"sine",30); noise(0.004,0.20,0.24*v,320,90,0.8); tone(180,0.004,0.9,0.07*v,"triangle",120); },
+    grit:function(){ noise(0.01,0.14,0.10,2100,700,1.6); },
+    drum:function(){ tone(96,0.004,1.5,0.24,"sine",88); tone(243,0.004,1.2,0.13,"triangle",232); tone(388,0.004,0.9,0.07,"sine",372); noise(0.003,0.09,0.13,900,300,1.1); },
+    glass:function(){ for(var i=0;i<7;i++){ tone(2400+Math.random()*3400,0.003,0.10+Math.random()*0.2,0.055,"triangle"); } noise(0.004,0.24,0.13,4200,1400,1.4); },
+    splash:function(){ noise(0.01,0.34,0.20,700,180,0.7); tone(120,0.01,0.3,0.08,"sine",60); },
+    spike:function(){ noise(0.01,0.30,0.22,3400,900,7); tone(1400,0.01,0.28,0.07,"sawtooth",420); },
+    crack:function(){ tone(900,0.002,0.10,0.14,"square",180); noise(0.002,0.16,0.11,2600,600,2.4); },
+    vane:function(){ noise(0.03,0.5,0.14,2600,1200,0.8); },
+    fall:function(){ tone(420,0.02,2.2,0.2,"sine",26); noise(0.05,2.0,0.10,800,60,0.5); },
+    /* ---- kit ---- */
+    pickup:function(){ tone(760,0.005,0.10,0.11,"triangle"); tone(1180,0.02,0.12,0.07,"sine"); },
+    logOpen:function(){ tone(420,0.01,0.09,0.08,"square"); tone(640,0.05,0.1,0.05,"square"); },
+    boltThrow:function(){ noise(0.01,0.09,0.09,1400,700,1.2); },
+    boltLand:function(){ tone(220,0.003,0.30,0.2,"triangle",90); noise(0.003,0.14,0.14,1700,500,1.4); },
+    lampToggle:function(){ tone(1500,0.002,0.05,0.06,"square"); },
+    /* ---- body ---- */
+    breath:function(){ noise(0.10,0.34,0.045,520,300,0.7); },
+    gasp:function(){ noise(0.03,0.5,0.16,900,420,0.6); tone(230,0.03,0.4,0.05,"sine",160); },
+    shiver:function(){ noise(0.02,0.22,0.09,1600,900,2.2); },
+    hurt:function(){ tone(150,0.004,0.4,0.28,"sawtooth",60); noise(0.004,0.3,0.16,700,200,0.7); },
+    heart:function(v){ tone(52,0.01,0.20,0.10*v,"sine",38); },
+    /* ---- them ---- */
+    walkerVoice:function(){ tone(74,0.25,1.5,0.14,"sawtooth",56); tone(112,0.3,1.3,0.06,"sine",84); noise(0.2,1.1,0.05,340,180,0.7); },
+    skitterVoice:function(){ for(var i=0;i<5;i++) tone(1700+Math.random()*1600,0.004,0.05,0.07,"square"); noise(0.01,0.22,0.09,3000,1500,3); },
+    skitterSlam:function(){ tone(120,0.003,0.3,0.18,"triangle",50); noise(0.003,0.14,0.14,1200,400,1); },
+    hangerDrop:function(){ tone(46,0.004,0.7,0.30,"sine",28); noise(0.004,0.4,0.24,600,140,0.6); },
+    stingGrab:function(){ tone(1700,0.004,0.7,0.24,"sawtooth",180); noise(0.004,0.65,0.26,2600,300,0.7); tone(60,0.01,1.1,0.22,"sine",34); },
+    lift:function(){ tone(300,0.05,0.5,0.12,"sine",600); tone(600,0.2,0.8,0.09,"sine",900); }
+  };
+})();
+
+/* ==========================================================================
+   RENDERER — software raycast into a Uint32Array.
+   INVARIANT: fov = 0.5*(RW/RH). Horizontal world scale is derived from the
+   vertical one; changing either alone stretches the view and desyncs every
+   sprite aspect ratio.
+   ========================================================================== */
+var cv=null, cx=null, RW=384, RH=232, fov=0.5*(RW/RH);
+var buf=null, imgd=null, zbuf=null, ceilY=null;
+var HL_RANGE=9.2;
+var frameN=0;
+
+function initRender(){
+  cv=el("view"); if(!cv) return;
+  cx=cv.getContext("2d",{alpha:false});
+  resize();
+  window.addEventListener("resize",resize);
+}
+function resize(){
+  if(!cv) return;
+  var w=window.innerWidth, h=window.innerHeight;
+  cv.width=w; cv.height=h;
+  var target=Math.min(560,Math.max(300,Math.round(w/3.1)));
+  RW=target; RH=Math.round(target*(h/w));
+  RH=Math.max(160,Math.min(420,RH));
+  fov=0.5*(RW/RH);
+  buf=new Uint32Array(RW*RH);
+  zbuf=new Float32Array(RW);
+  if(cx&&cx.createImageData) imgd=cx.createImageData(RW,RH);
+  if(cx) cx.imageSmoothingEnabled=false;
+}
+
+function texFor(t,i){
+  switch(t){
+    case T.WALL: return TEX.wall;
+    case T.LOCK: return TEX.hatch;
+    case T.DRUM: return TEX.drum;
+    default: return TEX.wall;
+  }
+}
+function floorTexFor(t){
+  switch(t){
+    case T.GRIT: return TEX.grit;
+    case T.THIN: return TEX.thin;
+    case T.HOLE: return TEX.hole;
+    case T.SLUSH: return TEX.slush;
+    case T.GLASS: return TEX.glass;
+    case T.HEAT: return TEX.heat;
+    case T.LIFT: return TEX.liftfloor;
+    case T.PLATE: return TEX.plate;
+    case T.MIRR_A: return TEX.mirrA;
+    case T.MIRR_B: return TEX.mirrB;
+    case T.VANE_E: return TEX.vane[0];
+    case T.VANE_S: return TEX.vane[1];
+    case T.VANE_W: return TEX.vane[2];
+    case T.VANE_N: return TEX.vane[3];
+    default: return TEX.ice;
+  }
+}
+function shade(c,r,g,b){
+  var cr=c&255, cg=(c>>8)&255, cb=(c>>16)&255;
+  cr=cr*r; cg=cg*g; cb=cb*b;
+  if(cr>255)cr=255; if(cg>255)cg=255; if(cb>255)cb=255;
+  return 0xff000000|((cb|0)<<16)|((cg|0)<<8)|(cr|0);
+}
+
+function lightAt(l,tx,ty){
+  if(!inB(l,tx,ty)) return null;
+  var i=ty*l.w+tx;
+  return i;
+}
+
+function render(){
+  if(!buf||!L) return;
+  frameN++;
+  var w=RW,h=RH;
+  var dirX=Math.cos(P.dir), dirY=Math.sin(P.dir);
+  var planeX=-dirY*fov, planeY=dirX*fov;
+  var horizon=(h*0.5+P.pitch)|0;
+  var amb=0.030;
+  var hlOn=P.lampOn&&P.batt>0?1:0;
+  var hlPow=hlOn?(0.85+0.15*Math.sin(gameTime*17)*(P.batt<15?1:0.06)):0;
+
+  /* ---------------- floor + ceiling ---------------- */
+  for(var y=0;y<h;y++){
+    var isFloor=y>horizon;
+    var p=isFloor?(y-horizon):(horizon-y);
+    if(p<1) p=1;
+    var rowDist=(0.5*h)/p;
+    if(rowDist>34){ /* out of range: pure dark */
+      var off0=y*w;
+      for(var x=0;x<w;x++) buf[off0+x]=0xff000000;
+      continue;
+    }
+    var rdX0=dirX-planeX, rdY0=dirY-planeY;
+    var rdX1=dirX+planeX, rdY1=dirY+planeY;
+    var stepX=rowDist*(rdX1-rdX0)/w, stepY=rowDist*(rdY1-rdY0)/w;
+    var fX=P.x+rowDist*rdX0, fY=P.y+rowDist*rdY0;
+    var fogv=1/(1+rowDist*rowDist*0.019);
+    var off=y*w;
+    var hlBase=hlPow*Math.max(0,1-rowDist/HL_RANGE);
+    hlBase*=hlBase;
+    for(var x=0;x<w;x++){
+      var tx=fX|0, ty=fY|0;
+      var col=0xff000000;
+      if(tx>=0&&ty>=0&&tx<L.w&&ty<L.h){
+        var ti=ty*L.w+tx, tt=L.map[ti];
+        if(tt===T.THIN && L.thinBit[ti]!==undefined && ((L.broken>>>L.thinBit[ti])&1)) tt=T.HOLE;
+        var tex=isFloor?floorTexFor(tt):(L.hangerSet&&L.hangerSet[ti]?TEX.ceilFrost:TEX.ceil);
+        var u=((fX-tx)*tex.w)|0, v=((fY-ty)*tex.h)|0;
+        var c=tex.d[(v&(tex.h-1))*tex.w+(u&(tex.w-1))];
+        var lr=L.lmR[ti], lg=L.lmG[ti], lb=L.lmB3[ti];
+        /* headlamp cone, tightest at screen centre */
+        var cone=1-Math.abs((x-(w>>1))/(w*0.5));
+        cone=cone*cone;
+        var hl=hlBase*(0.35+0.65*cone);
+        var sr=(amb+lr+hl)*fogv, sg=(amb+lg+hl*0.98)*fogv, sb=(amb+lb+hl*0.92)*fogv;
+        if(!isFloor){ sr*=0.62; sg*=0.66; sb*=0.72; }
+        if(tt===T.HOLE&&isFloor){ sr*=0.25; sg*=0.25; sb*=0.28; }
+        col=shade(c,sr,sg,sb);
+      }
+      buf[off+x]=col;
+      fX+=stepX; fY+=stepY;
+    }
+  }
+
+  /* ---------------- walls ---------------- */
+  for(var x=0;x<w;x++){
+    var camX=2*x/w-1;
+    var rdX=dirX+planeX*camX, rdY=dirY+planeY*camX;
+    var mapX=P.x|0, mapY=P.y|0;
+    var ddX=rdX===0?1e30:Math.abs(1/rdX), ddY=rdY===0?1e30:Math.abs(1/rdY);
+    var sX,sY,sdX,sdY;
+    if(rdX<0){ sX=-1; sdX=(P.x-mapX)*ddX; } else { sX=1; sdX=(mapX+1-P.x)*ddX; }
+    if(rdY<0){ sY=-1; sdY=(P.y-mapY)*ddY; } else { sY=1; sdY=(mapY+1-P.y)*ddY; }
+    var hit=0,side=0,tt=0,guard=0;
+    while(!hit&&guard++<160){
+      if(sdX<sdY){ sdX+=ddX; mapX+=sX; side=0; } else { sdY+=ddY; mapY+=sY; side=1; }
+      if(mapX<0||mapY<0||mapX>=L.w||mapY>=L.h){ hit=2; break; }
+      var mi=mapY*L.w+mapX;
+      tt=L.map[mi];
+      if(tt===T.LOCK){ if(!((L.opened>>>(L.lockBit[mi]||0))&1)) hit=1; }
+      else if(TILE[tt].solid) hit=1;
+    }
+    var pw;
+    if(hit!==1){ zbuf[x]=1e9; continue; }
+    pw=side===0?(sdX-ddX):(sdY-ddY);
+    if(pw<0.0001) pw=0.0001;
+    zbuf[x]=pw;
+    var lineH=(h/pw)|0;
+    var drawS=horizon-(lineH>>1), drawE=horizon+(lineH>>1);
+    var y0=drawS<0?0:drawS, y1=drawE>=h?h-1:drawE;
+    var wallX=side===0?(P.y+pw*rdY):(P.x+pw*rdX);
+    wallX-=Math.floor(wallX);
+    var tex=texFor(tt);
+    var texX=(wallX*tex.w)|0;
+    if((side===0&&rdX>0)||(side===1&&rdY<0)) texX=tex.w-texX-1;
+    /* light sampled from the cell we are looking from, not the wall itself */
+    var bx=mapX-(side===0?sX:0), by=mapY-(side===1?sY:0);
+    var li=(by>=0&&bx>=0&&by<L.h&&bx<L.w)?(by*L.w+bx):(mapY*L.w+mapX);
+    var lr=L.lmR[li], lg=L.lmG[li], lb=L.lmB3[li];
+    var fogv=1/(1+pw*pw*0.019);
+    var cone=1-Math.abs((x-(w>>1))/(w*0.5)); cone=cone*cone;
+    var hl=hlPow*Math.max(0,1-pw/HL_RANGE); hl*=hl; hl*=(0.35+0.65*cone);
+    var sideDim=side===1?0.72:1.0;
+    var sr=(amb+lr+hl)*fogv*sideDim, sg=(amb+lg+hl*0.98)*fogv*sideDim, sb=(amb+lb+hl*0.92)*fogv*sideDim;
+    var step=tex.h/lineH;
+    var texPos=(y0-horizon+(lineH>>1))*step;
+    for(var y=y0;y<=y1;y++){
+      var texY=texPos|0; if(texY<0)texY=0; if(texY>=tex.h)texY=tex.h-1;
+      texPos+=step;
+      buf[y*w+x]=shade(tex.d[texY*tex.w+texX],sr,sg,sb);
+    }
+  }
+
+  /* ---------------- sprites ---------------- */
+  var sprites=[];
+  for(var i=0;i<L.items.length;i++){
+    var it=L.items[i]; if(it.got) continue;
+    var s=SPR[it.type==="key"?"key":it.type==="log"?"log":it.type==="spike"?"spike":it.type==="bolt"?"bolt":it.type==="cell"?"cell":"med"];
+    sprites.push({x:it.x,y:it.y,img:s,mag:0.42,vOff:0.30,emis:it.type==="log"?0.35:0.16});
+  }
+  for(var i=0;i<L.lamps.length;i++){
+    var lp=L.lamps[i];
+    if(lp.mode==="bloom") sprites.push({x:lp.x,y:lp.y,img:lp.shut>0?SPR.bloomShut:SPR.bloomOpen,mag:0.85,vOff:0.10,emis:lp.shut>0?0.05:0.9});
+    else if(lp.mode==="emerg") sprites.push({x:lp.x,y:lp.y,img:SPR.emerg,mag:0.34,vOff:-0.62,emis:0.8});
+  }
+  for(var i=0;i<L.map.length;i++){
+    if(TILE[L.map[i]].vane){
+      var vx=(i%L.w)+0.5, vy=((i/L.w)|0)+0.5;
+      if(dist2(vx,vy,P.x,P.y)<400) sprites.push({x:vx,y:vy,img:SPR.steam,mag:0.9,vOff:0.05,emis:0.20,jit:1});
+    }
+  }
+  for(var i=0;i<L.mons.length;i++){
+    var m=L.mons[i];
+    if(m.kind==="hanger"&&m.fused){
+      sprites.push({x:m.x,y:m.y,img:SPR.hangerUp,mag:0.72,vOff:-0.66,emis:0.05});
+      continue;
+    }
+    var fr=(m.anim|0)&3;
+    var img=m.kind==="walker"?SPR.walker[fr]:m.kind==="skitter"?SPR.skitter[fr]:SPR.hanger[fr];
+    var mg=m.kind==="walker"?1.02:m.kind==="skitter"?0.50:0.72;
+    sprites.push({x:m.x,y:m.y,img:img,mag:mg,vOff:m.kind==="skitter"?0.34:0.0,emis:0.045});
+  }
+  for(var i=0;i<thrown.length;i++) sprites.push({x:thrown[i].x,y:thrown[i].y,img:SPR.boltThrown,mag:0.22,vOff:0.40,emis:0.1});
+
+  for(var i=0;i<sprites.length;i++) sprites[i].d=dist2(sprites[i].x,sprites[i].y,P.x,P.y);
+  sprites.sort(function(a,b){return b.d-a.d;});
+
+  var invDet=1/(planeX*dirY-dirX*planeY);
+  for(var i=0;i<sprites.length;i++){
+    var sp=sprites[i];
+    var sx=sp.x-P.x, sy=sp.y-P.y;
+    var trX=invDet*(dirY*sx-dirX*sy);
+    var trY=invDet*(-planeY*sx+planeX*sy);
+    if(trY<0.12) continue;
+    var scrX=((w/2)*(1+trX/trY))|0;
+    var sh=Math.abs((h/trY)*sp.mag)|0;
+    var img=sp.img;
+    var sw2=(sh*(img.w/img.h))|0;
+    if(sh<1||sw2<1) continue;
+    var vMove=(sp.vOff*h/trY)|0;
+    var jit=sp.jit?((Math.sin(gameTime*3+sp.x*4)*h*0.01/trY)|0):0;
+    var top=horizon-(sh>>1)+vMove+jit;
+    var y0=top<0?0:top, y1=(top+sh)>=h?h-1:(top+sh-1);
+    var x0=scrX-(sw2>>1), x1=x0+sw2-1;
+    var lx=sp.x|0, ly=sp.y|0;
+    var li=(lx>=0&&ly>=0&&lx<L.w&&ly<L.h)?(ly*L.w+lx):0;
+    var fogv=1/(1+trY*trY*0.019);
+    var hl=hlPow*Math.max(0,1-trY/HL_RANGE); hl*=hl;
+    var base=(amb+L.lmR[li]+hl+sp.emis)*fogv;
+    var bg=(amb+L.lmG[li]+hl*0.98+sp.emis)*fogv;
+    var bb=(amb+L.lmB3[li]+hl*0.92+sp.emis)*fogv;
+    if(sp.emis>0.5){ base=Math.max(base,sp.emis); bg=Math.max(bg,sp.emis*0.92); bb=Math.max(bb,sp.emis*0.6); }
+    for(var x=x0;x<=x1;x++){
+      if(x<0||x>=w) continue;
+      if(trY>=zbuf[x]) continue;
+      var tx2=(((x-x0)*img.w/sw2)|0);
+      if(tx2<0||tx2>=img.w) continue;
+      for(var y=y0;y<=y1;y++){
+        var ty2=(((y-top)*img.h/sh)|0);
+        if(ty2<0||ty2>=img.h) continue;
+        var c=img.d[ty2*img.w+tx2];
+        if((c>>>24)<110) continue;
+        buf[y*w+x]=shade(c,base,bg,bb);
+      }
+    }
+  }
+
+  /* ---------------- jumpscare, inside the same image ---------------- */
+  if(scare) drawScare();
+
+  /* ---------------- post ---------------- */
+  var gr=(P.dizzyGrain||0);
+  var grain=0.055+gr+(P.temp<31?0.05:0)+(P.hp<40?0.05:0);
+  var vign=1.0;
+  var seed=(frameN*2654435761)>>>0;
+  var cold=clamp((32.5-P.temp)/5.0,0,1);
+  for(var y=0;y<h;y++){
+    var off=y*w;
+    for(var x=0;x<w;x++){
+      var c=buf[off+x];
+      seed=(seed*1664525+1013904223)>>>0;
+      var n=((seed>>>16)&255)-128;
+      var r=(c&255)+n*grain, g2=((c>>8)&255)+n*grain, b=((c>>16)&255)+n*grain;
+      if(cold>0){ b+=cold*16; g2+=cold*5; r-=cold*7; }
+      if(r<0)r=0; if(r>255)r=255; if(g2<0)g2=0; if(g2>255)g2=255; if(b<0)b=0; if(b>255)b=255;
+      buf[off+x]=0xff000000|((b|0)<<16)|((g2|0)<<8)|(r|0);
+    }
+  }
+
+  if(imgd){
+    var d8=imgd.data;
+    var b32=new Uint8Array(buf.buffer);
+    d8.set(b32);
+    cx.putImageData(imgd,0,0);
+    cx.save();
+    cx.imageSmoothingEnabled=false;
+    cx.drawImage(cv,0,0,RW,RH,0,0,cv.width,cv.height);
+    cx.restore();
+  }
+  drawOverlay();
+}
+
+/* ---------------------------------------------- 2D overlay (frost, cues) */
+function drawOverlay(){
+  if(!cx) return;
+  var W2=cv.width, H2=cv.height;
+
+  /* the slide you are about to commit to */
+  if(P.preview&&P.preview.length&&!P.sliding){
+    var dirX=Math.cos(P.dir), dirY=Math.sin(P.dir);
+    var planeX=-dirY*fov, planeY=dirX*fov;
+    var invDet=1/(planeX*dirY-dirX*planeY);
+    var horizon=(RH*0.5+P.pitch);
+    cx.save();
+    for(var i=0;i<P.preview.length;i++){
+      var pt=P.preview[i];
+      var sx=pt.x+0.5-P.x, sy=pt.y+0.5-P.y;
+      var trX=invDet*(dirY*sx-dirX*sy), trY=invDet*(-planeY*sx+planeX*sy);
+      if(trY<0.25) continue;
+      var scrX=(RW/2)*(1+trX/trY);
+      var scrY=horizon+(0.5*RH/trY);
+      var px=scrX*(W2/RW), py=scrY*(H2/RH);
+      var s=Math.max(2,(W2/RW)*(10/trY));
+      var last=i===P.preview.length-1;
+      cx.fillStyle=last?"rgba(150,255,210,.55)":"rgba(130,205,240,"+(0.36-i*0.008).toFixed(3)+")";
+      cx.beginPath(); cx.ellipse(px,py,s,s*0.42,0,0,6.284); cx.fill();
+    }
+    cx.restore();
+  }
+
+  /* rime creeping in from the edges as core temperature falls */
+  var cold=clamp((32.6-P.temp)/5.2,0,1);
+  if(cold>0.02){
+    cx.save();
+    var g=cx.createRadialGradient(W2/2,H2/2,H2*0.22,W2/2,H2/2,H2*(0.82-cold*0.28));
+    g.addColorStop(0,"rgba(190,230,255,0)");
+    g.addColorStop(1,"rgba(200,238,255,"+(cold*0.5).toFixed(3)+")");
+    cx.fillStyle=g; cx.fillRect(0,0,W2,H2);
+    var rr=mulberry32(4242);
+    cx.globalAlpha=cold*0.5;
+    for(var i=0;i<90;i++){
+      var a=rr()*6.284, rad=(0.42+rr()*0.6)*H2;
+      var x=W2/2+Math.cos(a)*rad*1.3, y=H2/2+Math.sin(a)*rad;
+      cx.strokeStyle="rgba(226,244,255,"+(0.1+rr()*0.35).toFixed(2)+")";
+      cx.lineWidth=1+rr()*2;
+      cx.beginPath(); cx.moveTo(x,y);
+      cx.lineTo(x+(W2/2-x)*0.06*(0.4+rr()),y+(H2/2-y)*0.06*(0.4+rr()));
+      cx.stroke();
+    }
+    cx.restore();
+  }
+  /* breath vapour when held */
+  if(P.holding){
+    cx.save(); cx.globalAlpha=0.10+0.05*Math.sin(gameTime*9);
+    cx.fillStyle="#cfe9f7";
+    cx.beginPath(); cx.ellipse(W2*0.5,H2*0.82,W2*0.09,H2*0.05,0,0,6.284); cx.fill();
+    cx.restore();
+  }
+}
+
+/* -------------------------------------------------------- jumpscare */
+var scare=null, scareCool=0;
+function jumpscare(img,mag,from,force){
+  if(scare&&scare.t<0.12&&!force) return;
+  if(scareCool>0&&!force) return;
+  scare={img:img,mag:mag||1.8,t:0,dur:0.85,from:from||0};
+  scareCool=2.4;
+  Snd.stingGrab();
+}
+function drawScare(){
+  var s=scare, img=s.img; if(!img) return;
+  var w=RW,h=RH;
+  var k=clamp(s.t/0.14,0,1);
+  var mag=s.mag*(0.82+0.18*k);
+  var sh=(h*mag)|0, sw2=(sh*(img.w/img.h))|0;
+  var cxp=(w>>1)+((Math.sin(s.t*38)*w*0.012*(1-k))|0);
+  var top=((h*0.5-sh*0.52)+s.from*(1-k)*h*0.55)|0;
+  var x0=cxp-(sw2>>1);
+  for(var y=Math.max(0,top);y<Math.min(h,top+sh);y++){
+    var ty=(((y-top)*img.h/sh)|0);
+    for(var x=Math.max(0,x0);x<Math.min(w,x0+sw2);x++){
+      var tx=(((x-x0)*img.w/sw2)|0);
+      var c=img.d[ty*img.w+tx];
+      if((c>>>24)<110) continue;
+      buf[y*w+x]=shade(c,0.95,0.72,0.70);
+    }
+  }
+}
+
+/* ==========================================================================
+   THE GAME
+   ========================================================================== */
+var gameTime=0, thrown=[], noiseEvents=[];
+
+/* Proving a deck costs up to a few seconds on the big late decks, and it used
+   to be spent after the player hit DESCEND — a frozen page at the exact
+   moment they asked to move. Build it instead while they are reading the
+   intro, or the death screen. Generation is deterministic per deck index, so
+   the cached deck is the same deck a rebuild would produce. */
+var deckCache=null;
+function prebuildDeck(idx){
+  if(deckCache&&deckCache.idx===idx) return;
+  deckCache={idx:idx,deck:buildDeck(idx)};
+}
+function startLevel(idx,keepProgress){
+  G.level=idx;
+  if(idx>G.deepest) G.deepest=idx;
+  if(deckCache&&deckCache.idx===idx){ L=deckCache.deck; deckCache=null; }
+  else L=buildDeck(idx);
+  L.hangerSet={};
+  for(var i=0;i<L.hangers.length;i++) L.hangerSet[L.hangers[i]]=1;
+  P={
+    x:L.spawn.x+0.5, y:L.spawn.y+0.5, dir:0, pitch:0,
+    gx:L.spawn.x, gy:L.spawn.y,
+    sliding:false, path:null, pi:0, slideDir:0, spd:0, creep:false,
+    stopKind:"grit",
+    hp:(keepProgress&&P?P.hp:100),
+    temp:(keepProgress&&P?Math.min(TEMP_MAX,P.temp+3.5):TEMP_MAX),
+    batt:(keepProgress&&P?Math.min(100,P.batt+18):100),
+    spikes:(keepProgress&&P?P.spikes:SPIKE_START),
+    bolts:(keepProgress&&P?P.bolts:BOLT_START),
+    keys:0, lampOn:true, holding:false, breath:100,
+    noiseMeter:0, wet:0, iframe:0, shiverT:0, gaspT:0,
+    preview:null, dizzyGrain:0, dead:false, won:false, steps:0,
+    pendingLog:null, reading:false, prevThin:-1
+  };
+  /* face the most open direction so you do not wake up staring at a wall */
+  var best=-1,bd=-1;
+  for(var d=0;d<4;d++){
+    var st={x:L.spawn.x,y:L.spawn.y,broken:0,opened:0,kmask:0,kused:0};
+    var r=stepSlide(L,st,d);
+    if(!r.dead&&r.len>bd){ bd=r.len; best=d; }
+  }
+  P.dir=[0,Math.PI/2,Math.PI,-Math.PI/2][best<0?0:best];
+  thrown=[]; noiseEvents=[]; scare=null; scareCool=0;
+  L.broken=0; L.opened=0;
+  gameTime=0;
+  L.seen=new Uint8Array(L.w*L.h);
+  markSeen();
+  updateLamps(L,0);
+  setState("play");
+  hudTask();
+  toast(L.sub+" · "+L.name+" — PAR "+L.par);
+}
+
+/* --------------------------------------------------------------- noise */
+function makeNoise(x,y,level){
+  if(!L) return;
+  noiseEvents.push({x:x,y:y,l:level,t:0});
+  if(noiseEvents.length>40) noiseEvents.shift();
+  P.noiseMeter=Math.max(P.noiseMeter,Math.min(100,level));
+
+  /* blooms hear quieter than the hunters do — handled before the cutoff */
+  if(level>=12){
+    for(var i=0;i<L.lamps.length;i++){
+      var lp=L.lamps[i];
+      if(lp.mode!=="bloom"||lp.shut>0) continue;
+      if(dist2(lp.x,lp.y,x,y)<Math.pow(2.2+level*0.075,2)){
+        lp.shut=26+level*0.45;
+      }
+    }
+  }
+  if(level<NOISE_NOTICE) return;
+
+  for(var i=0;i<L.mons.length;i++){
+    var m=L.mons[i], md=MONDEF[m.kind];
+    var carry=level*0.44*md.hear;
+    var d=Math.sqrt(dist2(m.x,m.y,x,y));
+    if(d>carry) continue;
+    var eff=level*(1-d/(carry+0.001))*md.hear;
+    if(m.kind==="hanger"&&m.fused){
+      if(eff>=34&&d<3.2) dropHanger(m);
+      continue;
+    }
+    if(eff>=NOISE_CHARGE){ m.mode="hunt"; m.tx=x; m.ty=y; m.lost=0; m.slide=null; if(m.voice<=0){ voice(m); } }
+    else if(eff>=NOISE_NOTICE){ if(m.mode!=="hunt"){ m.mode="seek"; m.tx=x; m.ty=y; m.lost=0; } }
+  }
+}
+function voice(m){
+  m.voice=4+Math.random()*6;
+  var d=Math.sqrt(dist2(m.x,m.y,P.x,P.y));
+  if(d>22) return;
+  if(m.kind==="walker") Snd.walkerVoice();
+  else if(m.kind==="skitter") Snd.skitterVoice();
+}
+function dropHanger(m){
+  if(!m.fused) return;
+  m.fused=false; m.mode="hunt"; m.tx=P.x; m.ty=P.y; m.drop=0.5;
+  var ix=(m.y|0)*L.w+(m.x|0);
+  if(L.hangerSet) delete L.hangerSet[ix];
+  Snd.hangerDrop();
+  makeNoise(m.x,m.y,62);
+  if(dist2(m.x,m.y,P.x,P.y)<2.0){
+    jumpscare(SPR.hanger[0],1.62,-1,true);
+    damage(MONDEF.hanger.dmg,"HANGER");
+  }
+}
+
+/* --------------------------------------------------------------- slides */
+function playerState(){
+  return {x:P.gx,y:P.gy,broken:L.broken,opened:L.opened,kmask:P.keys>0?((1<<P.keys)-1):0,kused:0};
+}
+function computeSlide(d){
+  var st={x:P.gx,y:P.gy,broken:L.broken,opened:L.opened,
+          kmask:P.keys>0?((1<<P.keys)-1):0, kused:0};
+  return stepSlide(L,st,d);
+}
+function cardinalFromYaw(yaw){
+  var d=Math.round(yaw/(Math.PI/2));
+  return ((d%4)+4)%4;
+}
+function beginSlide(rel){
+  if(P.sliding||state!=="play") return;
+  var d=(cardinalFromYaw(P.dir)+rel)&3;
+  var r=computeSlide(d);
+  if(r.len===0){
+    /* nose against a bulkhead: a scuff, not a slide */
+    makeNoise(P.x,P.y,P.creep?2:6);
+    Snd.push(true);
+    return;
+  }
+  P.sliding=true; P.path=r.path; P.pi=0; P.slideDir=d;
+  P.res=r; P.steps++;
+  P.spd=P.creep?SLIDE_SPEED_CREEP:SLIDE_SPEED;
+  P.spikeReq=false;
+  Snd.push(P.creep);
+  Snd.slideStart();
+  makeNoise(P.x,P.y,P.creep?N_PUSH_CREEP:N_PUSH);
+}
+
+function tileNoiseMul(t){
+  if(t===T.SLUSH) return WATER_NOISE;
+  return 1;
+}
+
+function arriveTile(pt,isLast){
+  var i=pt.y*L.w+pt.x;
+  var t=L.map[i];
+  P.gx=pt.x; P.gy=pt.y;
+  markSeen();
+
+  /* the tile we just left, if it was a fracture, opens behind us */
+  if(P.prevThin!==undefined&&P.prevThin>=0){
+    var pi2=P.prevThin;
+    var bit=L.thinBit[pi2];
+    if(bit!==undefined&&!((L.broken>>>bit)&1)){
+      L.broken|=(1<<bit);
+      Snd.crack();
+      makeNoise((pi2%L.w)+0.5,((pi2/L.w)|0)+0.5,34);
+    }
+  }
+  P.prevThin = (L.map[i]===T.THIN)?i:-1;
+
+  /* running noise, scaled by deck and gait */
+  var mul=tileNoiseMul(t);
+  var run=(P.creep?N_RUNTILE_CREEP:N_RUNTILE)*mul;
+  if(run>0.5) makeNoise(pt.x+0.5,pt.y+0.5,run*(P.holding?0.5:1)*6);
+
+  if(t===T.GLASS){ Snd.glass(); makeNoise(pt.x+0.5,pt.y+0.5,N_GLASS*(P.holding?0.7:1)); }
+  if(TILE[t].vane){ Snd.vane(); makeNoise(pt.x+0.5,pt.y+0.5,52); }
+
+  /* pickups happen in passing */
+  for(var k=0;k<L.items.length;k++){
+    var it=L.items[k];
+    if(it.got) continue;
+    if((it.x|0)===pt.x&&(it.y|0)===pt.y) takeItem(it);
+  }
+
+  if(t===T.HOLE || (t===T.THIN&&L.thinBit[i]!==undefined&&((L.broken>>>L.thinBit[i])&1))){
+    fall(); return true;
+  }
+  return false;
+}
+
+function endSlide(kind){
+  P.sliding=false; P.path=null; P.spd=0;
+  Snd.slideStop();
+  var i=P.gy*L.w+P.gx, t=L.map[i];
+  var fast=P.creep?0.45:1;
+
+  if(kind==="wall"){
+    var lvl=N_WALL_MIN+(N_WALL_MAX-N_WALL_MIN)*fast;
+    Snd.slam(0.5+0.5*fast);
+    makeNoise(P.x,P.y,lvl*(P.holding?0.5:1));
+    damage(P.creep?0:2,null,true);
+    P.dizzyGrain=Math.max(P.dizzyGrain||0,0.055*fast);
+  } else if(kind==="grit"||kind==="lift"||kind==="heat"){
+    Snd.grit(); makeNoise(P.x,P.y,N_GRIT*fast*(P.holding?0.5:1));
+  } else if(kind==="slush"){
+    Snd.splash(); makeNoise(P.x,P.y,N_SLUSH*(P.holding?0.5:1));
+    P.wet=Math.min(WET_MAX,P.wet+WET_SOAK);   /* accumulates to a cap, never resets the clock */
+  } else if(kind==="unlock"){
+    /* Commit it. The slide only ever PREDICTED the hatch coming open — it
+       computed the new opened-mask, stopped you against the hatch, played the
+       sound, and then dropped the result on the floor. L.opened was read in
+       five places and written in none, so every hatch in the wing stayed
+       sealed for good and the cards you were carrying did nothing at all. */
+    if(P.res&&P.res.opened!==undefined&&P.res.opened!==L.opened){
+      var before=L.opened;
+      L.opened=P.res.opened;
+      var spent=0, diff=(L.opened&~before)>>>0;
+      while(diff){ spent+=diff&1; diff>>>=1; }
+      P.keys=Math.max(0,P.keys-spent);
+      markSeen(); hudTask();
+      toast(spent>1?"HATCHES RELEASED":"HATCH RELEASED");
+    }
+    Snd.grit(); makeNoise(P.x,P.y,30);
+  } else if(kind==="spike"){
+    Snd.spike(); makeNoise(P.x,P.y,N_SPIKE*(P.holding?0.5:1));
+  } else if(kind==="spin"){
+    Snd.grit(); makeNoise(P.x,P.y,48);
+    /* a ride you could not get off. You come out of it not knowing which way
+       you are pointing, and now the screen says so too. */
+    P.dizzyGrain=0.17;
+    toast("SPUN OUT");
+  }
+
+  /* Net for decks the generator could not prove unbreakable. On a proved deck
+     this never runs. Checked only when something irreversible has changed,
+     which is the only way a deck can stop being winnable. */
+  if(L.safe===false){
+    var sig=L.broken+"|"+L.opened;
+    if(sig!==L.strandSig){
+      L.strandSig=sig;
+      var chk=solveDeck({w:L.w,h:L.h,map:L.map,spawn:{x:P.gx,y:P.gy},lift:L.lift,
+                         thinBit:L.thinBit,lockBit:L.lockBit,keyBit:L.keyBit},40000);
+      if(chk.par<0&&!chk.over) toast("NO CLEAN ROUTE LEFT — CRAMPON, OR RESTART THE DECK");
+    }
+  }
+
+  /* stopping on a fracture drops you through it */
+  if(t===T.THIN){ Snd.crack(); fall(); return; }
+  if(t===T.HEAT){ toast("HEAT VENT"); }
+  if(t===T.LIFT){ winLevel(); return; }
+  P.prevThin=-1;
+  if(P.pendingLog!==undefined&&P.pendingLog!==null){ var pl=P.pendingLog; P.pendingLog=null; openLog(pl); }
+}
+
+function fall(){
+  if(P.dead) return;
+  P.sliding=false; P.path=null;
+  Snd.slideStop(); Snd.fall();
+  die("The plate was not there. Eleven levels of shaft, and the wing goes quiet behind you.");
+}
+
+/* --------------------------------------------------------------- items */
+function takeItem(it){
+  it.got=true;
+  if(it.type==="log"){
+    Snd.logOpen();
+    /* You take it in passing and read it once you have stopped. Opening the
+       reader mid-slide froze the player on live ice with the world running. */
+    if(P.sliding){ P.pendingLog=it.log; toast("LOG RECOVERED"); }
+    else openLog(it.log);
+  } else {
+    Snd.pickup();
+    if(it.type==="spike"){ P.spikes++; toast("CRAMPON +1"); }
+    else if(it.type==="bolt"){ P.bolts++; toast("COUPLING BOLT +1"); }
+    else if(it.type==="cell"){ P.batt=Math.min(100,P.batt+55); toast("CELL CHARGE"); }
+    else if(it.type==="med"){ P.hp=Math.min(100,P.hp+34); toast("FIELD KIT"); }
+    else if(it.type==="key"){ P.keys++; toast("KEYCARD"); }
+  }
+  hudTask();
+}
+function openLog(li){
+  var lg=LOGS[li%LOGS.length];
+  if(!G.seenLogs[li]){ G.seenLogs[li]=1; G.logsRead++; }
+  el("logTitle").textContent=lg.t;
+  el("logMeta").textContent=lg.by+"  ·  RECOVERED "+(G.logsRead)+"/"+LOGS.length;
+  el("logBody").textContent=lg.b;
+  el("logbox").classList.add("on");
+  P.reading=true;
+}
+function closeLog(){
+  el("logbox").classList.remove("on");
+  if(P) P.reading=false;   /* toMainMenu closes the reader, and can run before there is a player */
+}
+
+/* -------------------------------------------------------------- damage */
+function damage(n,src,silent){
+  if(P.dead||n<=0) return;
+  if(P.iframe>0&&!silent) return;
+  P.hp-=n;
+  if(!silent){ P.iframe=0.9; Snd.hurt(); flash(); }
+  if(P.hp<=0){
+    P.hp=0;
+    die(src==="cold" ? "Core temperature below survivable. You stop shivering, which is the part you were told to be afraid of."
+       : src ? "Contact. The "+src+" had a fix on the last sound you made, and you were still standing on it."
+       : "You did not survive the wing.");
+  }
+}
+function flash(){
+  var f=el("dmgflash"); if(!f) return;
+  f.style.transition="none"; f.style.opacity="1";
+  setTimeout(function(){ f.style.transition="opacity .45s"; f.style.opacity="0"; },16);
+}
+function die(why){
+  if(P.dead) return;
+  P.dead=true; G.deaths++;
+  Snd.slideStop();
+  el("deadWhy").textContent=why;
+  setState("dead");
+}
+function winLevel(){
+  P.won=true;
+  Snd.lift();
+  if(G.level>=LEVELS.length-1){ showEnding(); return; }
+  toast("LIFT · ASCENDING");
+  var nx=G.level+1;
+  setTimeout(function(){ if(state==="play"){ showIntro(nx,true); } },900);
+}
+
+/* ------------------------------------------------------------- throwing */
+function throwBolt(){
+  if(P.bolts<=0||state!=="play") return;
+  P.bolts--;
+  Snd.boltThrow();
+  var d=cardinalFromYaw(P.dir);
+  thrown.push({x:P.x,y:P.y,vx:Math.cos(P.dir)*11,vy:Math.sin(P.dir)*11,t:0,live:true});
+  makeNoise(P.x,P.y,10);
+  hudTask();
+}
+function updateThrown(dt){
+  for(var i=thrown.length-1;i>=0;i--){
+    var b=thrown[i];
+    if(!b.live){ continue; }
+    b.t+=dt;
+    var nx=b.x+b.vx*dt, ny=b.y+b.vy*dt;
+    var ti=(ny|0)*L.w+(nx|0);
+    var hitWall=!inB(L,nx|0,ny|0)||TILE[L.map[ti]].solid;
+    if(hitWall||b.t>0.55){
+      b.live=false;
+      b.x=clamp(b.x,0.5,L.w-0.5); b.y=clamp(b.y,0.5,L.h-0.5);
+      var lt=L.map[(b.y|0)*L.w+(b.x|0)];
+      Snd.boltLand();
+      makeNoise(b.x,b.y,lt===T.SLUSH?N_BOLT_WET:N_BOLT_DRY);
+      if(lt===T.HOLE){ thrown.splice(i,1); continue; }
+      L.items.push({type:"bolt",x:(b.x|0)+0.5,y:(b.y|0)+0.5,got:false});
+      thrown.splice(i,1);
+      continue;
+    }
+    b.x=nx; b.y=ny;
+  }
+}
+
+/* ------------------------------------------------------------ monsters */
+function monBlocked(x,y){
+  if(!inB(L,x|0,y|0)) return true;
+  var i=(y|0)*L.w+(x|0), t=L.map[i];
+  if(t===T.LOCK) return !((L.opened>>>(L.lockBit[i]||0))&1);
+  if(t===T.HOLE) return true;
+  if(t===T.THIN&&L.thinBit[i]!==undefined&&((L.broken>>>L.thinBit[i])&1)) return true;
+  return !!TILE[t].solid;
+}
+function monStep(m,dt,spd){
+  var dx=m.tx-m.x, dy=m.ty-m.y;
+  var d=Math.sqrt(dx*dx+dy*dy);
+  if(d<0.35) return true;
+  dx/=d; dy/=d;
+  var mul=1;
+  var mi=(m.y|0)*L.w+(m.x|0);
+  if(L.map[mi]===T.SLUSH) mul=0.78;
+  var stepv=spd*mul*dt;
+  var nx=m.x+dx*stepv, ny=m.y+dy*stepv;
+  if(!monBlocked(nx,m.y)) m.x=nx;
+  else if(!monBlocked(m.x+dx*stepv*0.4,m.y+ (dy>0?0.6:-0.6))) { }
+  if(!monBlocked(m.x,ny)) m.y=ny;
+  /* unstick: shuffle along the wall */
+  if(m.x===nx-dx*stepv&&m.y===ny-dy*stepv){
+    var pd=(m.dir+1)&3;
+    var px=m.x+DX[pd]*stepv, py=m.y+DY[pd]*stepv;
+    if(!monBlocked(px,py)){ m.x=px; m.y=py; } else m.dir=(m.dir+1)&3;
+  }
+  return false;
+}
+function wanderTarget(m){
+  for(var t=0;t<24;t++){
+    var x=1+((Math.random()*(L.w-2))|0), y=1+((Math.random()*(L.h-2))|0);
+    if(monBlocked(x+0.5,y+0.5)) continue;
+    m.tx=x+0.5; m.ty=y+0.5; return;
+  }
+  m.tx=m.x; m.ty=m.y;
+}
+function updateMons(dt){
+  for(var i=L.mons.length-1;i>=0;i--){
+    var m=L.mons[i], md=MONDEF[m.kind];
+    m.anim+=dt*(m.mode==="hunt"?9:4);
+    m.voice-=dt;
+    if(m.kind==="hanger"&&m.fused){
+      /* refreezes into the ceiling if nothing has happened for a while */
+      continue;
+    }
+    if(m.drop>0){ m.drop-=dt; continue; }
+
+    if(m.kind==="skitter"&&m.mode==="hunt"){
+      /* it commits to lanes exactly the way the deck makes you commit */
+      if(!m.slide){
+        var bestD=1e9,bestR=null;
+        for(var d=0;d<4;d++){
+          var r=stepSlide(L,{x:m.x|0,y:m.y|0,broken:L.broken,opened:L.opened,kmask:0,kused:0},d);
+          if(r.spin||r.len===0) continue;
+          var sc=dist2(r.x,r.y,m.tx,m.ty);
+          if(r.dead) sc+=0; /* it does not know, and that is the point */
+          if(sc<bestD){ bestD=sc; bestR=r; }
+        }
+        if(bestR){ m.slide={p:bestR.path,i:0,dead:bestR.dead,stop:bestR.stop}; }
+        else { m.mode="seek"; }
+      }
+      if(m.slide){
+        var s=m.slide, tgt=s.p[s.i];
+        if(tgt){
+          var tx=tgt.x+0.5, ty=tgt.y+0.5;
+          var dx=tx-m.x, dy=ty-m.y, dd=Math.sqrt(dx*dx+dy*dy);
+          var stepv=md.huntSpd*dt;
+          if(dd<=stepv){
+            m.x=tx; m.y=ty; s.i++;
+            var tt=L.map[tgt.y*L.w+tgt.x];
+            if(tt===T.HOLE||(tt===T.THIN&&L.thinBit[tgt.y*L.w+tgt.x]!==undefined&&((L.broken>>>L.thinBit[tgt.y*L.w+tgt.x])&1))){
+              /* aimed into a shaft. this is the counterplay the logs describe. */
+              Snd.fall(); L.mons.splice(i,1);
+              toast("SOMETHING WENT DOWN THE SHAFT");
+              continue;
+            }
+            if(s.i>=s.p.length){
+              if(s.stop==="wall"){ Snd.skitterSlam(); makeNoise(m.x,m.y,58); }
+              m.slide=null;
+              if(dist2(m.x,m.y,m.tx,m.ty)<2.2){ m.mode="seek"; m.lost=0; }
+            }
+          } else { m.x+=dx/dd*stepv; m.y+=dy/dd*stepv; }
+        } else m.slide=null;
+      }
+    } else {
+      var spd=m.mode==="hunt"?md.huntSpd:m.mode==="seek"?md.spd:md.spd*0.62;
+      if(m.kind==="skitter"&&m.mode!=="hunt") spd*=0.8;
+      var arrived=monStep(m,dt,spd);
+      if(arrived){
+        if(m.mode==="hunt"||m.mode==="seek"){
+          m.lost+=dt;
+          if(m.lost>2.6){ m.mode="wander"; wanderTarget(m); m.lost=0; }
+          else { /* cast about near the fix */
+            m.tx=m.x+(Math.random()-0.5)*3.4; m.ty=m.y+(Math.random()-0.5)*3.4;
+            if(monBlocked(m.tx,m.ty)){ m.tx=m.x; m.ty=m.y; }
+          }
+        } else wanderTarget(m);
+      }
+    }
+    if(m.voice<=0&&m.mode!=="wander"&&Math.random()<dt*0.35) voice(m);
+
+    /* contact */
+    var pd=dist2(m.x,m.y,P.x,P.y);
+    if(pd<Math.pow(md.r+0.42,2)&&P.iframe<=0&&!P.dead){
+      var spr=m.kind==="walker"?SPR.walker[0]:m.kind==="skitter"?SPR.skitter[0]:SPR.hanger[0];
+      jumpscare(spr,m.kind==="walker"?2.05:m.kind==="skitter"?1.5:1.7,0);
+      damage(md.dmg,md.name);
+      /* it throws you off your line */
+      if(P.sliding){ P.sliding=false; P.path=null; Snd.slideStop(); }
+      m.tx=P.x+(Math.random()-0.5)*4; m.ty=P.y+(Math.random()-0.5)*4;
+    }
+  }
+}
+
+/* ----------------------------------------------------------- map memory */
+function markSeen(){
+  if(!L.seen) return;
+  var r=7;
+  for(var y=P.gy-r;y<=P.gy+r;y++) for(var x=P.gx-r;x<=P.gx+r;x++){
+    if(!inB(L,x,y)) continue;
+    if(dist2(x,y,P.gx,P.gy)>r*r) continue;
+    if(losClear(L,P.gx+0.5,P.gy+0.5,x+0.5,y+0.5)) L.seen[y*L.w+x]=1;
+  }
+}
+
+/* ==========================================================================
+   UPDATE
+   ========================================================================== */
+function updatePlayer(dt){
+  if(P.dead) return;
+  P.iframe-=dt;
+  P.noiseMeter=Math.max(0,P.noiseMeter-dt*34);
+  /* the post pass reads this and nothing was ever writing it — see endSlide */
+  if(P.dizzyGrain>0) P.dizzyGrain=Math.max(0,P.dizzyGrain-dt*0.085);
+  if(P.gaspT>0) P.gaspT-=dt;
+  if(scareCool>0) scareCool-=dt;
+  if(scare){ scare.t+=dt; if(scare.t>scare.dur) scare=null; }
+
+  /* breath */
+  P.holding=(keys.b||mouseDown[2])&&P.breath>0&&!P.reading;
+  if(P.holding){
+    P.breath=Math.max(0,P.breath-dt*17);
+    if(P.breath<=0){ Snd.gasp(); makeNoise(P.x,P.y,N_GASP); P.gaspT=1.2; }
+  } else {
+    P.breath=Math.min(100,P.breath+dt*11);
+    if(P.breathSnd===undefined) P.breathSnd=0;
+    P.breathSnd-=dt;
+    if(P.breathSnd<=0){ P.breathSnd=3.4+Math.random()*2.2; if(Math.random()<0.5) Snd.breath(); }
+  }
+
+  /* cold */
+  var onTile=L.map[P.gy*L.w+P.gx];
+  var drain=TEMP_DRAIN*(1+G.level*0.055);
+  if(P.wet>0){
+    /* worst right after the dunk, easing as you dry rather than stopping dead */
+    var soak=clamp(P.wet/WET_SOAK,0,1);
+    drain=TEMP_DRAIN_WET*(WET_FLOOR+(1-WET_FLOOR)*soak);
+    P.wet-=dt*(onTile===T.HEAT?WET_DRY_ON_HEAT:1);
+    if(P.wet<0) P.wet=0;
+  }
+  if(onTile===T.HEAT){ P.temp=Math.min(TEMP_MAX,P.temp+TEMP_WARM*dt); }
+  else P.temp-=drain*dt;
+  if(P.temp<31.2){
+    P.shiverT-=dt;
+    if(P.shiverT<=0){
+      P.shiverT=2.2+Math.random()*2.4;
+      Snd.shiver();
+      makeNoise(P.x,P.y,N_SHIVER*(P.holding?0.6:1));
+      toast("SHIVERING");
+    }
+  }
+  if(P.temp<=TEMP_MIN){ P.temp=TEMP_MIN; damage(999,"cold"); return; }
+
+  /* lamp */
+  if(P.lampOn){
+    P.batt=Math.max(0,P.batt-BATT_DRAIN*dt);
+    if(P.batt<=0){ P.lampOn=false; toast("CELL DEAD"); }
+  }
+
+  /* heartbeat when something is close and moving */
+  P.heartT=(P.heartT||0)-dt;
+  if(P.heartT<=0){
+    var near=99;
+    for(var i=0;i<L.mons.length;i++){ if(L.mons[i].fused) continue;
+      near=Math.min(near,Math.sqrt(dist2(L.mons[i].x,L.mons[i].y,P.x,P.y))); }
+    if(near<9){ Snd.heart(clamp(1.4-near/9,0.15,1)); P.heartT=clamp(near/9,0.28,0.85); }
+    else P.heartT=0.9;
+  }
+
+  if(P.reading) return;
+
+  /* ---- the slide ---- */
+  if(P.sliding){
+    var tgt=P.path[P.pi];
+    if(!tgt){ endSlide(P.res.spin?"spin":P.res.stop); return; }
+    var tx=tgt.x+0.5, ty=tgt.y+0.5;
+    var dx=tx-P.x, dy=ty-P.y, d=Math.sqrt(dx*dx+dy*dy);
+    var mul=(L.map[P.gy*L.w+P.gx]===T.SLUSH)?0.5:1;
+    var step=P.spd*mul*dt;
+    if(d<=step){
+      P.x=tx; P.y=ty;
+      var died=arriveTile(tgt,P.pi===P.path.length-1);
+      if(died||P.dead) return;
+      P.pi++;
+      if(P.spikeReq){
+        P.spikeReq=false;
+        P.res={stop:"spike"};
+        endSlide("spike"); return;
+      }
+      if(P.pi>=P.path.length){ endSlide(P.res.spin?"spin":P.res.stop); return; }
+    } else { P.x+=dx/d*step; P.y+=dy/d*step; }
+    Snd.slideLevel(P.creep?0.010:0.030);
+  } else {
+    Snd.slideLevel(0.0001);
+    /* commit */
+    if(keys.w) beginSlide(0);
+    else if(keys.d) beginSlide(1);
+    else if(keys.s) beginSlide(2);
+    else if(keys.a) beginSlide(3);
+  }
+
+  /* preview */
+  if(keys.tab&&!P.sliding){
+    var r=computeSlide(cardinalFromYaw(P.dir));
+    P.preview=r.path;
+  } else P.preview=null;
+
+  /* bloom recovery */
+  for(var i=0;i<L.lamps.length;i++){ if(L.lamps[i].shut>0) L.lamps[i].shut-=dt; }
+}
+
+function update(dt){
+  if(state!=="play") return;
+  gameTime+=dt;
+  G.time+=dt;
+  updatePlayer(dt);
+  if(P.dead) return;
+  updateThrown(dt);
+  updateMons(dt);
+  updateLamps(L,gameTime);
+  for(var i=noiseEvents.length-1;i>=0;i--){ noiseEvents[i].t+=dt; if(noiseEvents[i].t>2.4) noiseEvents.splice(i,1); }
+  hud();
+}
+
+/* ==========================================================================
+   HUD + MAP
+   ========================================================================== */
+var toastT=0;
+function toast(s){
+  var t=el("toast"); if(!t) return;
+  t.textContent=s; t.classList.add("on"); toastT=2.2;
+}
+function hudTask(){
+  var r=el("rKit"); if(!r) return;
+  r.innerHTML="SPIKES "+P.spikes+" &nbsp; BOLTS "+P.bolts+(P.keys?" &nbsp; CARDS "+P.keys:"");
+  var t=el("rTask");
+  if(t) t.textContent="REACH THE LIFT";
+}
+function hud(){
+  var n=P.noiseMeter|0;
+  var nb=el("noiseBar"), nt=el("noiseTxt");
+  if(nb){
+    nb.style.width=Math.min(100,n)+"%";
+    nb.style.background=n>=NOISE_CHARGE?"#e8503a":n>=NOISE_NOTICE?"#d8a03a":"#3f7f6a";
+  }
+  if(nt) nt.textContent=n+(n>=NOISE_CHARGE?" · CHARGE":n>=NOISE_NOTICE?" · NOTICED":" · UNHEARD");
+  var tp=clamp((P.temp-TEMP_MIN)/(TEMP_MAX-TEMP_MIN),0,1);
+  var tb=el("tempBar"); if(tb){ tb.style.width=(tp*100)+"%"; tb.style.background=tp<0.35?"#6fd0ff":"#5aa8d8"; }
+  var tt=el("tempTxt"); if(tt) tt.textContent=P.temp.toFixed(1);
+  var hb=el("hpBar"); if(hb){ hb.style.width=P.hp+"%"; hb.style.background=P.hp<35?"#c9563f":"#7fc9a0"; }
+  var ht=el("hpTxt"); if(ht) ht.textContent=P.hp|0;
+  var bb=el("battBar"); if(bb) bb.style.width=P.batt+"%";
+  var bt=el("battTxt"); if(bt) bt.textContent=P.batt|0;
+  var st=el("rStance"); if(st){ st.textContent=P.creep?"CREEPING":"STANDING"; st.className=P.creep?"good":""; }
+  var lm=el("rLamp"); if(lm){ lm.textContent=P.lampOn?"LAMP ON":"LAMP OFF"; lm.className=P.lampOn?"":"dim"; }
+  var tp2=el("hTop");
+  if(tp2){
+    var lo=L.def.name+"  ·  "+L.sub+"  ·  PAR "+L.par+"  ·  PUSHES "+P.steps;
+    tp2.textContent=lo;
+  }
+  var hn=el("hint");
+  if(hn){
+    var s="";
+    if(P.sliding) s="";
+    else {
+      var t2=L.map[P.gy*L.w+P.gx];
+      if(t2===T.LIFT) s="";
+      else if(t2===T.HEAT) s="[E] WARM UP";
+      else {
+        var it=itemHere();
+        if(it) s="[E] "+(it.type==="log"?"READ LOG":"TAKE");
+      }
+    }
+    hn.textContent=s;
+  }
+  drawMap();
+}
+function itemHere(){
+  for(var i=0;i<L.items.length;i++){
+    var it=L.items[i];
+    if(!it.got&&(it.x|0)===P.gx&&(it.y|0)===P.gy) return it;
+  }
+  return null;
+}
+
+var mapBig=false;
+var MAPCOL={};
+MAPCOL[T.WALL]="#243541"; MAPCOL[T.ICE]="#0e1c26"; MAPCOL[T.GRIT]="#4a3722";
+MAPCOL[T.THIN]="#132b3c"; MAPCOL[T.HOLE]="#000000"; MAPCOL[T.DRUM]="#3d4630";
+MAPCOL[T.SLUSH]="#123244"; MAPCOL[T.GLASS]="#2a4250"; MAPCOL[T.LOCK]="#5a4620";
+MAPCOL[T.LIFT]="#2f7f5e"; MAPCOL[T.HEAT]="#5a3320"; MAPCOL[T.PLATE]="#22323c";
+MAPCOL[T.MIRR_A]="#3f5566"; MAPCOL[T.MIRR_B]="#3f5566";
+MAPCOL[T.VANE_E]="#2a4a5c"; MAPCOL[T.VANE_S]="#2a4a5c"; MAPCOL[T.VANE_W]="#2a4a5c"; MAPCOL[T.VANE_N]="#2a4a5c";
+function drawMap(){
+  var c=el("mapc"); if(!c||!c.getContext) return;
+  var S=mapBig?9:3;
+  var w=L.w*S, h=L.h*S;
+  if(c.width!==w||c.height!==h){ c.width=w; c.height=h; }
+  var g=c.getContext("2d"); if(!g) return;
+  g.fillStyle="#04080b"; g.fillRect(0,0,w,h);
+  for(var y=0;y<L.h;y++) for(var x=0;x<L.w;x++){
+    var i=y*L.w+x;
+    if(!L.seen[i]) continue;
+    var t=L.map[i];
+    if(t===T.THIN&&L.thinBit[i]!==undefined&&((L.broken>>>L.thinBit[i])&1)) t=T.HOLE;
+    if(t===T.LOCK&&((L.opened>>>(L.lockBit[i]||0))&1)) t=T.ICE;
+    g.fillStyle=MAPCOL[t]||"#0e1c26";
+    g.fillRect(x*S,y*S,S,S);
+  }
+  /* items you have seen */
+  for(var i=0;i<L.items.length;i++){
+    var it=L.items[i]; if(it.got) continue;
+    var ix=(it.y|0)*L.w+(it.x|0);
+    if(!L.seen[ix]) continue;
+    g.fillStyle=it.type==="log"?"#7fd8f0":it.type==="key"?"#e0b84a":"#9fd0a8";
+    g.fillRect((it.x|0)*S+(S>2?1:0),(it.y|0)*S+(S>2?1:0),Math.max(1,S-2),Math.max(1,S-2));
+  }
+  /* blooms that are lit */
+  for(var i=0;i<L.lamps.length;i++){
+    var lp=L.lamps[i]; if(lp.mode!=="bloom") continue;
+    var ix=(lp.y|0)*L.w+(lp.x|0); if(!L.seen[ix]) continue;
+    g.fillStyle=lp.shut>0?"#3a3020":"#e8c060";
+    g.fillRect((lp.x|0)*S,(lp.y|0)*S,Math.max(1,S-1),Math.max(1,S-1));
+  }
+  /* the noise you have been making */
+  for(var i=0;i<noiseEvents.length;i++){
+    var ne=noiseEvents[i];
+    if(ne.l<NOISE_NOTICE) continue;
+    var a=clamp(1-ne.t/2.4,0,1)*0.5;
+    g.strokeStyle="rgba(232,90,60,"+a.toFixed(2)+")";
+    g.lineWidth=1;
+    g.beginPath(); g.arc(ne.x*S,ne.y*S,(2+ne.t*7)*(S/3),0,6.284); g.stroke();
+  }
+  /* you */
+  g.fillStyle="#dff4ff";
+  g.beginPath(); g.arc(P.x*S,P.y*S,Math.max(1.5,S*0.42),0,6.284); g.fill();
+  g.strokeStyle="#8fd6ee"; g.lineWidth=Math.max(1,S*0.22);
+  g.beginPath(); g.moveTo(P.x*S,P.y*S);
+  g.lineTo(P.x*S+Math.cos(P.dir)*S*1.7,P.y*S+Math.sin(P.dir)*S*1.7); g.stroke();
+  if(mapBig){
+    g.fillStyle="#7fd8a0";
+    g.fillRect(L.lift.x*S,L.lift.y*S,S,S);
+  }
+}
+
+/* ==========================================================================
+   INPUT
+   ========================================================================== */
+var KEYMAP={KeyW:"w",KeyA:"a",KeyS:"s",KeyD:"d",KeyB:"b",Tab:"tab"};
+function bindInput(){
+  window.addEventListener("keydown",function(e){
+    Snd.resume();
+    var c=e.code;
+    if(c==="Tab"||c==="Space"||c==="KeyW"||c==="KeyA"||c==="KeyS"||c==="KeyD"||c==="KeyM"||c==="KeyE"||c==="KeyR"||c==="KeyF"||c==="KeyC"||c==="KeyB") e.preventDefault();
+    if(KEYMAP[c]) keys[KEYMAP[c]]=1;
+    if(e.repeat) return;
+    if(c==="Escape"){
+      if(el("logbox").classList.contains("on")){ closeLog(); return; }
+      if(state==="play") setState("pause");
+      else if(state==="pause") setState("play");
+      else if(MENU_PAGES.indexOf(curPage)>=0) showMenuPage(null);
+      return;
+    }
+    if(state!=="play") return;
+    if(c==="KeyC"){ P.creep=!P.creep; toast(P.creep?"CREEPING":"STANDING"); }
+    if(c==="KeyF"){ if(P.batt>0){ P.lampOn=!P.lampOn; Snd.lampToggle(); } else toast("CELL DEAD"); }
+    if(c==="KeyM"){ mapBig=!mapBig; el("mapwrap").classList.toggle("big",mapBig); }
+    if(c==="KeyR"){ throwBolt(); }
+    if(c==="KeyE"){ interact(); }
+    if(c==="Space"){
+      if(P.sliding&&P.spikes>0&&!P.spikeReq){ P.spikes--; P.spikeReq=true; G.spikesUsed++; hudTask(); }
+      else if(!P.sliding) toast("SPIKES ONLY BITE WHILE MOVING");
+      else if(P.spikes<=0) toast("NO CRAMPONS LEFT");
+    }
+  });
+  window.addEventListener("keyup",function(e){ if(KEYMAP[e.code]) keys[KEYMAP[e.code]]=0; });
+  window.addEventListener("blur",function(){ keys={}; mouseDown={}; });
+
+  var v=el("view");
+  v.addEventListener("click",function(){
+    Snd.resume();
+    if(state==="play"&&v.requestPointerLock) v.requestPointerLock();
+  });
+  window.addEventListener("mousedown",function(e){ mouseDown[e.button]=1; if(e.button===2) e.preventDefault(); });
+  window.addEventListener("mouseup",function(e){ mouseDown[e.button]=0; });
+  window.addEventListener("contextmenu",function(e){ if(state==="play") e.preventDefault(); });
+  window.addEventListener("mousemove",function(e){
+    if(state!=="play"||!P) return;
+    var lk=document.pointerLockElement===v;
+    var mx=lk?e.movementX:0, my=lk?e.movementY:0;
+    if(!lk) return;
+    P.dir+=mx*0.0026;
+    P.pitch=clamp(P.pitch-my*0.9,-RH*0.45,RH*0.45);
+  });
+}
+function interact(){
+  var it=itemHere();
+  if(it){ takeItem(it); return; }
+  var t=L.map[P.gy*L.w+P.gx];
+  if(t===T.HEAT){ P.temp=Math.min(TEMP_MAX,P.temp+4.5); toast("CORE TEMP "+P.temp.toFixed(1)); return; }
+  if(t===T.LIFT){ winLevel(); return; }
+  toast("NOTHING HERE");
+}
+
+/* ==========================================================================
+   SCREENS
+   ========================================================================== */
+var MENU_PAGES=["sBrief","sBest","sKeys","sSel","sGlyph"];
+var curPage=null;
+var SCREENS=["sMenu","sBrief","sBest","sKeys","sSel","sGlyph","sIntro","sPause","sDead","sWin"];
+function hideAll(){ for(var i=0;i<SCREENS.length;i++){ var e2=el(SCREENS[i]); if(e2) e2.classList.remove("on"); } }
+function showMenuPage(id){
+  hideAll(); curPage=id;
+  el(id||"sMenu").classList.add("on");
+  if(id==="sBest") buildBestiary();
+  if(id==="sSel") buildSelect();
+  if(id==="sGlyph") buildGlyphs();
+}
+function setState(s){
+  state=s;
+  var h=el("hud");
+  hideAll();
+  if(s==="play"){
+    if(h) h.classList.add("on");
+    curPage=null;
+  } else {
+    if(h) h.classList.remove("on");
+    if(document.exitPointerLock&&document.pointerLockElement) document.exitPointerLock();
+    if(s==="pause"){ el("sPause").classList.add("on"); Snd.slideStop();
+      el("pauseStat").textContent="LOGS RECOVERED "+G.logsRead+"/"+LOGS.length+"  ·  DEATHS "+G.deaths+"  ·  DECK "+(G.level+1)+"/"+LEVELS.length; }
+    else if(s==="dead"){ el("sDead").classList.add("on"); Snd.slideStop();
+      setTimeout(function(){ if(state==="dead") prebuildDeck(G.level); },600); }
+    else if(s==="win"){ el("sWin").classList.add("on"); }
+    else if(s==="menu"){ el("sMenu").classList.add("on"); }
+    else if(s==="intro"){ el("sIntro").classList.add("on"); }
+  }
+}
+function showIntro(idx,keep){
+  pendingLevel=idx; pendingKeep=!!keep;
+  var d=LEVELS[idx];
+  el("introName").textContent=d.name;
+  el("introSub").textContent=d.sub+"  ·  DECK "+(idx+1)+" OF "+LEVELS.length;
+  el("introBody").textContent=d.intro;
+  setState("intro");
+  setTimeout(function(){ prebuildDeck(idx); },50);
+}
+var pendingLevel=0, pendingKeep=false;
+
+function showEnding(){
+  var n=G.logsRead, t=el("winTitle"), b=el("winBody");
+  var title,body;
+  if(n>=20){
+    title="SURFACE — AND YOU KNOW WHY";
+    body="<p>The shaft ladder is exactly where Oduya said it would be, and the air moving down it is the first warm thing you have touched in six hours.</p>"
+      +"<p>You come up with twenty-odd recovered logs and the whole shape of it: a compound that holds in the cold, a man who countersigned his own Class 4 authorisation, and a wing that has had eleven days alone in the dark to learn a floor with no friction on it.</p>"
+      +"<p>Vance wrote that he would very much like to know what it had learned. You can tell him. You are the only person alive who can, and the sentence you have chosen is <em>it learned to hunt the way the floor makes you move</em>.</p>"
+      +"<p class='dim'>They seal Sublevel 8 again the following week. This time somebody reads the file first.</p>";
+  } else if(n>=11){
+    title="SURFACE";
+    body="<p>You come up out of the terminus shaft with frostbite in three fingers and a partial record.</p>"
+      +"<p>Enough of it to be believed: the acoustic notes, the field observations, Oduya's handover logs. Not enough to explain why a cryogenic wing had three live Class 4 bays in it, or whose name is on the countersign.</p>"
+      +"<p>The board thanks you. The board files it. Somebody upstairs reads the part about the compound holding in the cold and does not put it down.</p>"
+      +"<p class='dim'>The wing stays sealed for now.</p>";
+  } else {
+    title="SURFACE — WITH NOTHING";
+    body="<p>You get out. That is the whole of it.</p>"
+      +"<p>You could not tell them what is down there because you never stopped long enough to read anything, and the only true sentence in your report is that the floor has no friction and the things on it have no eyes.</p>"
+      +"<p>It reads like panic. It gets filed as panic.</p>"
+      +"<p class='dim'>Sublevel 8 goes back on the schedule for a survey team in the spring. You are not consulted about the roster.</p>";
+  }
+  t.textContent=title;
+  b.innerHTML=body+"<p class='tiny center' style='margin-top:26px'>LOGS RECOVERED "+n+"/"+LOGS.length
+    +"  ·  DEATHS "+G.deaths+"  ·  SPIKES USED "+G.spikesUsed+"  ·  TIME "+fmtTime(G.time)+"</p>";
+  setState("win");
+}
+function fmtTime(s){ var m=(s/60)|0; return m+"m "+((s-m*60)|0)+"s"; }
+
+/* ---------------------------------------------------- menu sub-pages */
+function blitInto(cvs,tex,scale,bg){
+  if(!cvs||!cvs.getContext) return;
+  var g=cvs.getContext("2d"); if(!g) return;
+  cvs.width=Math.round(tex.w*scale); cvs.height=Math.round(tex.h*scale);
+  g.fillStyle=bg||"#04080b"; g.fillRect(0,0,cvs.width,cvs.height);
+  var id=g.createImageData(tex.w,tex.h), p=id.data;
+  for(var i=0;i<tex.w*tex.h;i++){
+    var c=tex.d[i];
+    p[i*4]=c&255; p[i*4+1]=(c>>8)&255; p[i*4+2]=(c>>16)&255; p[i*4+3]=(c>>>24)&255;
+  }
+  var tmp=document.createElement("canvas"); tmp.width=tex.w; tmp.height=tex.h;
+  var tg=tmp.getContext("2d"); if(!tg) return;
+  tg.putImageData(id,0,0);
+  g.imageSmoothingEnabled=false;
+  g.drawImage(tmp,0,0,cvs.width,cvs.height);
+}
+var BEASTS=[
+ {k:"walker", spr:function(){return SPR.walker[1];}, sc:1.5, n:"RIMEWALKER",
+  tags:["BLIND","CLAWED — DOES NOT SLIDE","SLOW","HEAVY CONTACT"],
+  d:"The largest of them. It grew claws that reach through the ice to the plate underneath, which is the whole difference between it and you: it chooses where it stops and you do not.\n\nOn open deck you are faster than it by half. That advantage lasts exactly as long as your route does."},
+ {k:"skitter", spr:function(){return SPR.skitter[1];}, sc:1.6, n:"SKITTER",
+  tags:["BLIND","SLIDES","VERY FAST","SHRIEKS"],
+  d:"It adapted the other way — it committed to the ice. It hunts in long straight lanes and slams into bulkheads at the end of them, and it does not appear to mind.\n\nBecause it slides, it can be aimed. Put a shaft at the end of the lane it is going to take."},
+ {k:"hanger", spr:function(){return SPR.hanger[1];}, sc:1.6, n:"HANGER",
+  tags:["BLIND","AMBUSH","CEILING"],
+  d:"It goes up into the ceiling ice and freezes in. The only tell is frost growing downward in spires from a body heat that has no business being up there.\n\nIt drops on sound underneath it. Look up. That is the entire counter."},
+ {k:"bloom", spr:function(){return SPR.bloomOpen;}, sc:1.1, n:"BLOOM",
+  tags:["HARMLESS","LIGHT SOURCE","LISTENS"],
+  d:"Not an animal, and not something anyone put there. A rooted stalk with a light organ, and the only reason you can see anything down here.\n\nIt clamps shut when a loud stop lands near it. The wing lights itself in exact proportion to how carefully you have been moving through it."}
+];
+function buildBestiary(){
+  var host=el("bestList"); if(!host||host.dataset.built) return;
+  host.innerHTML="";
+  for(var i=0;i<BEASTS.length;i++){
+    var b=BEASTS[i];
+    var d=document.createElement("div"); d.className="beast";
+    var c=document.createElement("canvas");
+    d.appendChild(c);
+    var t=document.createElement("div");
+    var tags="";
+    for(var j=0;j<b.tags.length;j++) tags+="<span class='tag "+(b.tags[j]==="BLIND"?"blind":j===0?"":"")+"'>"+b.tags[j]+"</span>";
+    t.innerHTML="<h3>"+b.n+"</h3>"+tags+"<p>"+b.d.replace(/\n\n/g,"</p><p>")+"</p>";
+    d.appendChild(t);
+    host.appendChild(d);
+    blitInto(c,b.spr(),b.sc);
+  }
+  host.dataset.built="1";
+}
+var GLYPHS=[
+ {t:T.ICE,n:"BLACK ICE"},{t:T.GRIT,n:"GRIT"},{t:T.THIN,n:"FRACTURE"},{t:T.HOLE,n:"OPEN SHAFT"},
+ {t:T.DRUM,n:"COOLANT DRUM"},{t:T.VANE_E,n:"STEAM JET"},{t:T.MIRR_A,n:"CANTED PLATE"},
+ {t:T.SLUSH,n:"MELTWATER"},{t:T.GLASS,n:"SHATTERED PANE"},{t:T.LOCK,n:"SEALED HATCH"},
+ {t:T.PLATE,n:"KEY PLATE"},{t:T.HEAT,n:"HEAT VENT"},{t:T.LIFT,n:"SERVICE LIFT"}
+];
+function buildGlyphs(){
+  var host=el("glyphs"); if(!host||host.dataset.built) return;
+  host.innerHTML="";
+  for(var i=0;i<GLYPHS.length;i++){
+    var g=GLYPHS[i];
+    var d=document.createElement("div"); d.className="gl";
+    var c=document.createElement("canvas"); d.appendChild(c);
+    var tx=document.createElement("div");
+    var def=TILE[g.t];
+    tx.innerHTML="<b>"+g.n+"</b><span>"+(def.desc||"")+"</span>";
+    d.appendChild(tx); host.appendChild(d);
+    var tex=(g.t===T.DRUM)?TEX.drum:(g.t===T.LOCK)?TEX.hatch:floorTexFor(g.t);
+    blitInto(c,tex,0.72);
+  }
+  host.dataset.built="1";
+}
+function buildSelect(){
+  var host=el("selList"); if(!host) return;
+  host.innerHTML="";
+  for(var i=0;i<LEVELS.length;i++){
+    (function(i){
+      var d=LEVELS[i];
+      var b=document.createElement("button"); b.className="lvbtn";
+      var mech=d.mechs.length?d.mechs.join(" · ").toUpperCase():"ICE ONLY";
+      var reached=i<=G.deepest?"  ·  REACHED":"";
+      b.innerHTML="<b>"+(i+1)+". "+d.name+"</b><i>"+d.sub+" — "+mech+reached+"</i>";
+      b.onclick=function(){ G.logsRead=0; G.seenLogs={}; P=null; showIntro(i,false); };
+      host.appendChild(b);
+    })(i);
+  }
+}
+
+/* ==========================================================================
+   BOOT
+   ========================================================================== */
+function bindBtn(id,fn){ var b=el(id); if(b) b.onclick=fn; }
+function toMainMenu(){
+  Snd.slideStop();
+  scare=null; scareCool=0; mapBig=false;
+  var mw=el("mapwrap"); if(mw) mw.classList.remove("big");
+  closeLog();
+  if(document.exitPointerLock&&document.pointerLockElement) document.exitPointerLock();
+  state="menu"; showMenuPage(null);
+  var h=el("hud"); if(h) h.classList.remove("on");
+}
+function boot(){
+  buildArt();
+  initRender();
+  bindInput();
+  bindBtn("bStart",function(){ Snd.resume(); G.logsRead=0; G.seenLogs={}; G.deaths=0; G.time=0; G.spikesUsed=0; P=null; showIntro(0,false); });
+  bindBtn("bSel",function(){ showMenuPage("sSel"); });
+  bindBtn("bBrief",function(){ showMenuPage("sBrief"); });
+  bindBtn("bBest",function(){ showMenuPage("sBest"); });
+  bindBtn("bGlyph",function(){ showMenuPage("sGlyph"); });
+  bindBtn("bKeys",function(){ showMenuPage("sKeys"); });
+  bindBtn("bIntroGo",function(){ Snd.resume(); startLevel(pendingLevel,pendingKeep); });
+  bindBtn("bResume",function(){ setState("play"); });
+  bindBtn("bPauseRestart",function(){ startLevel(G.level,false); });
+  bindBtn("bPauseMenu",toMainMenu);
+  bindBtn("bRetry",function(){ startLevel(G.level,false); });
+  bindBtn("bDeadMenu",toMainMenu);
+  bindBtn("bWinMenu",toMainMenu);
+  var backs=document.querySelectorAll?document.querySelectorAll("[data-back]"):[];
+  for(var i=0;i<backs.length;i++) backs[i].onclick=function(){ showMenuPage(null); };
+  var lb=el("logbox"); if(lb) lb.onclick=closeLog;
+  requestAnimationFrame(loop);
+}
+function loop(t){
+  requestAnimationFrame(loop);
+  var dt=lastT?Math.min(0.05,(t-lastT)/1000):0.016;
+  lastT=t;
+  if(toastT>0){ toastT-=dt; if(toastT<=0){ var tt=el("toast"); if(tt) tt.classList.remove("on"); } }
+  if(state==="play"){ update(dt); render(); }
+}
+if(typeof document!=="undefined"&&document.getElementById) boot();
+
+</script>
+</body>
+</html>

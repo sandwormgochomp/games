@@ -1,0 +1,1071 @@
+<meta charset="utf-8">
+<title>TIDEPOOL</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #060d12; color: #cfe6ee;
+    font: 13px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    overflow: hidden;
+  }
+  #wrap { display: flex; height: 100%; }
+  #stage { flex: 1; position: relative; min-width: 0; }
+  canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  #side {
+    width: 300px; flex: none; border-left: 1px solid #12303c;
+    background: #08131a; overflow-y: auto; padding: 12px 14px 40px;
+  }
+  h1 {
+    font-size: 15px; letter-spacing: 4px; margin: 2px 0 2px;
+    color: #7fe3c4; font-weight: 600;
+  }
+  .sub { color: #4a7183; font-size: 11px; margin-bottom: 14px; letter-spacing: 1px; }
+  .grp { margin-bottom: 16px; }
+  .grp > .lbl {
+    color: #4a7183; font-size: 10px; letter-spacing: 2px;
+    text-transform: uppercase; margin-bottom: 6px;
+    border-bottom: 1px solid #10262f; padding-bottom: 3px;
+  }
+  .row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .row .n { width: 74px; flex: none; color: #8fb3c2; font-size: 11px; }
+  .row .v { width: 40px; flex: none; text-align: right; color: #7fe3c4; font-size: 11px; }
+  input[type=range] {
+    flex: 1; min-width: 0; -webkit-appearance: none; appearance: none;
+    height: 3px; background: #16323d; border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 11px; height: 11px; border-radius: 50%;
+    background: #7fe3c4; cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 11px; height: 11px; border: 0; border-radius: 50%;
+    background: #7fe3c4; cursor: pointer;
+  }
+  .btns { display: flex; flex-wrap: wrap; gap: 5px; }
+  button {
+    background: #0f2731; color: #9fd8ea; border: 1px solid #1b4353;
+    padding: 5px 9px; border-radius: 3px; cursor: pointer;
+    font: inherit; font-size: 11px;
+  }
+  button:hover { background: #164050; color: #d8f4ff; }
+  button.on { background: #1d5a4a; border-color: #2f8d72; color: #b6ffe6; }
+  #pops { width: 100%; height: 84px; display: block; background: #061119;
+          border: 1px solid #10262f; border-radius: 3px; }
+  .stat { display: flex; justify-content: space-between; font-size: 11px; padding: 1px 0; }
+  .stat .k { color: #6f97a8; }
+  .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+  #sel { font-size: 11px; }
+  #sel .none { color: #3f6274; font-style: italic; }
+  .bar { height: 4px; background: #10262f; border-radius: 2px; overflow: hidden; margin: 2px 0 5px; }
+  .bar > i { display: block; height: 100%; background: #7fe3c4; }
+  #hint {
+    position: absolute; left: 12px; bottom: 10px; color: #37596a;
+    font-size: 11px; pointer-events: none; letter-spacing: .5px;
+  }
+  #clock {
+    position: absolute; right: 12px; top: 10px; color: #37596a;
+    font-size: 11px; pointer-events: none; text-align: right; letter-spacing: 1px;
+  }
+</style>
+
+<div id="wrap">
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="hint">drag to stir the water &nbsp;·&nbsp; click a creature to follow it &nbsp;·&nbsp; space pauses</div>
+    <div id="clock"></div>
+  </div>
+  <div id="side">
+    <h1>TIDEPOOL</h1>
+    <div class="sub">nothing to win. just watch.</div>
+
+    <div class="grp">
+      <div class="lbl">the water</div>
+      <div class="row"><span class="n">light</span><input id="s_light" type="range" min="0" max="200" value="100"><span class="v" id="v_light"></span></div>
+      <div class="row"><span class="n">warmth</span><input id="s_temp" type="range" min="0" max="200" value="100"><span class="v" id="v_temp"></span></div>
+      <div class="row"><span class="n">current</span><input id="s_cur" type="range" min="0" max="200" value="60"><span class="v" id="v_cur"></span></div>
+      <div class="row"><span class="n">minerals</span><input id="s_min" type="range" min="0" max="200" value="100"><span class="v" id="v_min"></span></div>
+    </div>
+
+    <div class="grp">
+      <div class="lbl">time</div>
+      <div class="btns">
+        <button data-sp="0">pause</button>
+        <button data-sp="1" class="on">1&times;</button>
+        <button data-sp="2">2&times;</button>
+        <button data-sp="4">4&times;</button>
+        <button data-sp="10">10&times;</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="lbl">drop something in</div>
+      <div class="btns">
+        <button id="b_algae">algae bloom</button>
+        <button id="b_graze">grazers &times;12</button>
+        <button id="b_hunt">hunters &times;4</button>
+        <button id="b_food">food fall</button>
+        <button id="b_wipe">clear life</button>
+        <button id="b_reset">fresh pool</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="lbl">populations</div>
+      <canvas id="pops" width="272" height="84"></canvas>
+      <div class="stat"><span class="k"><i class="swatch" style="background:#3fbf7f"></i>algae</span><span id="n_algae">0</span></div>
+      <div class="stat"><span class="k"><i class="swatch" style="background:#7fd6ff"></i>grazers</span><span id="n_graze">0</span></div>
+      <div class="stat"><span class="k"><i class="swatch" style="background:#ff7a6b"></i>hunters</span><span id="n_hunt">0</span></div>
+      <div class="stat"><span class="k">generations</span><span id="n_gen">0</span></div>
+    </div>
+
+    <div class="grp">
+      <div class="lbl">following</div>
+      <div id="sel"><span class="none">click a creature</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function () {
+
+// ---------------------------------------------------------------- constants
+var C = {
+  ALGAE_MAX:      1400,
+  ALGAE_SEED:     260,
+  ALGAE_ENERGY:   26,     // energy a grazer gains from one algae
+  ALGAE_R:        2.6,
+
+  GRAZE_START:    34,
+  HUNT_START:     6,
+
+  E_MAX:          200,    // energy ceiling for creatures
+  E_MAX_H:        110,    // hunters bank far less, so they starve promptly
+  // Divided by the urge gene to get a creature's breeding threshold, then
+  // clamped by the floors below. Keep this near what the pool can actually
+  // sustain (~70): at 150 even the most eager creature needed 91 energy,
+  // which hunters never reach, so the whole predator tier was sterile.
+  E_BREED:        88,     // baseline energy needed to split
+  // These floors must sit BELOW the energy the pool can actually sustain
+  // (grazers settle near 70, hunters near 50). Set them higher and nothing
+  // ever breeds: the creatures stay fat and well fed, never reproduce, and
+  // the founding generation quietly ages out into an empty pool.
+  E_BREED_MIN:    62,     // no grazer may breed below this, however eager
+  E_BREED_SHARE:  0.45,   // fraction of the parent's reserves the child takes
+  E_START:        95,
+
+  MUT:            0.09,   // gene mutation magnitude
+  GRAZE_EAT_R:    7,
+  HUNT_EAT_R:     10,
+  HUNT_ENERGY:    0.62,   // fraction of prey energy a hunter absorbs
+  DIGEST:         200,    // ticks a hunter spends full after a kill
+  PRED_RATIO:     0.12,   // hunters may breed only up to this share of prey
+  PRED_MAX:       34,     // hard ceiling on hunters, whatever the prey does
+  PREY_FLOOR:     30,     // below this many grazers, hunters lose the scent
+  PREY_EMA:       0.0006, // how fast the predator cap follows the prey count
+  MEAL_MIN:       60,     // floor on what one kill is worth
+  MEAL_SIZE:      36,     // extra energy per unit of prey size
+  E_BREED_MIN_H:  58,     // hunters still need more in reserve than grazers,
+                          // so prey out-breeds them and can always recover
+  REST:           0.45,   // upkeep multiplier for a full, resting hunter
+  CHASE:          1.95,   // hunter speed multiplier while hunting. High on
+                          // purpose: prey evolve toward max speed within a
+                          // few hundred ticks, and a predator that cannot
+                          // close that gap starves before it evolves at all.
+                          // Safe now only because PRED_RATIO caps their number.
+  COVER_R:        18,     // how far around a grazer counts as cover
+  COVER_N:        5,      // algae needed (x its size) for a grazer to hide
+
+  FOOD_ENERGY:    46,
+  FOOD_R:         3.2,
+
+  AGE_MAX:        4200,   // ticks before old age starts biting
+  GRID:           48
+};
+
+var GENES = [
+  // key       label        min   max
+  ["speed",   "speed",      0.25, 2.30],
+  ["size",    "size",       0.55, 2.10],
+  ["sense",   "senses",     18.0, 150.0],
+  ["metab",   "metabolism", 0.55, 1.75],
+  ["breed",   "urge",       0.35, 1.65]
+];
+
+// ---------------------------------------------------------------- state
+var W = 900, H = 600;                 // sim-space dimensions (resized to canvas)
+var env = { light: 1, temp: 1, current: 0.6, minerals: 1 };
+var speed = 1, paused = false;
+
+var algae = [];
+var creatures = [];
+var food = [];
+var particles = [];
+
+var tick = 0, generations = 0, nextId = 1;
+var preyEMA = C.GRAZE_START;   // slow-moving prey average; sets the predator cap
+var preyScarce = false;        // true when grazers are too sparse to hunt
+var selected = null;
+var history = [];                     // [algae, grazers, hunters] samples
+
+var rngState = 1234567;
+function rnd() {                      // deterministic-ish, seedable
+  rngState = (rngState * 1664525 + 1013904223) & 0x7fffffff;
+  return rngState / 0x7fffffff;
+}
+function rr(a, b) { return a + rnd() * (b - a); }
+function pick(arr) { return arr[(rnd() * arr.length) | 0]; }
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+// ---------------------------------------------------------------- genome
+function randomGenome() {
+  var g = {};
+  for (var i = 0; i < GENES.length; i++) {
+    var d = GENES[i], lo = d[2], hi = d[3];
+    g[d[0]] = rr(lo + (hi - lo) * 0.25, lo + (hi - lo) * 0.75);
+  }
+  return g;
+}
+
+function mutate(g) {
+  var out = {};
+  for (var i = 0; i < GENES.length; i++) {
+    var d = GENES[i], key = d[0], lo = d[2], hi = d[3];
+    var v = g[key] + (rnd() * 2 - 1) * (hi - lo) * C.MUT;
+    out[key] = clamp(v, lo, hi);
+  }
+  return out;
+}
+
+function geneNorm(key, val) {
+  for (var i = 0; i < GENES.length; i++) {
+    if (GENES[i][0] === key) return (val - GENES[i][2]) / (GENES[i][3] - GENES[i][2]);
+  }
+  return 0;
+}
+
+// ---------------------------------------------------------------- entities
+function makeAlgae(x, y) {
+  return {
+    x: x, y: y,
+    r: C.ALGAE_R * rr(0.8, 1.35),
+    hue: rr(115, 155),
+    sway: rnd() * 6.283,
+    ripe: rr(0.3, 1)
+  };
+}
+
+function makeCreature(kind, x, y, genome, gen) {
+  var g = genome || randomGenome();
+  return {
+    id: nextId++,
+    kind: kind,                       // "grazer" | "hunter"
+    x: x, y: y,
+    vx: rr(-0.5, 0.5), vy: rr(-0.5, 0.5),
+    dir: rnd() * 6.283,
+    energy: C.E_START,
+    age: 0,
+    gen: gen || 1,
+    genome: g,
+    wiggle: rnd() * 6.283,
+    target: null,
+    fleeing: 0,
+    digest: 0,
+    hidden: false,
+    ateAt: -999
+  };
+}
+
+function makeFood(x, y) {
+  return { x: x, y: y, vy: rr(0.25, 0.7), r: C.FOOD_R * rr(0.7, 1.3), spin: rnd() * 6.283 };
+}
+
+function burst(x, y, color, n, spread) {
+  for (var i = 0; i < n; i++) {
+    var a = rnd() * 6.283, s = rr(0.3, spread || 1.6);
+    particles.push({
+      x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+      life: 1, decay: rr(0.02, 0.05), color: color, r: rr(0.8, 2.2)
+    });
+  }
+}
+
+// ---------------------------------------------------------------- spatial grid
+// Rebuilt each tick. Keeps neighbour lookups cheap enough for 10x speed.
+var grid = { cols: 0, rows: 0, cells: null };
+
+function buildGrid() {
+  var cols = Math.max(1, Math.ceil(W / C.GRID));
+  var rows = Math.max(1, Math.ceil(H / C.GRID));
+  if (grid.cols !== cols || grid.rows !== rows || !grid.cells) {
+    grid.cols = cols; grid.rows = rows;
+    grid.cells = new Array(cols * rows);
+    for (var i = 0; i < grid.cells.length; i++) grid.cells[i] = { algae: [], creatures: [], food: [] };
+  } else {
+    for (var j = 0; j < grid.cells.length; j++) {
+      var c = grid.cells[j];
+      c.algae.length = 0; c.creatures.length = 0; c.food.length = 0;
+    }
+  }
+  var k;
+  for (k = 0; k < algae.length; k++) cellAt(algae[k]).algae.push(algae[k]);
+  for (k = 0; k < creatures.length; k++) cellAt(creatures[k]).creatures.push(creatures[k]);
+  for (k = 0; k < food.length; k++) cellAt(food[k]).food.push(food[k]);
+}
+
+function cellAt(o) {
+  var cx = clamp((o.x / C.GRID) | 0, 0, grid.cols - 1);
+  var cy = clamp((o.y / C.GRID) | 0, 0, grid.rows - 1);
+  return grid.cells[cy * grid.cols + cx];
+}
+
+// Collects entities of `list` ("algae"|"creatures"|"food") within `radius` of (x,y).
+function near(x, y, radius, list, out) {
+  out.length = 0;
+  var span = Math.ceil(radius / C.GRID);
+  var cx = clamp((x / C.GRID) | 0, 0, grid.cols - 1);
+  var cy = clamp((y / C.GRID) | 0, 0, grid.rows - 1);
+  var r2 = radius * radius;
+  for (var gy = cy - span; gy <= cy + span; gy++) {
+    if (gy < 0 || gy >= grid.rows) continue;
+    for (var gx = cx - span; gx <= cx + span; gx++) {
+      if (gx < 0 || gx >= grid.cols) continue;
+      var arr = grid.cells[gy * grid.cols + gx][list];
+      for (var i = 0; i < arr.length; i++) {
+        var o = arr[i];
+        var dx = o.x - x, dy = o.y - y;
+        if (dx * dx + dy * dy <= r2) out.push(o);
+      }
+    }
+  }
+  return out;
+}
+
+var scratchA = [], scratchB = [], scratchC = [], scratchD = [];
+
+// ---------------------------------------------------------------- simulation
+function step() {
+  tick++;
+
+  growAlgae();
+  updateFood();
+  updateCreatures();
+  updateParticles();
+
+  if (tick % 6 === 0) sampleHistory();
+}
+
+function growAlgae() {
+  // Algae spreads from existing algae; light and minerals set the rate,
+  // heat helps a little but too much heat cooks the pool.
+  var heat = env.temp;
+  var heatFactor = heat < 1 ? 0.45 + heat * 0.55 : 1.55 - heat * 0.55;
+  var rate = env.light * env.minerals * clamp(heatFactor, 0.05, 1) * 0.55;
+  if (algae.length >= C.ALGAE_MAX) rate = 0;
+
+  var births = rate * (0.8 + algae.length * 0.010);
+  var whole = births | 0;
+  if (rnd() < births - whole) whole++;
+
+  for (var i = 0; i < whole && algae.length < C.ALGAE_MAX; i++) {
+    if (algae.length === 0) {
+      algae.push(makeAlgae(rr(0, W), rr(0, H)));
+      continue;
+    }
+    var parent = pick(algae);
+    var a = rnd() * 6.283, d = rr(4, 26);
+    var x = parent.x + Math.cos(a) * d, y = parent.y + Math.sin(a) * d;
+    if (x < 2 || x > W - 2 || y < 2 || y > H - 2) continue;
+    algae.push(makeAlgae(x, y));
+  }
+
+  // Ripening: young algae is worth less, so a freshly seeded pool
+  // doesn't instantly feed an army of grazers.
+  for (var j = 0; j < algae.length; j++) {
+    if (algae[j].ripe < 1) algae[j].ripe = Math.min(1, algae[j].ripe + 0.004);
+  }
+}
+
+function updateFood() {
+  for (var i = food.length - 1; i >= 0; i--) {
+    var f = food[i];
+    f.y += f.vy;
+    f.x += (env.current - 0.6) * 0.5;
+    f.spin += 0.04;
+    if (f.y > H - 4) { f.y = H - 4; f.vy = 0; }
+    if (f.x < 2 || f.x > W - 2) food.splice(i, 1);
+  }
+}
+
+function updateCreatures() {
+  // Predators get an explicit carrying capacity tied to how much prey is
+  // actually swimming around. Two full parameter sweeps (135 configurations)
+  // failed to find ANY setting where a free-running predator population is
+  // stable in a pool this small — they always overshoot their prey and crash
+  // with them. Capping their breeding by the prey count is what keeps the top
+  // of the food chain permanently visible instead of a brief spike.
+  var gzN = 0, htN = 0;
+  for (var n = 0; n < creatures.length; n++) {
+    if (creatures[n].kind === "grazer") gzN++; else htN++;
+  }
+  // Track a SLOW average of the prey population, not its current value.
+  // Grazers spike hard and briefly; sizing the predator cap off a spike
+  // licenses a hunter boom that outlives the prey boom that paid for it,
+  // and the crash takes both tiers down.
+  preyEMA += (gzN - preyEMA) * C.PREY_EMA;
+  var hunterCap = Math.max(2, Math.min(C.PRED_MAX, Math.floor(preyEMA * C.PRED_RATIO)));
+
+  // Below this density the grazers are too scattered to be worth hunting and
+  // the hunters lose them. This is the guarantee that the pool can never be
+  // sterilised: every other mechanism (digest, cover, breeding caps) only
+  // slows a collapse down, and a slowed collapse still ends at zero.
+  preyScarce = gzN < C.PREY_FLOOR;
+
+  var drift = (env.current - 0.6) * 0.55;
+  // Metabolic cost scales with warmth: a hot pool burns everyone faster.
+  var tempCost = 0.55 + env.temp * 0.75;
+
+  for (var i = creatures.length - 1; i >= 0; i--) {
+    var c = creatures[i];
+    var g = c.genome;
+    c.age++;
+    c.wiggle += 0.12 + g.speed * 0.05;
+
+    if (c.kind === "grazer") stepGrazer(c);
+    else stepHunter(c);
+
+    // movement
+    // The chase must be winnable. A hunter out-accelerates a fleeing grazer,
+    // so grazers survive by SEEING it early (senses) and by breeding faster,
+    // not by simply outrunning it — otherwise predators can never eat at all.
+    var spd = g.speed * (c.kind === "hunter" ? C.CHASE : (c.fleeing > 0 ? 1.22 : 1));
+    c.vx += Math.cos(c.dir) * spd * 0.14;
+    c.vy += Math.sin(c.dir) * spd * 0.14;
+    c.vx += drift * 0.06;
+    c.vx *= 0.86; c.vy *= 0.86;
+    c.x += c.vx; c.y += c.vy;
+
+    // walls: turn away rather than stick
+    if (c.x < 8)       { c.x = 8;     c.dir = rr(-1.2, 1.2); }
+    if (c.x > W - 8)   { c.x = W - 8; c.dir = Math.PI + rr(-1.2, 1.2); }
+    if (c.y < 8)       { c.y = 8;     c.dir = rr(0.4, 2.7); }
+    if (c.y > H - 8)   { c.y = H - 8; c.dir = -rr(0.4, 2.7); }
+
+    if (c.fleeing > 0) c.fleeing--;
+    if (c.digest > 0) c.digest--;
+
+    // upkeep: bigger and faster costs more
+    var upkeep = (0.055 + g.size * 0.055 + g.speed * 0.045) * g.metab * tempCost;
+    // A resting, full hunter costs much less to run than a hunting one.
+    // Without this the long digest needed to keep prey alive also starves
+    // the predators, and the top of the food chain quietly disappears.
+    if (c.kind === "hunter") upkeep *= (c.digest > 0 ? C.REST : 1.05);
+    c.energy -= upkeep;
+
+    // old age
+    if (c.age > C.AGE_MAX) c.energy -= (c.age - C.AGE_MAX) * 0.0016;
+
+    if (c.energy <= 0) {
+      die(c, i);
+      continue;
+    }
+
+    // Breeding splits the parent's reserves instead of costing a flat sum.
+    // A flat cost lets selection drive the urge gene to its ceiling, where
+    // everything breeds the instant it can afford to and both parent and
+    // child are left too empty to survive — the population then starves to
+    // death surrounded by food. Keeping it proportional makes the urge gene
+    // self-limiting: breeding too eagerly just halves you into weakness.
+    // A hunter's tank is deliberately small. Let them bank 200 and a fat
+    // predator can coast ~600 ticks without eating, so when prey dips the
+    // hunters do NOT decline with it — they calmly finish off the remnant
+    // and sterilise the pool. A small tank makes them feel a shortage while
+    // there is still prey left to recover.
+    var eCap = c.kind === "hunter" ? C.E_MAX_H : C.E_MAX;
+    var floor = c.kind === "hunter" ? C.E_BREED_MIN_H : C.E_BREED_MIN;
+    var threshold = clamp(C.E_BREED / g.breed, floor, eCap - 4);
+    var capped = c.kind === "hunter" && htN >= hunterCap;
+    if (c.energy >= threshold && creatures.length < 900 && !capped) {
+      var give = c.energy * C.E_BREED_SHARE;
+      c.energy -= give;
+      var child = makeCreature(c.kind, c.x + rr(-6, 6), c.y + rr(-6, 6), mutate(g), c.gen + 1);
+      child.energy = give * 0.92;
+      creatures.push(child);
+      if (child.kind === "hunter") htN++; else gzN++;
+      if (child.gen > generations) generations = child.gen;
+      burst(c.x, c.y, c.kind === "grazer" ? "#7fd6ff" : "#ff7a6b", 4, 0.9);
+    }
+
+    if (c.energy > eCap) c.energy = eCap;
+  }
+}
+
+function die(c, index) {
+  creatures.splice(index, 1);
+  if (selected === c) selected = null;
+  burst(c.x, c.y, "#4a6a78", 6, 1.2);
+  // A corpse feeds the pool: dead things become minerals become algae.
+  for (var k = 0; k < 2; k++) {
+    if (algae.length < C.ALGAE_MAX && rnd() < 0.55 * env.minerals) {
+      algae.push(makeAlgae(clamp(c.x + rr(-10, 10), 3, W - 3), clamp(c.y + rr(-10, 10), 3, H - 3)));
+    }
+  }
+}
+
+function stepGrazer(c) {
+  var g = c.genome;
+
+  // Thick algae is cover. This is the pool's main stabiliser: when grazers
+  // get scarce the algae they aren't eating grows dense, so the survivors
+  // become hard to find — predation eases off exactly when prey is rare.
+  // Big grazers stick out and need more of it to disappear.
+  c.hidden = near(c.x, c.y, C.COVER_R, "algae", scratchD).length >= C.COVER_N * g.size;
+
+  // 1. run from hunters first
+  var threats = near(c.x, c.y, g.sense, "creatures", scratchA);
+  var tx = 0, ty = 0, threatCount = 0;
+  for (var i = 0; i < threats.length; i++) {
+    if (threats[i].kind !== "hunter") continue;
+    tx += threats[i].x; ty += threats[i].y; threatCount++;
+  }
+  if (threatCount > 0) {
+    tx /= threatCount; ty /= threatCount;
+    c.dir = Math.atan2(c.y - ty, c.x - tx) + rr(-0.3, 0.3);
+    c.fleeing = 26;
+    c.target = null;
+    return;
+  }
+
+  // 2. eat what's underfoot
+  var bite = C.GRAZE_EAT_R * g.size;
+  var hits = near(c.x, c.y, bite, "algae", scratchB);
+  if (hits.length) {
+    var a = hits[0];
+    var idx = algae.indexOf(a);
+    if (idx >= 0) {
+      algae.splice(idx, 1);
+      c.energy += C.ALGAE_ENERGY * a.ripe;
+      c.ateAt = tick;
+      burst(a.x, a.y, "#3fbf7f", 3, 0.8);
+    }
+    return;
+  }
+  var fh = near(c.x, c.y, bite, "food", scratchC);
+  if (fh.length) {
+    var fi = food.indexOf(fh[0]);
+    if (fi >= 0) {
+      food.splice(fi, 1);
+      c.energy += C.FOOD_ENERGY;
+      c.ateAt = tick;
+      burst(c.x, c.y, "#e8c46a", 5, 1.1);
+    }
+    return;
+  }
+
+  // 3. head for the nearest algae in sense range
+  var seen = near(c.x, c.y, g.sense, "algae", scratchB);
+  var best = null, bestD = Infinity;
+  for (var j = 0; j < seen.length; j++) {
+    var dx = seen[j].x - c.x, dy = seen[j].y - c.y;
+    var d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = seen[j]; }
+  }
+  if (best) {
+    c.dir = Math.atan2(best.y - c.y, best.x - c.x) + rr(-0.12, 0.12);
+    c.target = best;
+  } else {
+    c.target = null;
+    c.dir += Math.sin(c.wiggle) * 0.09 + rr(-0.06, 0.06);
+  }
+}
+
+function stepHunter(c) {
+  var g = c.genome;
+  var bite = C.HUNT_EAT_R * g.size;
+
+  // A full hunter drifts instead of hunting. This caps how many grazers one
+  // predator can take per unit time no matter how thick the prey is, which
+  // is the feedback that makes the pool oscillate instead of collapsing.
+  if (c.digest > 0 || preyScarce) {
+    c.target = null;
+    c.dir += Math.sin(c.wiggle * 0.5) * 0.05 + rr(-0.04, 0.04);
+    return;
+  }
+
+  var close = near(c.x, c.y, bite, "creatures", scratchA);
+  for (var i = 0; i < close.length; i++) {
+    var p = close[i];
+    if (p.kind !== "grazer") continue;
+    if (p.hidden) continue;
+    // Big hunters can take big prey; a small hunter can't swallow a whale.
+    if (p.genome.size > g.size * 1.9) continue;
+    var idx = creatures.indexOf(p);
+    if (idx >= 0) {
+      // A kill is worth the prey's reserves PLUS its flesh, so hunting a
+      // starving grazer is still worth the chase.
+      c.energy += Math.max(C.MEAL_MIN, p.energy * C.HUNT_ENERGY + p.genome.size * C.MEAL_SIZE);
+      c.ateAt = tick;
+      c.digest = C.DIGEST;
+      creatures.splice(idx, 1);
+      if (selected === p) selected = null;
+      burst(p.x, p.y, "#ff7a6b", 9, 2.0);
+    }
+    return;
+  }
+
+  var seen = near(c.x, c.y, g.sense, "creatures", scratchA);
+  var best = null, bestD = Infinity;
+  for (var j = 0; j < seen.length; j++) {
+    var q = seen[j];
+    if (q.kind !== "grazer") continue;
+    if (q.hidden) continue;
+    if (q.genome.size > g.size * 1.9) continue;
+    var dx = q.x - c.x, dy = q.y - c.y;
+    var d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = q; }
+  }
+  if (best) {
+    c.dir = Math.atan2(best.y - c.y, best.x - c.x) + rr(-0.08, 0.08);
+    c.target = best;
+  } else {
+    c.target = null;
+    c.dir += Math.sin(c.wiggle * 0.7) * 0.07 + rr(-0.05, 0.05);
+  }
+}
+
+function updateParticles() {
+  for (var i = particles.length - 1; i >= 0; i--) {
+    var p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vx *= 0.93; p.vy *= 0.93;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function sampleHistory() {
+  var gz = 0, ht = 0;
+  for (var i = 0; i < creatures.length; i++) {
+    if (creatures[i].kind === "grazer") gz++; else ht++;
+  }
+  history.push([algae.length, gz, ht]);
+  if (history.length > 272) history.shift();
+}
+
+// ---------------------------------------------------------------- seeding
+function seedPool() {
+  algae.length = 0; creatures.length = 0; food.length = 0;
+  particles.length = 0; history.length = 0;
+  tick = 0; generations = 1; selected = null;
+  preyEMA = C.GRAZE_START;
+
+  var i;
+  for (i = 0; i < C.ALGAE_SEED; i++) {
+    var a = makeAlgae(rr(20, W - 20), rr(20, H - 20));
+    a.ripe = 1;
+    algae.push(a);
+  }
+  for (i = 0; i < C.GRAZE_START; i++) creatures.push(makeCreature("grazer", rr(40, W - 40), rr(40, H - 40)));
+  for (i = 0; i < C.HUNT_START; i++)  creatures.push(makeCreature("hunter", rr(40, W - 40), rr(40, H - 40)));
+  buildGrid();
+}
+
+function addAlgaeBloom() {
+  var cx = rr(W * 0.2, W * 0.8), cy = rr(H * 0.2, H * 0.8);
+  for (var i = 0; i < 170 && algae.length < C.ALGAE_MAX; i++) {
+    var a = rnd() * 6.283, d = rr(0, 95);
+    var x = clamp(cx + Math.cos(a) * d, 4, W - 4);
+    var y = clamp(cy + Math.sin(a) * d, 4, H - 4);
+    var al = makeAlgae(x, y); al.ripe = 1;
+    algae.push(al);
+  }
+  burst(cx, cy, "#3fbf7f", 22, 3);
+}
+
+function addCreatures(kind, n) {
+  for (var i = 0; i < n; i++) {
+    creatures.push(makeCreature(kind, rr(40, W - 40), rr(40, H - 40)));
+  }
+}
+
+function foodFall() {
+  for (var i = 0; i < 40; i++) food.push(makeFood(rr(20, W - 20), rr(-40, 0)));
+}
+
+// ---------------------------------------------------------------- rendering
+var canvas = document.getElementById("c");
+var ctx = canvas.getContext("2d");
+var popCanvas = document.getElementById("pops");
+var popCtx = popCanvas.getContext("2d");
+var dpr = 1;
+
+function resize() {
+  var r = canvas.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.round(r.width * dpr));
+  canvas.height = Math.max(1, Math.round(r.height * dpr));
+  W = Math.max(200, Math.round(r.width));
+  H = Math.max(200, Math.round(r.height));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  buildGrid();
+}
+
+function draw() {
+  // water: darker with depth, brighter with light
+  var lit = clamp(env.light, 0, 2);
+  var grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, "rgb(" + (8 + 22 * lit) + "," + (26 + 42 * lit) + "," + (34 + 44 * lit) + ")");
+  grad.addColorStop(1, "rgb(" + (4 + 6 * lit) + "," + (10 + 14 * lit) + "," + (16 + 18 * lit) + ")");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  drawCaustics(lit);
+
+  var i;
+
+  // algae
+  for (i = 0; i < algae.length; i++) {
+    var a = algae[i];
+    var sway = Math.sin(tick * 0.03 + a.sway) * (0.8 + env.current * 1.6);
+    var alpha = 0.35 + a.ripe * 0.5;
+    ctx.fillStyle = "hsla(" + a.hue + ",62%," + (28 + a.ripe * 24) + "%," + alpha + ")";
+    ctx.beginPath();
+    ctx.arc(a.x + sway, a.y, a.r, 0, 6.283);
+    ctx.fill();
+  }
+
+  // food
+  for (i = 0; i < food.length; i++) {
+    var f = food[i];
+    ctx.fillStyle = "rgba(232,196,106,0.85)";
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.r, 0, 6.283);
+    ctx.fill();
+  }
+
+  // creatures
+  for (i = 0; i < creatures.length; i++) drawCreature(creatures[i]);
+
+  // particles
+  for (i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    ctx.globalAlpha = clamp(p.life, 0, 1) * 0.8;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, 6.283);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  if (selected) drawSelectionRing(selected);
+}
+
+function drawCaustics(lit) {
+  if (lit <= 0.05) return;
+  ctx.globalAlpha = 0.05 * lit;
+  ctx.strokeStyle = "#9fe8ff";
+  ctx.lineWidth = 2;
+  for (var i = 0; i < 7; i++) {
+    var y = (i / 7) * H + Math.sin(tick * 0.008 + i) * 22;
+    ctx.beginPath();
+    for (var x = 0; x <= W; x += 26) {
+      var yy = y + Math.sin(x * 0.014 + tick * 0.016 + i * 1.3) * 12;
+      if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawCreature(c) {
+  var g = c.genome;
+  var s = g.size;
+  var vitality = clamp(c.energy / C.E_MAX, 0.12, 1);
+  var body = 4.4 * s;
+  var wob = Math.sin(c.wiggle) * 0.35 * s;
+
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.rotate(c.dir);
+
+  if (c.kind === "grazer") {
+    // soft rounded swimmer, tail flicks
+    ctx.fillStyle = "rgba(127,214,255," + (0.28 + vitality * 0.55) + ")";
+    ctx.beginPath();
+    ctx.moveTo(-body * 1.5, wob);
+    ctx.quadraticCurveTo(-body * 0.2, -body * 0.95, body * 1.25, 0);
+    ctx.quadraticCurveTo(-body * 0.2, body * 0.95, -body * 1.5, wob);
+    ctx.fill();
+    ctx.fillStyle = "rgba(180,240,255," + (0.25 + vitality * 0.5) + ")";
+    ctx.beginPath();
+    ctx.moveTo(-body * 1.4, wob);
+    ctx.lineTo(-body * 2.3, wob * 2.4 - body * 0.5);
+    ctx.lineTo(-body * 2.3, wob * 2.4 + body * 0.5);
+    ctx.fill();
+  } else {
+    // angular predator
+    ctx.fillStyle = "rgba(255,122,107," + (0.30 + vitality * 0.55) + ")";
+    ctx.beginPath();
+    ctx.moveTo(body * 1.7, 0);
+    ctx.lineTo(-body * 0.9, -body * 0.85);
+    ctx.lineTo(-body * 1.7, wob);
+    ctx.lineTo(-body * 0.9, body * 0.85);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,205,190,0.85)";
+    ctx.beginPath();
+    ctx.arc(body * 0.75, 0, Math.max(0.7, body * 0.2), 0, 6.283);
+    ctx.fill();
+  }
+
+  // a flash right after eating
+  if (tick - c.ateAt < 8) {
+    ctx.globalAlpha = (8 - (tick - c.ateAt)) / 8 * 0.5;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(0, 0, body * 2.1, 0, 6.283);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+function drawSelectionRing(c) {
+  var r = 4.4 * c.genome.size * 2.6 + 4 + Math.sin(tick * 0.09) * 1.6;
+  ctx.strokeStyle = "rgba(127,227,196,0.85)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, 6.283);
+  ctx.stroke();
+
+  // a faint line to whatever it is chasing
+  if (c.target && (creatures.indexOf(c.target) >= 0 || algae.indexOf(c.target) >= 0)) {
+    ctx.strokeStyle = "rgba(127,227,196,0.22)";
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(c.target.x, c.target.y);
+    ctx.stroke();
+  }
+}
+
+function drawPops() {
+  var w = popCanvas.width, h = popCanvas.height;
+  popCtx.clearRect(0, 0, w, h);
+  if (history.length < 2) return;
+
+  var maxA = 1, maxC = 1, i;
+  for (i = 0; i < history.length; i++) {
+    if (history[i][0] > maxA) maxA = history[i][0];
+    if (history[i][1] > maxC) maxC = history[i][1];
+    if (history[i][2] > maxC) maxC = history[i][2];
+  }
+
+  // algae uses its own scale so grazers/hunters stay readable
+  plot(0, maxA, "rgba(63,191,127,0.55)");
+  plot(1, maxC, "#7fd6ff");
+  plot(2, maxC, "#ff7a6b");
+
+  function plot(idx, max, color) {
+    popCtx.strokeStyle = color;
+    popCtx.lineWidth = 1.2;
+    popCtx.beginPath();
+    for (var k = 0; k < history.length; k++) {
+      var x = (k / (history.length - 1)) * (w - 2) + 1;
+      var y = h - 2 - (history[k][idx] / max) * (h - 5);
+      if (k === 0) popCtx.moveTo(x, y); else popCtx.lineTo(x, y);
+    }
+    popCtx.stroke();
+  }
+}
+
+// ---------------------------------------------------------------- panel
+var el = {};
+["v_light", "v_temp", "v_cur", "v_min", "n_algae", "n_graze", "n_hunt", "n_gen", "sel", "clock"]
+  .forEach(function (k) { el[k] = document.getElementById(k); });
+
+function refreshPanel() {
+  el.v_light.textContent = Math.round(env.light * 100) + "%";
+  el.v_temp.textContent  = Math.round(env.temp * 100) + "%";
+  el.v_cur.textContent   = Math.round(env.current * 100) + "%";
+  el.v_min.textContent   = Math.round(env.minerals * 100) + "%";
+
+  var gz = 0, ht = 0;
+  for (var i = 0; i < creatures.length; i++) {
+    if (creatures[i].kind === "grazer") gz++; else ht++;
+  }
+  el.n_algae.textContent = algae.length;
+  el.n_graze.textContent = gz;
+  el.n_hunt.textContent  = ht;
+  el.n_gen.textContent   = generations;
+
+  var mins = Math.floor(tick / 3600), secs = Math.floor((tick % 3600) / 60);
+  el.clock.textContent = "tick " + tick + "  ·  " + mins + "m" + (secs < 10 ? "0" : "") + secs +
+                         (paused ? "  ·  PAUSED" : "");
+
+  drawSelPanel();
+  drawPops();
+}
+
+function drawSelPanel() {
+  if (!selected || creatures.indexOf(selected) < 0) {
+    el.sel.innerHTML = '<span class="none">click a creature</span>';
+    return;
+  }
+  var c = selected;
+  var html = '<div class="stat"><span class="k">' +
+    (c.kind === "grazer" ? "grazer" : "hunter") + " #" + c.id +
+    '</span><span>gen ' + c.gen + '</span></div>';
+  html += '<div class="stat"><span class="k">energy</span><span>' + Math.round(c.energy) + '</span></div>';
+  html += '<div class="bar"><i style="width:' + Math.round(clamp(c.energy / C.E_MAX, 0, 1) * 100) + '%"></i></div>';
+  html += '<div class="stat"><span class="k">age</span><span>' + c.age + '</span></div>';
+  for (var i = 0; i < GENES.length; i++) {
+    var key = GENES[i][0];
+    var pct = Math.round(geneNorm(key, c.genome[key]) * 100);
+    html += '<div class="stat"><span class="k">' + GENES[i][1] + '</span><span>' +
+            c.genome[key].toFixed(2) + '</span></div>';
+    html += '<div class="bar"><i style="width:' + pct + '%"></i></div>';
+  }
+  el.sel.innerHTML = html;
+}
+
+// ---------------------------------------------------------------- input
+function bindSlider(id, key, scale) {
+  var s = document.getElementById(id);
+  s.addEventListener("input", function () {
+    env[key] = parseFloat(s.value) / scale;
+    refreshPanel();
+  });
+  env[key] = parseFloat(s.value) / scale;
+}
+bindSlider("s_light", "light", 100);
+bindSlider("s_temp", "temp", 100);
+bindSlider("s_cur", "current", 100);
+bindSlider("s_min", "minerals", 100);
+
+Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function (b) {
+  b.addEventListener("click", function () {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function (o) {
+      o.classList.remove("on");
+    });
+    b.classList.add("on");
+    var v = parseInt(b.getAttribute("data-sp"), 10);
+    paused = v === 0;
+    if (v > 0) speed = v;
+  });
+});
+
+document.getElementById("b_algae").addEventListener("click", addAlgaeBloom);
+document.getElementById("b_graze").addEventListener("click", function () { addCreatures("grazer", 12); });
+document.getElementById("b_hunt").addEventListener("click", function () { addCreatures("hunter", 4); });
+document.getElementById("b_food").addEventListener("click", foodFall);
+document.getElementById("b_wipe").addEventListener("click", function () {
+  creatures.length = 0; selected = null;
+});
+document.getElementById("b_reset").addEventListener("click", function () {
+  rngState = (Date.now() & 0x7fffffff) || 1;
+  seedPool();
+});
+
+canvas.addEventListener("mousedown", function (e) {
+  var r = canvas.getBoundingClientRect();
+  var x = e.clientX - r.left, y = e.clientY - r.top;
+  var best = null, bestD = 400;             // 20px grab radius
+  for (var i = 0; i < creatures.length; i++) {
+    var dx = creatures[i].x - x, dy = creatures[i].y - y;
+    var d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = creatures[i]; }
+  }
+  selected = best;
+  dragging = true; dragX = x; dragY = y;
+  refreshPanel();
+});
+
+var dragging = false, dragX = 0, dragY = 0;
+window.addEventListener("mouseup", function () { dragging = false; });
+canvas.addEventListener("mousemove", function (e) {
+  if (!dragging) return;
+  var r = canvas.getBoundingClientRect();
+  var x = e.clientX - r.left, y = e.clientY - r.top;
+  stir(x, y, x - dragX, y - dragY);
+  dragX = x; dragY = y;
+});
+
+// Dragging pushes everything nearby — algae drifts, creatures get shoved.
+function stir(x, y, dx, dy) {
+  var mag = Math.min(6, Math.sqrt(dx * dx + dy * dy));
+  if (mag < 0.5) return;
+  var R = 80, R2 = R * R;
+  var i;
+  for (i = 0; i < creatures.length; i++) {
+    var c = creatures[i];
+    var ax = c.x - x, ay = c.y - y;
+    var d2 = ax * ax + ay * ay;
+    if (d2 > R2) continue;
+    var f = (1 - Math.sqrt(d2) / R) * 0.35;
+    c.vx += dx * f; c.vy += dy * f;
+  }
+  for (i = 0; i < algae.length; i++) {
+    var a = algae[i];
+    var bx = a.x - x, by = a.y - y;
+    var e2 = bx * bx + by * by;
+    if (e2 > R2) continue;
+    var g = (1 - Math.sqrt(e2) / R) * 0.5;
+    a.x = clamp(a.x + dx * g, 3, W - 3);
+    a.y = clamp(a.y + dy * g, 3, H - 3);
+  }
+  if (rnd() < 0.4) burst(x, y, "#9fe8ff", 2, 1.0);
+}
+
+window.addEventListener("keydown", function (e) {
+  if (e.code === "Space") {
+    e.preventDefault();
+    paused = !paused;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function (o) {
+      o.classList.toggle("on", paused ? o.getAttribute("data-sp") === "0"
+                                      : parseInt(o.getAttribute("data-sp"), 10) === speed);
+    });
+    refreshPanel();
+  }
+});
+
+window.addEventListener("resize", resize);
+
+// ---------------------------------------------------------------- loop
+var panelTimer = 0;
+
+function frame() {
+  if (!paused) {
+    for (var s = 0; s < speed; s++) {
+      buildGrid();
+      step();
+    }
+  }
+  draw();
+  if (++panelTimer >= 6) { panelTimer = 0; refreshPanel(); }
+  requestAnimationFrame(frame);
+}
+
+// expose for the headless harness
+window.TIDEPOOL = {
+  C: C, env: env, algae: algae, creatures: creatures, food: food,
+  step: step, buildGrid: buildGrid, seedPool: seedPool, draw: draw,
+  addAlgaeBloom: addAlgaeBloom, addCreatures: addCreatures, foodFall: foodFall,
+  mutate: mutate, randomGenome: randomGenome, makeCreature: makeCreature,
+  setSize: function (w, h) { W = w; H = h; buildGrid(); },
+  counts: function () {
+    var gz = 0, ht = 0;
+    for (var i = 0; i < creatures.length; i++) {
+      if (creatures[i].kind === "grazer") gz++; else ht++;
+    }
+    return { algae: algae.length, grazers: gz, hunters: ht, gen: generations, tick: tick };
+  }
+};
+
+resize();
+seedPool();
+refreshPanel();
+frame();
+
+})();
+</script>

@@ -1,9 +1,11 @@
-# Twenty-Six Games
+# Thirty-Six Games
 
-Twenty-six single-file HTML games. No build step, no dependencies to install — each
-`.html` file is the whole game. Open it in a browser and play.
+Thirty-six single-file HTML games, plus four tools. No build step, no dependencies to
+install — each `.html` file is the whole thing. Open it in a browser and play.
 
 **Play them in your browser: https://sandwormgochomp.github.io/games/**
+
+## Games
 
 | Game | File | What it is |
 |---|---|---|
@@ -23,6 +25,7 @@ Twenty-six single-file HTML games. No build step, no dependencies to install —
 | **THE LIGHTHOUSE KEEPER** | `lighthouse.html` | One beam pulled three ways: ships, followers, and the drowned keeper |
 | **MARKET DAY** | `burger.html` | Five stalls, five minigames, one burger you have to earn |
 | **MMMM** | `mmmm.html` | Precision platformer about the letter M, 100 levels |
+| **MOSSFORD** | `mossford.html` | Cozy 3D town (three.js) — carry the post, no fail state |
 | **NECTAR** | `nectar.html` | Forage by day, defend the hive by night; table-driven raiders and weather |
 | **NINE LIVES** | `ninelives.html` | Fire sim — nine deaths, each permanently scarring the room you died in |
 | **PROTOTYPE** | `prototype.html` | Pick four modules, paint the level, play the game you built, get reviewed |
@@ -34,8 +37,37 @@ Twenty-six single-file HTML games. No build step, no dependencies to install —
 | **THE UNDERSTUDY** | `understudy.html` | Puppet-show stage sim — you can only work a puppet you stand beside |
 | **UNDERGROWTH** | `undergrowth.html` | 2D tile sandbox — ore tiers, real torch lighting, night-only boss |
 
-`index.html` is a landing page linking to all twenty-six.
+## Horror
 
-HIVEBOUND loads three.js from unpkg via an import map, so it needs a network
-connection the first time. The other twenty-five are entirely offline — no network,
-no assets, no CDN.
+These are the dark ones — dread, body horror and sound. Same deal, one file each.
+
+| Game | File | What it is |
+|---|---|---|
+| **CANDLE FIRE** | `candlefire.html` | 3D yard defence (three.js) — boards, traps and fire buy time; blue light stops him |
+| **HALDEN DEEP** | `halden.html` | First-person raycast horror — 7 sublevels, 27 datapads |
+| **LAST CALL** | `lastcall.html` | 3D bar sim (three.js) — you inherited dad's bar; six nights, and it rots |
+| **PORRIDGE** | `porridge.html` | Goldilocks shot the bear. You are the bear. Forage alive, haunt dead, 3 endings |
+| **RIME** | `rime.html` | Sliding-puzzle horror — Halden's corridors, Glide's rule; solver-proved decks |
+| **THE ROWAN LINE** | `rowanline.html` | 911-dispatcher horror — no graphics at all, and silence is a scored move |
+| **TALLOW** | `tallow.html` | Top-down light/shadow horror — lantern oil, the Hollow, a pit that reaches back |
+| **UNKNOWN** | `unknown.html` | Survey horror — sound the Kettle Deep, drop beacons, come back with the record |
+| **VIGIL** | `vigil.html` | Narrative horror — 6-day grief loop, role-swap finale, anomalies unlock the truth |
+
+## Tools & toys
+
+Not games. Three things to make things with, and one thing to just watch.
+
+| Tool | File | What it is |
+|---|---|---|
+| **INKFLOW** | `inkflow.html` | Smooth (non-pixel) paint & animation studio — layers, frames, onion skin |
+| **MAKER** | `maker.html` | Game maker — paint a level, wire WHEN/THEN rule blocks, then play it |
+| **PIXEL FORGE** | `pixelforge.html` | Pixel animation studio — layers, frames, onion skin, GIF export |
+| **TIDEPOOL** | `tidepool.html` | Ecosystem toy — no score, no lose state; stock the tank and watch |
+
+---
+
+`index.html` is a landing page linking to all forty.
+
+CANDLE FIRE, HIVEBOUND, LAST CALL and MOSSFORD load three.js from unpkg via an import
+map, so those four need a network connection. The other thirty-six are entirely
+offline — no network, no assets, no CDN.

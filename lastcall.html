@@ -1,0 +1,1647 @@
+<meta charset="utf-8">
+<title>LAST CALL — The Weathervane</title>
+<style>
+  :root{
+    --ink:#e8dcc8; --dim:#9a8f7d; --warm:#e0a03c; --blood:#8e1f1f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;
+    font-family:"Georgia","Times New Roman",serif;color:var(--ink);user-select:none}
+  canvas{display:block}
+  #app{position:fixed;inset:0}
+
+  .layer{position:fixed;inset:0;pointer-events:none;z-index:10}
+  .clicky{pointer-events:auto}
+
+  /* ---------- title ---------- */
+  #title{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at 50% 45%,#241a10 0%,#0a0705 70%,#000 100%);z-index:60}
+  #title h1{font-size:clamp(40px,9vw,110px);letter-spacing:.22em;margin:0 0 .1em;
+    color:#f0d9a8;text-shadow:0 0 26px rgba(224,160,60,.5),0 0 90px rgba(224,160,60,.18)}
+  #title h2{font-size:clamp(13px,2vw,20px);letter-spacing:.5em;color:var(--dim);
+    font-weight:400;margin:0 0 2.2em;text-transform:uppercase}
+  .btn{pointer-events:auto;cursor:pointer;border:1px solid #6b5a3e;background:rgba(20,14,8,.7);
+    color:#f0d9a8;padding:14px 34px;letter-spacing:.28em;text-transform:uppercase;font-size:14px;
+    font-family:inherit;margin:6px;transition:.18s}
+  .btn:hover{background:#3a2a14;border-color:var(--warm);box-shadow:0 0 20px rgba(224,160,60,.28)}
+  #title .note{margin-top:26px;color:#6d6152;font-size:12px;letter-spacing:.1em;max-width:560px;
+    text-align:center;line-height:1.9}
+
+  /* ---------- hud ---------- */
+  #hud{opacity:0;transition:opacity .6s}
+  #clock{position:absolute;top:18px;left:50%;transform:translateX(-50%);
+    font-size:26px;letter-spacing:.18em;color:#d8c49c;text-shadow:0 2px 12px #000}
+  #night{position:absolute;top:50px;left:50%;transform:translateX(-50%);
+    font-size:11px;letter-spacing:.42em;color:#8a7c66;text-transform:uppercase}
+  #cash{position:absolute;top:18px;right:24px;text-align:right}
+  #cash .big{font-size:26px;letter-spacing:.06em;color:#cdb98f}
+  #cash .sub{font-size:11px;letter-spacing:.22em;color:#7d715e;text-transform:uppercase}
+
+  #orders{position:absolute;top:90px;right:24px;width:250px;text-align:right}
+  .ord{margin-bottom:9px;font-size:13px;line-height:1.45;
+    border-right:2px solid #5c4c33;padding-right:10px;transition:.3s}
+  .ord .who{color:#e2cfa4;letter-spacing:.08em}
+  .ord .what{color:#93866f;font-size:12px;font-style:italic}
+  .ord .bar{height:3px;background:#2a2018;margin-top:5px}
+  .ord .bar i{display:block;height:100%;background:var(--warm);transition:width .2s linear}
+  .ord.angry .bar i{background:var(--blood)}
+  .ord.angry .who{color:#d78b8b}
+
+  #hands{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);text-align:center}
+  #carry{font-size:14px;letter-spacing:.16em;color:#cbb894}
+  #glassbar{width:190px;height:9px;border:1px solid #59492f;margin:8px auto 0;
+    background:#150f09;display:none}
+  #glassbar i{display:block;height:100%;background:linear-gradient(90deg,#c98a2a,#e8bd63);width:0%}
+  #glassbar .target{position:absolute}
+  #prompt{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);
+    font-size:14px;letter-spacing:.14em;color:#e6d2a6;text-shadow:0 2px 10px #000;
+    opacity:0;transition:opacity .12s}
+  #dot{position:absolute;top:50%;left:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;
+    border-radius:50%;background:rgba(240,220,180,.65)}
+
+  #subs{position:absolute;bottom:64px;left:50%;transform:translateX(-50%);width:min(760px,86vw);
+    text-align:center;font-size:17px;line-height:1.6;color:#efe2c6;text-shadow:0 2px 14px #000;
+    opacity:0;transition:opacity .35s;font-style:italic}
+  #subs b{font-style:normal;color:var(--warm);letter-spacing:.1em}
+
+  #nervewrap{position:absolute;bottom:26px;left:26px;width:150px}
+  #nervewrap .lbl{font-size:10px;letter-spacing:.3em;color:#7d715e;text-transform:uppercase;margin-bottom:5px}
+  #nerve{height:5px;background:#1c1410}
+  #nerve i{display:block;height:100%;width:100%;background:#8fae7a;transition:width .35s}
+
+  /* ---------- cards / overlays ---------- */
+  #card{display:none;position:fixed;inset:0;background:#000;z-index:50;
+    align-items:center;justify-content:center;flex-direction:column;text-align:center}
+  #card .k{font-size:11px;letter-spacing:.55em;color:#6d6152;text-transform:uppercase;margin-bottom:16px}
+  #card .t{font-size:clamp(28px,6vw,64px);letter-spacing:.14em;color:#e8d5aa;margin-bottom:22px}
+  #card .b{font-size:15px;color:#9a8f7d;line-height:2;max-width:600px;font-style:italic}
+  #card .stats{margin:28px 0;font-size:14px;color:#b5a483;line-height:2.1;letter-spacing:.08em}
+
+  #vig{position:fixed;inset:0;pointer-events:none;z-index:15;
+    box-shadow:inset 0 0 150px 20px rgba(0,0,0,.7);transition:box-shadow .8s}
+  #flash{position:fixed;inset:0;pointer-events:none;z-index:20;background:#fff;opacity:0}
+  #bloodv{position:fixed;inset:0;pointer-events:none;z-index:16;opacity:0;transition:opacity 1.2s;
+    background:radial-gradient(ellipse at 50% 50%,transparent 35%,rgba(120,10,10,.55) 100%)}
+  #scare{position:fixed;inset:0;z-index:70;display:none;background:#000}
+  #scare canvas{width:100%;height:100%}
+  #grain{position:fixed;inset:0;pointer-events:none;z-index:14;opacity:.05;mix-blend-mode:overlay}
+</style>
+
+<div id="app"></div>
+
+<div class="layer" id="hud">
+  <div id="dot"></div>
+  <div id="clock">8:00</div>
+  <div id="night">Night One</div>
+  <div id="cash"><div class="big">$0</div><div class="sub">of $0 owed</div></div>
+  <div id="orders"></div>
+  <div id="nervewrap"><div class="lbl">Nerve</div><div id="nerve"><i></i></div></div>
+  <div id="hands"><div id="carry"></div><div id="glassbar"><i></i></div></div>
+  <div id="prompt"></div>
+  <div id="subs"></div>
+</div>
+
+<div id="vig"></div>
+<div id="bloodv"></div>
+<canvas id="grain"></canvas>
+<div id="flash"></div>
+<div id="scare"><canvas></canvas></div>
+
+<div id="card"></div>
+
+<div class="layer" id="title">
+  <h1>LAST CALL</h1>
+  <h2>The Weathervane</h2>
+  <button class="btn" id="playBtn">Open the doors</button>
+  <div class="note">
+    Your father ran this bar for thirty-one years. He never once closed early.<br>
+    Now it's yours.<br><br>
+    WASD move &nbsp;·&nbsp; Mouse look &nbsp;·&nbsp; E interact / hold to pour &nbsp;·&nbsp; Shift run &nbsp;·&nbsp; C crouch
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================
+   LAST CALL — single-file 3D horror. Runs the bar, then runs from it.
+   Structure: DATA -> AUDIO -> WORLD -> ACTORS -> PLAYER -> DIRECTOR -> LOOP
+   ===================================================================== */
+
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp = (a,b,t) => a+(b-a)*t;
+const rnd = (a,b) => a+Math.random()*(b-a);
+const pick = a => a[(Math.random()*a.length)|0];
+
+/* ============================ DATA ============================ */
+
+// Drinks live behind the bar at fixed stations. Referenced by id everywhere.
+const DRINK = {
+  amber:   { name:'Amber Ale',    color:0xc9862c, foam:true,  station:'tapA', pour:1.00 },
+  stout:   { name:'Stout',        color:0x2a1a10, foam:true,  station:'tapB', pour:1.35 },
+  whiskey: { name:'Rye Whiskey',  color:0xa2571c, foam:false, station:'shelf', pour:2.60 },
+  gin:     { name:'Gin & Lime',   color:0xbcd6c0, foam:false, station:'shelf', pour:2.20 },
+  soda:    { name:'Cherry Soda',  color:0xa8283a, foam:true,  station:'soda', pour:1.15 },
+  water:   { name:'Tap Water',    color:0x8fb4c6, foam:false, station:'sink', pour:0.95 },
+  // Not on any menu. Do not pour it. It has no station.
+  hollow:  { name:'the usual',    color:0x120608, foam:false, station:null,   pour:1.0 }
+};
+
+// The six. Dad's regulars. Each has a seat, a drink, and a way of turning.
+const CAST = [
+  { id:'marlow', name:'Marlow',  seat:0, drink:'amber',   skin:0xd9a97e, shirt:0x4a6b8a,
+    hello:"Well look at you. Spitting image of him, standing right there.",
+    order:"Amber. Same as always, same as thirty years.",
+    thanks:"That's the pour. That's his pour.",
+    turn:"He poured it slower. He poured it like he was sorry." },
+  { id:'ivy', name:'Ivy',        seat:1, drink:'gin',     skin:0xe4c3a2, shirt:0x8a5470,
+    hello:"Hey! Oh, hey. He'd be so pleased you kept the sign up.",
+    order:"Gin and lime, and don't be shy with the lime.",
+    thanks:"Perfect. You're a natural, you know that?",
+    turn:"Don't look at the window behind me. I'm asking nicely." },
+  { id:'boone', name:'Boone',    seat:2, drink:'stout',   skin:0x8d6244, shirt:0x5f5a4a,
+    hello:"Kid. Sit down sometime. You're on your feet like he was.",
+    order:"Stout. Let it settle before you bring it.",
+    thanks:"Good. Sit with it a minute.",
+    turn:"I've been on this stool since Tuesday. Which Tuesday, I couldn't say." },
+  { id:'pen', name:'Pen',        seat:3, drink:'soda',    skin:0xf0d2b4, shirt:0xc2884a,
+    hello:"I'm not drinking tonight. I'm just here for the room.",
+    order:"Cherry soda. He always kept one cold for me.",
+    thanks:"Still cold. Huh. Still cold.",
+    turn:"Who put the extra stool out? There's only ever been six of us." },
+  { id:'hark', name:'Harker',    seat:4, drink:'whiskey', skin:0xc79a72, shirt:0x3f4a3a,
+    hello:"Rye. And none of that talk about the cellar.",
+    order:"Rye. Neat. Two fingers, not three.",
+    thanks:"Mm. He'd have poured three. He was generous, your dad. Too generous.",
+    turn:"You hear it going down there? That's not the boiler. Never was." },
+  { id:'sil', name:'Silva',      seat:5, drink:'water',   skin:0x9c7050, shirt:0x6a4a6a,
+    hello:"Just water. I drive. Somebody here has to.",
+    order:"Water. Tap's fine.",
+    thanks:"Thank you, love.",
+    turn:"I've been driving home for four hours. The road keeps giving me this door." }
+];
+
+// Nights: corruption ramps, quota rises, and the script gets louder.
+const NIGHTS = [
+  { n:1, title:'Night One',   sub:'Opening',        quota:24,  minutes:26, corrupt:0.00, wave:8 },
+  { n:2, title:'Night Two',   sub:'The wrong slip', quota:36,  minutes:28, corrupt:0.18, wave:9 },
+  { n:3, title:'Night Three', sub:"Dad's stool",    quota:48,  minutes:30, corrupt:0.40, wave:10 },
+  { n:4, title:'Night Four',  sub:'The hatch',      quota:56,  minutes:30, corrupt:0.62, wave:11 },
+  { n:5, title:'Night Five',  sub:'Last call',      quota:40,  minutes:32, corrupt:0.82, wave:12 },
+  { n:6, title:'Night Six',   sub:'He comes up',    quota:0,   minutes:40, corrupt:1.00, wave:0  }
+];
+
+/* ============================ AUDIO ============================ */
+// Everything synthesised. No files, no network, no CSP problems.
+const Audio_ = (()=>{
+  let ctx=null, master=null, musicGain=null, ambGain=null, started=false;
+  let jukeTimer=0, jukeStep=0, detune=0;
+
+  function init(){
+    if(started) return; started=true;
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    master = ctx.createGain(); master.gain.value=0.9; master.connect(ctx.destination);
+    musicGain = ctx.createGain(); musicGain.gain.value=0.16; musicGain.connect(master);
+    ambGain = ctx.createGain(); ambGain.gain.value=0.10; ambGain.connect(master);
+    // room tone: filtered noise
+    const buf = ctx.createBuffer(1, ctx.sampleRate*3, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.5;
+    const src = ctx.createBufferSource(); src.buffer=buf; src.loop=true;
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=340;
+    src.connect(lp); lp.connect(ambGain); src.start();
+  }
+  function tone(f, dur, type='sine', vol=0.2, when=0){
+    if(!ctx) return;
+    const t=ctx.currentTime+when;
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type=type; o.frequency.setValueAtTime(f*Math.pow(2,detune/1200), t);
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t+dur+0.05);
+    return o;
+  }
+  function noise(dur, vol=0.3, freq=1200, type='lowpass'){
+    if(!ctx) return;
+    const t=ctx.currentTime;
+    const n=(ctx.sampleRate*dur)|0;
+    const buf=ctx.createBuffer(1,n,ctx.sampleRate); const d=buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+    const s=ctx.createBufferSource(); s.buffer=buf;
+    const f=ctx.createBiquadFilter(); f.type=type; f.frequency.value=freq;
+    const g=ctx.createGain(); g.gain.value=vol;
+    s.connect(f); f.connect(g); g.connect(master); s.start(t);
+  }
+  // A small warm waltz for the jukebox. Detunes and slows as things rot.
+  const MEL=[0,4,7,12,7,4,0,-5,0,4,7,11,7,4,2,-1];
+  function tickMusic(dt, corrupt){
+    if(!ctx) return;
+    detune = -corrupt*160;
+    const rate = 0.42 + corrupt*0.55;     // gets slower & draggier
+    jukeTimer -= dt;
+    if(jukeTimer<=0){
+      jukeTimer = rate;
+      const semi = MEL[jukeStep%MEL.length];
+      const base = 220*Math.pow(2,semi/12);
+      musicGain.gain.value = 0.15*(1-corrupt*0.45);
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.type = corrupt>0.6 ? 'sawtooth' : 'triangle';
+      o.frequency.value = base*Math.pow(2,detune/1200);
+      g.gain.setValueAtTime(0,ctx.currentTime);
+      g.gain.linearRampToValueAtTime(0.35,ctx.currentTime+0.03);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+rate*1.7);
+      o.connect(g); g.connect(musicGain); o.start(); o.stop(ctx.currentTime+rate*1.8);
+      if(jukeStep%4===0) tone(base/2, rate*1.6, 'sine', 0.12);
+      jukeStep++;
+    }
+  }
+  return {
+    init, tone, noise, tickMusic,
+    get ctx(){return ctx;},
+    pourStart(){ /* handled by loop calls */ },
+    ui(){ tone(660,0.09,'triangle',0.14); },
+    good(){ tone(523,0.12,'sine',0.2); tone(784,0.18,'sine',0.16,0.09); },
+    bad(){ tone(160,0.3,'sawtooth',0.16); },
+    clink(){ tone(1800,0.06,'sine',0.1); tone(2400,0.05,'sine',0.06,0.03); },
+    door(){ noise(0.5,0.22,500); tone(90,0.5,'sine',0.14); },
+    stinger(){ tone(70,1.4,'sawtooth',0.3); tone(73,1.4,'sawtooth',0.3); noise(0.8,0.4,3000,'highpass'); },
+    heart(v){ tone(58,0.16,'sine',0.22*v); tone(48,0.26,'sine',0.16*v,0.16); },
+    setMusic(v){ if(musicGain) musicGain.gain.value=v; }
+  };
+})();
+
+/* ============================ FACES ============================ */
+// Canvas-drawn face textures. Cute -> wrong. This is where the turn lands.
+function makeFace(mode, seed=0){
+  const c=document.createElement('canvas'); c.width=c.height=128;
+  const g=c.getContext('2d');
+  g.fillStyle='#00000000'; g.clearRect(0,0,128,128);
+
+  if(mode==='cute'){
+    g.fillStyle='#2a1c14';
+    // eyes
+    g.beginPath(); g.ellipse(42,54,8,10,0,0,7); g.fill();
+    g.beginPath(); g.ellipse(86,54,8,10,0,0,7); g.fill();
+    g.fillStyle='#fff';
+    g.beginPath(); g.arc(45,50,3,0,7); g.fill();
+    g.beginPath(); g.arc(89,50,3,0,7); g.fill();
+    // smile
+    g.strokeStyle='#2a1c14'; g.lineWidth=4; g.lineCap='round';
+    g.beginPath(); g.arc(64,74,20,0.25*Math.PI,0.75*Math.PI); g.stroke();
+    // blush
+    g.fillStyle='rgba(214,122,110,.35)';
+    g.beginPath(); g.arc(30,72,10,0,7); g.fill();
+    g.beginPath(); g.arc(98,72,10,0,7); g.fill();
+  }
+  else if(mode==='tired'){
+    g.fillStyle='#2a1c14';
+    g.beginPath(); g.ellipse(42,56,7,8,0,0,7); g.fill();
+    g.beginPath(); g.ellipse(86,56,7,8,0,0,7); g.fill();
+    g.strokeStyle='rgba(60,40,50,.5)'; g.lineWidth=3;
+    g.beginPath(); g.moveTo(32,68); g.lineTo(52,68); g.stroke();
+    g.beginPath(); g.moveTo(76,68); g.lineTo(96,68); g.stroke();
+    g.strokeStyle='#2a1c14'; g.lineWidth=4; g.lineCap='round';
+    g.beginPath(); g.moveTo(50,80); g.lineTo(78,80); g.stroke();
+  }
+  else if(mode==='wrong'){
+    // too many eyes, and none of them agree where you are
+    g.fillStyle='#0d0608';
+    const eyes=[[42,54,8,10],[86,54,8,10],[64,38,5,6],[30,74,4,5],[100,72,4,5]];
+    eyes.forEach((e,i)=>{ g.beginPath(); g.ellipse(e[0],e[1],e[2],e[3],0,0,7); g.fill(); });
+    g.fillStyle='#c9a05a';
+    g.beginPath(); g.arc(44+((seed*7)%5),54,2.4,0,7); g.fill();
+    g.beginPath(); g.arc(84-((seed*5)%5),54,2.4,0,7); g.fill();
+    g.strokeStyle='#0d0608'; g.lineWidth=3; g.lineCap='round';
+    g.beginPath(); g.arc(64,66,24,0.12*Math.PI,0.88*Math.PI); g.stroke();
+    for(let i=0;i<7;i++){
+      const x=42+i*7; g.beginPath(); g.moveTo(x,78); g.lineTo(x,78+(i%2?9:6)); g.stroke();
+    }
+  }
+  else if(mode==='hollow'){
+    g.fillStyle='#000';
+    g.beginPath(); g.ellipse(42,56,13,17,0,0,7); g.fill();
+    g.beginPath(); g.ellipse(86,56,13,17,0,0,7); g.fill();
+    g.beginPath(); g.ellipse(64,92,17,13,0,0,7); g.fill();
+    g.strokeStyle='rgba(120,20,20,.75)'; g.lineWidth=3;
+    for(let i=0;i<5;i++){
+      g.beginPath(); g.moveTo(30+i*17,72); g.lineTo(28+i*17,110); g.stroke();
+    }
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.needsUpdate=true;
+  return t;
+}
+
+/* ============================ RENDERER / SCENE ============================ */
+const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.6));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.25;
+$('#app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0705);
+scene.fog = new THREE.FogExp2(0x0a0705, 0.014);
+
+const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.05, 90);
+const camHolder = new THREE.Object3D();  // yaw
+camHolder.add(camera);
+scene.add(camHolder);
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  sizeGrain();
+});
+
+/* ============================ WORLD ============================ */
+const W = 15, D = 19, H = 3.4;          // room extents (x, z, height)
+const colliders = [];                    // {x1,z1,x2,z2}
+const interactables = [];                // {pos, r, id, label, kind}
+
+function box(w,h,d,color,x,y,z,opts={}){
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(w,h,d),
+    new THREE.MeshStandardMaterial({color, roughness:opts.rough??0.85, metalness:opts.metal??0.05,
+      emissive:opts.emissive??0x000000, emissiveIntensity:opts.ei??1})
+  );
+  m.position.set(x,y,z);
+  if(opts.rotY) m.rotation.y=opts.rotY;
+  scene.add(m);
+  if(opts.solid) addCollider(x,z,w,d,opts.rotY||0);
+  return m;
+}
+function addCollider(x,z,w,d,rotY){
+  if(rotY && Math.abs(Math.abs(rotY)-Math.PI/2)<0.1){ const t=w; w=d; d=t; }
+  colliders.push({x1:x-w/2, z1:z-d/2, x2:x+w/2, z2:z+d/2});
+}
+function cyl(rt,rb,h,color,x,y,z,seg=12,opts={}){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),
+    new THREE.MeshStandardMaterial({color,roughness:opts.rough??0.6,metalness:opts.metal??0.3,
+      emissive:opts.emissive??0x000000}));
+  m.position.set(x,y,z); scene.add(m); return m;
+}
+
+// --- shell ---
+const woodFloor = new THREE.Mesh(
+  new THREE.PlaneGeometry(W,D),
+  new THREE.MeshStandardMaterial({color:0x3a2a1c, roughness:0.92})
+);
+woodFloor.rotation.x=-Math.PI/2; scene.add(woodFloor);
+
+const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(W,D),
+  new THREE.MeshStandardMaterial({color:0x1a120c, roughness:1}));
+ceiling.rotation.x=Math.PI/2; ceiling.position.y=H; scene.add(ceiling);
+
+const wallMat = new THREE.MeshStandardMaterial({color:0x4a3524, roughness:0.95});
+function wall(x,z,w,rotY){
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(w,H), wallMat);
+  m.position.set(x,H/2,z); m.rotation.y=rotY; scene.add(m);
+  const back=m.clone(); back.rotation.y=rotY+Math.PI; scene.add(back);
+}
+wall(0,-D/2,W,0); wall(0,D/2,W,Math.PI);
+wall(-W/2,0,D,Math.PI/2); wall(W/2,0,D,-Math.PI/2);
+// wall colliders
+colliders.push({x1:-W/2-1,z1:-D/2-1,x2:W/2+1,z2:-D/2+0.25});
+colliders.push({x1:-W/2-1,z1:D/2-0.25,x2:W/2+1,z2:D/2+1});
+colliders.push({x1:-W/2-0.25,z1:-D/2-1,x2:-W/2+0.25,z2:D/2+1});
+colliders.push({x1:W/2-0.25,z1:-D/2-1,x2:W/2+0.25,z2:D/2+1});
+
+// wainscot trim
+box(W,0.9,0.1,0x2e2016, 0,0.45,-D/2+0.06);
+box(0.1,0.9,D,0x2e2016, -W/2+0.06,0.45,0);
+box(0.1,0.9,D,0x2e2016, W/2-0.06,0.45,0);
+
+// --- the bar counter (runs along -X side, player works behind it) ---
+const BAR_X = -3.2, BAR_Z0 = -6.0, BAR_Z1 = 5.0;
+const barLen = BAR_Z1-BAR_Z0, barCz = (BAR_Z0+BAR_Z1)/2;
+const barTop = box(1.0, 0.16, barLen, 0x5b3a1e, BAR_X, 1.06, barCz, {rough:0.45, metal:0.12});
+box(0.9, 1.0, barLen, 0x3d2714, BAR_X, 0.5, barCz, {solid:true});
+box(0.14, 0.30, barLen, 0x6b4524, BAR_X-0.52, 1.30, barCz);   // rail on patron side
+
+// back-bar shelving
+box(0.36, 2.2, barLen-1.0, 0x2c1d11, BAR_X-0.0-2.0, 1.1, barCz, {solid:true});
+for(let i=0;i<3;i++){
+  box(0.5,0.07,barLen-1.2, 0x4a3018, BAR_X-2.0+0.24, 0.9+i*0.55, barCz);
+}
+// bottles on the back shelf — colour and glow
+const bottles=[];
+for(let i=0;i<26;i++){
+  const shelf=(i%3), zz = barCz - (barLen-1.6)/2 + (i/3|0)*0.78 + rnd(-0.05,0.05);
+  const b=cyl(0.045,0.06,rnd(0.22,0.34), [0x8a5a2a,0x3a5a3a,0x6a2a3a,0x8a8a4a,0x2a3a5a][i%5],
+    BAR_X-1.72, 0.9+shelf*0.55+0.16, zz, 8, {metal:0.4,rough:0.25});
+  bottles.push(b);
+}
+
+// --- stations behind the bar ---
+const STATION = {};
+function station(id,label,x,y,z,kind){
+  STATION[id]={pos:new THREE.Vector3(x,y,z)};
+  interactables.push({pos:new THREE.Vector3(x,y,z), r:(id==='hatch'?2.3:1.5), id, label, kind});
+}
+
+// taps: two handles on the counter
+const tapBase = box(0.3,0.1,0.9, 0x6b6b6b, BAR_X+0.15, 1.19, barCz-1.4, {metal:0.8,rough:0.3});
+const tapA = cyl(0.035,0.035,0.42,0xc9a44a, BAR_X+0.15, 1.4, barCz-1.7, 10, {metal:0.9,rough:0.2});
+tapA.rotation.z=0.0;
+const tapAspout = cyl(0.03,0.03,0.16,0xc9a44a, BAR_X+0.02, 1.28, barCz-1.7, 8, {metal:0.9});
+tapAspout.rotation.z=Math.PI/2;
+const tapB = cyl(0.035,0.035,0.42,0x8a8a92, BAR_X+0.15, 1.4, barCz-1.1, 10, {metal:0.9,rough:0.2});
+const tapBspout = cyl(0.03,0.03,0.16,0x8a8a92, BAR_X+0.02, 1.28, barCz-1.1, 8, {metal:0.9});
+tapBspout.rotation.z=Math.PI/2;
+station('tapA','Pour Amber Ale', BAR_X+0.15, 1.3, barCz-1.7, 'pour');
+station('tapB','Pour Stout',     BAR_X+0.15, 1.3, barCz-1.1, 'pour');
+
+// spirits shelf station (reach point)
+station('shelf','Reach the spirits', BAR_X-1.55, 1.35, barCz+1.6, 'pour');
+const shelfGlow = cyl(0.06,0.06,0.3,0xa2571c, BAR_X-1.6,1.5,barCz+1.6,8,{emissive:0x3a1a06});
+
+// soda gun
+const sodaGun = box(0.12,0.22,0.1,0x555a5e, BAR_X+0.2,1.24,barCz+0.2,{metal:0.6});
+station('soda','Cherry soda gun', BAR_X+0.2,1.24,barCz+0.2,'pour');
+
+// sink / washer
+const sink = box(0.7,0.22,1.0, 0x707880, BAR_X+0.05, 1.02, barCz+2.6, {metal:0.7,rough:0.3});
+station('sink','Sink', BAR_X+0.05, 1.05, barCz+2.6, 'sink');
+
+// clean glass rack
+const rackGlasses=[];
+const rack = box(0.5,0.08,0.9, 0x4a3018, BAR_X+0.1, 1.18, barCz-3.2);
+for(let i=0;i<6;i++){
+  const gm=cyl(0.055,0.045,0.15,0xd8e4e8, BAR_X+0.1+((i%2)-0.5)*0.18, 1.29, barCz-3.5+(i/2|0)*0.3, 10,
+    {metal:0.1,rough:0.05});
+  gm.material.transparent=true; gm.material.opacity=0.5;
+  rackGlasses.push(gm);
+}
+station('rack','Take a clean glass', BAR_X+0.1, 1.25, barCz-3.2, 'rack');
+
+// --- stools along the patron side ---
+const SEATS=[];
+for(let i=0;i<6;i++){
+  const z = BAR_Z0 + 1.2 + i*1.55;
+  const x = BAR_X - 1.35;
+  cyl(0.22,0.20,0.09,0x6b4524, x,0.72,z,14,{rough:0.6});
+  cyl(0.05,0.05,0.72,0x40464a, x,0.36,z,8,{metal:0.8,rough:0.35});
+  SEATS.push({x, z, standX:x-0.15, standZ:z, occupied:null});
+}
+// Dad's stool. The seventh. Nobody sits there.
+const DAD_SEAT = { x: BAR_X-1.35, z: BAR_Z1+0.35 };
+const dadStool = cyl(0.24,0.22,0.09,0x7a4a20, DAD_SEAT.x,0.74,DAD_SEAT.z,14,{rough:0.5});
+cyl(0.05,0.05,0.74,0x50565a, DAD_SEAT.x,0.37,DAD_SEAT.z,8,{metal:0.8});
+
+// --- booths on the far side ---
+for(let i=0;i<3;i++){
+  const z=-4.5+i*4.4;
+  box(1.6,0.12,1.1,0x4a3018, 4.6,0.74,z,{solid:true});
+  box(0.16,1.2,1.3,0x3a2410, 5.6,0.6,z-1.2,{solid:true});
+  box(0.16,1.2,1.3,0x3a2410, 5.6,0.6,z+1.2,{solid:true});
+  box(1.5,0.5,0.35,0x5a2a2a, 4.6,0.42,z-1.0,{solid:true});
+  box(1.5,0.5,0.35,0x5a2a2a, 4.6,0.42,z+1.0,{solid:true});
+}
+
+// --- front door ---
+const doorFrame = box(1.6,2.4,0.2,0x2a1a10, 0, 1.2, D/2-0.12);
+const doorMesh = box(1.3,2.2,0.1,0x53321a, 0, 1.1, D/2-0.22, {rough:0.7});
+station('door','The front door', 0, 1.2, D/2-0.5, 'door');
+// little bell over the door
+const bell = cyl(0.06,0.08,0.1,0xc9a44a, 0, 2.35, D/2-0.35, 8, {metal:0.95,rough:0.15});
+
+// --- cellar hatch (behind the bar, floor) ---
+const hatch = box(1.1,0.08,1.1,0x2a1a10, BAR_X+0.1, 0.05, barCz+4.6, {rough:0.9});
+const hatchRing = cyl(0.09,0.09,0.03,0x6a6a6a, BAR_X+0.1,0.11,barCz+4.6,10,{metal:0.9});
+const hatchHole = box(1.05,0.06,1.05,0x000000, BAR_X+0.1, 0.02, barCz+4.6);
+hatchHole.visible=false;
+station('hatch','The cellar hatch', BAR_X+0.1, 0.55, barCz+4.6, 'hatch');
+
+// --- jukebox ---
+const juke = box(0.9,1.7,0.6, 0x5a2a2a, W/2-1.2, 0.85, -6.5, {rough:0.5, solid:true});
+const jukeGlow = box(0.7,0.5,0.05, 0xe8b45a, W/2-1.35, 1.35, -6.5, {emissive:0xe8b45a, ei:1.6});
+station('juke','Jukebox', W/2-1.4, 1.2, -6.5, 'juke');
+
+// --- photo of dad on the wall behind the bar ---
+const photoTex = (()=>{
+  const c=document.createElement('canvas'); c.width=128;c.height=160;
+  const g=c.getContext('2d');
+  g.fillStyle='#c9b898'; g.fillRect(0,0,128,160);
+  g.fillStyle='#8a7a5e'; g.fillRect(8,8,112,144);
+  g.fillStyle='#5a4a38';
+  g.beginPath(); g.ellipse(64,64,26,32,0,0,7); g.fill();       // head
+  g.fillRect(30,96,68,50);                                       // shoulders
+  g.fillStyle='#c9b898'; g.font='11px Georgia'; g.textAlign='center';
+  g.fillText('31 YEARS', 64, 154);
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;
+})();
+const photo = new THREE.Mesh(new THREE.PlaneGeometry(0.6,0.75),
+  new THREE.MeshStandardMaterial({map:photoTex, roughness:0.9}));
+photo.position.set(BAR_X-2.17, 2.15, barCz-1.0);
+photo.rotation.y = Math.PI/2;
+scene.add(photo);
+
+// --- lights ---
+const amb = new THREE.AmbientLight(0x6b5238, 1.05); scene.add(amb);
+const hemi = new THREE.HemisphereLight(0x7a6242, 0x241a12, 0.75); scene.add(hemi);
+
+const lamps=[];
+function lamp(x,z,color=0xffb04a,inten=3.2,dist=16){
+  const l=new THREE.PointLight(color, inten, dist, 1.9);
+  l.position.set(x,2.85,z); scene.add(l);
+  const shade=cyl(0.10,0.30,0.26,0x3a2a1a,x,2.95,z,10,{rough:0.8});
+  const bulb=cyl(0.06,0.06,0.09,0xffd9a0,x,2.8,z,8,{emissive:0xffb04a,ei:2});
+  lamps.push({light:l, bulb, base:inten, x, z, flick:0});
+  return l;
+}
+lamp(-2.0,-4.5); lamp(-2.0,1.0); lamp(-2.0,5.5);
+lamp(4.0,-4.5); lamp(4.0,0.5); lamp(4.0,5.0);
+const barLight = new THREE.PointLight(0xffc070, 2.6, 13, 1.8);
+barLight.position.set(BAR_X-1.4, 2.4, barCz); scene.add(barLight);
+const dadLight = new THREE.PointLight(0x8a3a3a, 0.0, 5, 2);
+dadLight.position.set(DAD_SEAT.x, 2.2, DAD_SEAT.z); scene.add(dadLight);
+const hatchLight = new THREE.PointLight(0x4a1a1a, 0.0, 6, 2);
+hatchLight.position.set(BAR_X+0.1, 0.5, barCz+4.6); scene.add(hatchLight);
+
+/* ============================ ACTORS ============================ */
+// A patron is a cheap stack of boxes with a face plane. Cheap is fine — the
+// horror is in what they DO, and in the face swap.
+
+function buildBody(def, horrorMode){
+  const g = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({color:def.skin, roughness:0.8});
+  const shirt= new THREE.MeshStandardMaterial({color:def.shirt, roughness:0.9});
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.44,0.62,0.28), shirt);
+  torso.position.y = 1.02; g.add(torso);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.20,16,14), skin);
+  head.position.y = 1.52; g.add(head);
+  g.userData.head = head;
+
+  // face plane parented to head, faces +Z of the group
+  const faceMat = new THREE.MeshBasicMaterial({transparent:true, depthWrite:false});
+  faceMat.map = makeFace('cute');
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.34,0.34), faceMat);
+  face.position.set(0,0.01,0.195);
+  head.add(face);
+  g.userData.face = face;
+
+  // arms
+  const armL=new THREE.Mesh(new THREE.BoxGeometry(0.11,0.5,0.11), shirt);
+  armL.position.set(-0.29,1.02,0); g.add(armL);
+  const armR=armL.clone(); armR.position.x=0.29; g.add(armR);
+  g.userData.arms=[armL,armR];
+
+  // legs
+  const legL=new THREE.Mesh(new THREE.BoxGeometry(0.13,0.62,0.13),
+    new THREE.MeshStandardMaterial({color:0x2a2420, roughness:0.9}));
+  legL.position.set(-0.12,0.40,0); g.add(legL);
+  const legR=legL.clone(); legR.position.x=0.12; g.add(legR);
+  g.userData.legs=[legL,legR];
+
+  // a hat-ish detail so silhouettes differ
+  if(def.id==='boone'||def.id==='hark'){
+    const hat=new THREE.Mesh(new THREE.CylinderGeometry(0.24,0.24,0.04,12),
+      new THREE.MeshStandardMaterial({color:0x2a2018,roughness:1}));
+    hat.position.y=1.66; g.add(hat);
+  }
+  return g;
+}
+
+class Patron{
+  constructor(def){
+    this.def=def; this.id=def.id; this.name=def.name;
+    this.g = buildBody(def);
+    this.g.position.set(0, 0, D/2-1.2);
+    scene.add(this.g);
+    this.g.visible=false;
+    this.state='away';
+    this.seat=null;
+    this.want=null;
+    this.patience=1; this.maxPatience=1;
+    this.served=false; this.angry=false;
+    this.talkT=0; this.bob=Math.random()*6;
+    this.faceMode='cute';
+    this.turned=false;
+    this.staring=0;
+    this.dirty=false;
+  }
+  setFace(mode){
+    if(this.faceMode===mode) return;
+    this.faceMode=mode;
+    const f=this.g.userData.face;
+    f.material.map.dispose?.();
+    f.material.map = makeFace(mode, this.id.length);
+    f.material.needsUpdate=true;
+  }
+  goTo(x,z){ this.tx=x; this.tz=z; }
+  arrive(seatIndex){
+    this.seat=SEATS[seatIndex];
+    this.seat.occupied=this;
+    this.g.visible=true;
+    this.g.position.set(0,0,D/2-1.6);
+    this.state='walking';
+    this.goTo(this.seat.standX, this.seat.standZ);
+    Audio_.door();
+    // door bell
+    bell.position.y = 2.35;
+  }
+  sit(){
+    this.state='ordering';
+    this.g.position.y = 0.28;      // perched on the stool
+    this.g.rotation.y = -Math.PI/2; // face the bar (-X)
+    this.want = this.def.drink;
+    Director.onOrder(this);
+  }
+  reorder(){
+    this.state='ordering';
+    this.served=false; this.angry=false;
+    this.patience=1;
+    this.rounds=(this.rounds||1)+1;
+    // Later rounds, the order starts drifting off the menu.
+    if(Director.corrupt>0.55 && Math.random()<Director.corrupt*0.5){
+      this.want='hollow';
+      Director.onOrder(this);
+      Director.say(this.name, "The usual. You know the one. He knew the one.");
+      Director.nerveHit(0.05);
+      return;
+    }
+    this.want=this.def.drink;
+    Director.onOrder(this);
+    Director.say(this.name, pick([
+      "Again, when you get a second.",
+      "Same again, kid.",
+      "One more and I'll get out of your hair."
+    ]));
+  }
+  serve(drinkId, quality){
+    if(this.state!=='ordering' && this.state!=='waiting') return false;
+
+    // "The usual" cannot be poured. Handing over anything at all buys you a
+    // little peace and costs you some of yourself.
+    if(this.want==='hollow'){
+      this.state='drinking'; this.drinkT=rnd(16,24);
+      Director.clearOrder(this);
+      Director.say(this.name, "...That's not it. But thank you for trying.");
+      Director.nerveHit(0.06);
+      Audio_.bad();
+      return true;
+    }
+
+    const right = drinkId===this.want;
+    if(right && quality>0.45){
+      this.served=true; this.state='drinking'; this.drinkT= rnd(14,22);
+      const tip = Math.round(2 + quality*4 + (this.patience>0.6?2:0));
+      Director.pay(tip, this, true);
+      Director.say(this.name, this.def.thanks);
+      Audio_.good();
+    } else {
+      this.angry=true; this.patience=Math.max(0,this.patience-0.35);
+      Director.pay(1, this, false);
+      Director.say(this.name, right ? "That's half a glass of foam, kid."
+                                    : "That's not what I asked for.");
+      Audio_.bad();
+    }
+    Director.clearOrder(this);
+    return true;
+  }
+  leave(){
+    this.state='leaving';
+    if(this.seat){ this.seat.occupied=null; }
+    this.g.position.y=0;
+    this.goTo(0, D/2-1.6);
+  }
+  update(dt, corrupt){
+    if(this.state==='away') return;
+    this.bob+=dt;
+    const ud=this.g.userData;
+
+    if(this.state==='walking' || this.state==='leaving'){
+      const dx=this.tx-this.g.position.x, dz=this.tz-this.g.position.z;
+      const d=Math.hypot(dx,dz);
+      const spd = 1.5*(1 - corrupt*0.25);
+      if(d<0.12){
+        if(this.state==='walking') this.sit();
+        else { this.g.visible=false; this.state='away'; Audio_.door(); }
+      } else {
+        this.g.position.x += dx/d*spd*dt;
+        this.g.position.z += dz/d*spd*dt;
+        this.g.rotation.y = Math.atan2(dx,dz);
+        const sw=Math.sin(this.bob*8)*0.45;
+        ud.legs[0].rotation.x=sw; ud.legs[1].rotation.x=-sw;
+        ud.arms[0].rotation.x=-sw*0.7; ud.arms[1].rotation.x=sw*0.7;
+      }
+    }
+    else if(this.state==='ordering' || this.state==='waiting'){
+      ud.legs[0].rotation.x=ud.legs[1].rotation.x=0;
+      this.g.position.y = 0.28 + Math.sin(this.bob*1.4)*0.012;
+      this.patience -= dt/(this.maxPatience*46);
+      if(this.patience<=0 && !this.angry){
+        this.angry=true;
+        Director.say(this.name, "Forget it. I'll drink at home.");
+        Director.pay(0,this,false);
+        Director.clearOrder(this);
+        this.leave();
+      }
+      // At high corruption they stop facing the bar and face YOU instead.
+      if(corrupt>0.42){
+        const toP = new THREE.Vector2(player.pos.x-this.g.position.x, player.pos.z-this.g.position.z);
+        const want = Math.atan2(toP.x,toP.y);
+        this.g.rotation.y = lerp(this.g.rotation.y, want, dt*(0.4+corrupt));
+      }
+    }
+    else if(this.state==='drinking'){
+      this.g.position.y = 0.28 + Math.sin(this.bob*1.2)*0.012;
+      this.drinkT-=dt;
+      if(this.drinkT<=0){
+        this.dirty=true;
+        // A regular doesn't have one drink and go home. Another round, if the
+        // night still has rounds left in it — otherwise they settle up and leave.
+        if(Director.takeRound()) this.reorder();
+        else this.leave();
+      }
+    }
+
+    // face selection by corruption
+    if(corrupt>0.86) this.setFace('hollow');
+    else if(corrupt>0.55 || this.turned) this.setFace('wrong');
+    else if(corrupt>0.22 && this.angry) this.setFace('tired');
+    else this.setFace('cute');
+
+    // at very high corruption their heads drift toward the player, always
+    if(corrupt>0.7){
+      const h=ud.head;
+      const dir=new THREE.Vector3().subVectors(player.pos, this.g.position);
+      h.rotation.y = lerp(h.rotation.y, clamp(Math.atan2(dir.x,dir.z)-this.g.rotation.y,-1.4,1.4), dt*2);
+      h.position.y = 1.52 + Math.sin(this.bob*0.7)*0.02*corrupt;
+    }
+  }
+}
+
+const patrons = CAST.map(d=>new Patron(d));
+const byId = {}; patrons.forEach(p=>byId[p.id]=p);
+
+/* --------------------- THE THING IN THE CELLAR --------------------- */
+// Dad. Taller than he was. He climbs out on the last nights.
+const Father = (()=>{
+  const g=new THREE.Group();
+  const dark=new THREE.MeshStandardMaterial({color:0x120c0a, roughness:1});
+  const skin=new THREE.MeshStandardMaterial({color:0x6b5548, roughness:0.95});
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(0.5,1.5,0.32), dark); torso.position.y=1.55; g.add(torso);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.22,16,14), skin); head.position.y=2.48; g.add(head);
+  const faceMat=new THREE.MeshBasicMaterial({transparent:true, depthWrite:false, map:makeFace('hollow')});
+  const face=new THREE.Mesh(new THREE.PlaneGeometry(0.4,0.4), faceMat);
+  face.position.set(0,0,0.215); head.add(face);
+  // long arms — that's the tell
+  const arms=[];
+  for(const s of [-1,1]){
+    const a=new THREE.Mesh(new THREE.BoxGeometry(0.11,1.5,0.11), dark);
+    a.position.set(s*0.33,1.35,0); g.add(a); arms.push(a);
+  }
+  const legs=[];
+  for(const s of [-1,1]){
+    const l=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.95,0.15), dark);
+    l.position.set(s*0.14,0.48,0); g.add(l); legs.push(l);
+  }
+  const glow=new THREE.PointLight(0x8a1a1a, 0.0, 5, 2); glow.position.y=2.4; g.add(glow);
+  g.visible=false; scene.add(g);
+
+  return {
+    g, head, arms, legs, glow,
+    active:false, state:'gone', t:0, speed:1.05, seen:0, bob:0,
+    lastKnown:new THREE.Vector3(), lostT:0,
+    spawn(){
+      this.active=true; this.state='rising'; this.t=0;
+      g.visible=true;
+      g.position.set(BAR_X+0.1, -2.2, barCz+4.6);
+      hatchMesh_open(true);
+      Audio_.stinger();
+      Director.say('','Something is coming up out of the cellar.');
+    },
+    despawn(){ this.active=false; this.state='gone'; g.visible=false; },
+    update(dt){
+      if(!this.active) return;
+      this.bob+=dt;
+      this.glow.intensity = 0.6+Math.sin(this.bob*3)*0.25;
+      if(this.state==='rising'){
+        g.position.y = Math.min(0, g.position.y + dt*0.9);
+        if(g.position.y>=0){ this.state='hunt'; }
+        return;
+      }
+      // He hunts what he can see. Hide and he keeps walking to where you were,
+      // then stands there a while, then goes looking. He is slow. You are not.
+      if(!player.hiding){
+        this.lastKnown.set(player.pos.x, 0, player.pos.z);
+        this.lostT = 0;
+      }
+      const tgt = player.hiding ? this.lastKnown : player.pos;
+      const dx=tgt.x-g.position.x, dz=tgt.z-g.position.z;
+      const d=Math.hypot(dx,dz);
+      g.rotation.y = lerp(g.rotation.y, Math.atan2(dx,dz), dt*3);
+
+      const spd = player.hiding ? this.speed*0.55 : this.speed*(player.running?1.25:1.0);
+      if(d>0.4){
+        // he does not respect the bar. he walks through it.
+        g.position.x += dx/d*spd*dt;
+        g.position.z += dz/d*spd*dt;
+      } else if(player.hiding){
+        // arrived where you were, and you aren't there. he waits, then drifts.
+        this.lostT += dt;
+        if(this.lostT > 3.2){
+          this.lastKnown.set(rnd(-W/2+1, W/2-1), 0, rnd(-D/2+1, D/2-1));
+          this.lostT = 0;
+        }
+      }
+
+      // real distance to you, for dread and for the kill
+      const realD = Math.hypot(player.pos.x-g.position.x, player.pos.z-g.position.z);
+      const sw=Math.sin(this.bob*4.4)*0.5;
+      this.legs[0].rotation.x=sw; this.legs[1].rotation.x=-sw;
+      this.arms[0].rotation.x=-sw*0.4; this.arms[1].rotation.x=sw*0.4;
+      this.head.position.y=2.48+Math.sin(this.bob*1.7)*0.05;
+
+      // proximity dread
+      const near = clamp(1 - realD/9, 0, 1);
+      Director.dread = Math.max(Director.dread, near);
+      if(near>0.35 && Math.random()<dt*near*2.2) Audio_.heart(near);
+
+      if(realD < 0.95 && !player.hiding){
+        Director.kill('He got a hand on you.');
+      } else if(realD < 1.4 && player.hiding){
+        // standing right over you. safe, but it costs you.
+        Director.nerveHit(dt*0.075);
+      }
+    }
+  };
+})();
+
+let hatchOpen=false;
+function hatchMesh_open(v){
+  hatchOpen=v;
+  hatch.rotation.x = v ? -1.35 : 0;
+  hatch.position.z = barCz+4.6 + (v?-0.5:0);
+  hatch.position.y = v ? 0.5 : 0.05;
+  hatchHole.visible = v;
+  hatchLight.intensity = v ? 0.9 : 0;
+}
+
+/* ============================ PLAYER ============================ */
+const player = {
+  pos: new THREE.Vector3(BAR_X+0.4, 0, barCz-2.0),
+  vel: new THREE.Vector3(),
+  yaw: Math.PI, pitch: 0,
+  height: 1.66, crouch:false, running:false, hiding:false,
+  bob:0, carry:null,        // {glass:true, fill:0..1, drink:id|null, dirty:bool}
+  pouring:null, nerve:1
+};
+
+const keys={};
+addEventListener('keydown', e=>{
+  keys[e.code]=true;
+  if(e.code==='KeyE' && !e.repeat) tryInteractDown();
+  if(e.code==='Escape') document.exitPointerLock?.();
+});
+addEventListener('keyup', e=>{
+  keys[e.code]=false;
+  if(e.code==='KeyE') tryInteractUp();
+});
+renderer.domElement.addEventListener('click', ()=>{
+  if(Director.running) renderer.domElement.requestPointerLock();
+});
+addEventListener('mousemove', e=>{
+  if(document.pointerLockElement!==renderer.domElement) return;
+  player.yaw   -= e.movementX*0.0022;
+  player.pitch -= e.movementY*0.0022;
+  player.pitch = clamp(player.pitch, -1.35, 1.35);
+});
+
+function collide(nx,nz){
+  const r=0.30;
+  for(const c of colliders){
+    if(nx+r>c.x1 && nx-r<c.x2 && nz+r>c.z1 && nz-r<c.z2) return true;
+  }
+  return false;
+}
+
+// Never let the player start inside geometry. If the spawn is buried, spiral
+// outward for the nearest free spot rather than stranding them in a wall.
+function safeSpawn(){
+  if(!collide(player.pos.x, player.pos.z)) return;
+  for(let r=0.15; r<6; r+=0.15){
+    for(let a=0; a<Math.PI*2; a+=Math.PI/12){
+      const x=player.pos.x+Math.cos(a)*r, z=player.pos.z+Math.sin(a)*r;
+      if(!collide(x,z)){ player.pos.x=x; player.pos.z=z; return; }
+    }
+  }
+  console.warn('safeSpawn: no free ground found near spawn');
+}
+
+function updatePlayer(dt){
+  const sp = player.crouch ? 1.5 : (player.running ? 4.3 : 2.7);
+  let fx=0, fz=0;
+  if(keys.KeyW) fz+=1; if(keys.KeyS) fz-=1;
+  if(keys.KeyA) fx-=1; if(keys.KeyD) fx+=1;
+  player.running = !!keys.ShiftLeft && !player.crouch;
+  player.crouch  = !!keys.KeyC;
+
+  const len=Math.hypot(fx,fz);
+  if(len>0){ fx/=len; fz/=len; }
+  const sy=Math.sin(player.yaw), cy=Math.cos(player.yaw);
+  const wx = fx*cy - fz*sy;
+  const wz = -fx*sy - fz*cy;
+
+  const nx = player.pos.x + wx*sp*dt;
+  const nz = player.pos.z + wz*sp*dt;
+  if(!collide(nx, player.pos.z)) player.pos.x=nx;
+  if(!collide(player.pos.x, nz)) player.pos.z=nz;
+  player.pos.x = clamp(player.pos.x, -W/2+0.4, W/2-0.4);
+  player.pos.z = clamp(player.pos.z, -D/2+0.4, D/2-0.4);
+
+  if(len>0) player.bob += dt*(player.running?13:8);
+
+  // "behind the bar and crouched" == hiding
+  const behindBar = player.pos.x > BAR_X-0.6 && player.pos.x < BAR_X+0.62
+                 && player.pos.z > BAR_Z0 && player.pos.z < BAR_Z1;
+  player.hiding = player.crouch && behindBar;
+
+  const h = player.height - (player.crouch?0.62:0);
+  camHolder.position.set(player.pos.x, h + Math.sin(player.bob)*0.035*(player.running?1.6:1), player.pos.z);
+  camHolder.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch + Math.sin(player.bob*0.5)*0.006;
+  camera.rotation.z = Math.sin(player.bob*0.5)*0.012 + Director.tilt;
+}
+
+/* --------- carried glass rendered in front of the camera --------- */
+const heldGroup = new THREE.Group();
+camera.add(heldGroup);
+const heldGlass = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.055,0.045,0.16,14,1,true),
+  new THREE.MeshPhysicalMaterial({color:0xdfeaee, transparent:true, opacity:0.35,
+    roughness:0.06, metalness:0, transmission:0.6, side:THREE.DoubleSide})
+);
+const heldLiquid = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.05,0.042,0.14,14),
+  new THREE.MeshStandardMaterial({color:0xc9862c, roughness:0.25})
+);
+heldGroup.add(heldGlass); heldGroup.add(heldLiquid);
+heldGroup.position.set(0.30,-0.26,-0.55);
+heldGroup.visible=false;
+
+function updateHeld(dt){
+  heldGroup.visible = !!player.carry;
+  if(!player.carry) return;
+  const c=player.carry;
+  const f=clamp(c.fill,0,1);
+  heldLiquid.visible = f>0.02;
+  heldLiquid.scale.y = Math.max(0.02,f);
+  heldLiquid.position.y = -0.07 + (0.14*f)/2;
+  if(c.drink) heldLiquid.material.color.setHex(DRINK[c.drink].color);
+  if(c.dirty) heldGlass.material.color.setHex(0x9a9080);
+  else heldGlass.material.color.setHex(0xdfeaee);
+  // sway
+  const s=Math.sin(player.bob)*0.02;
+  heldGroup.rotation.z = -s*0.6;
+  heldGroup.position.x = 0.30 + s*0.02;
+}
+
+/* ============================ INTERACTION ============================ */
+function bestInteractable(){
+  const fwd=new THREE.Vector3(0,0,-1).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()));
+  let best=null, bestScore=-1;
+  const eye=new THREE.Vector3(player.pos.x, player.height-(player.crouch?0.62:0), player.pos.z);
+
+  const cands = interactables.slice();
+  // patrons are interactable when they want something
+  for(const p of patrons){
+    if(p.state==='ordering'||p.state==='waiting'){
+      cands.push({pos:new THREE.Vector3(p.g.position.x, 1.4, p.g.position.z), r:2.0,
+        id:'patron:'+p.id, label:'Serve '+p.name, kind:'patron', patron:p});
+    }
+  }
+  for(const c of cands){
+    const to=new THREE.Vector3().subVectors(c.pos, eye);
+    const d=to.length();
+    if(d>c.r) continue;
+    to.normalize();
+    const dot=to.dot(fwd);
+    if(dot<0.55) continue;
+    const score=dot - d*0.06;
+    if(score>bestScore){ bestScore=score; best=c; }
+  }
+  return best;
+}
+
+let hover=null;
+function updatePrompt(){
+  hover = Director.running ? bestInteractable() : null;
+  const el=$('#prompt');
+  if(!hover){ el.style.opacity=0; return; }
+  let txt = hover.label;
+  if(hover.kind==='pour'){
+    if(!player.carry) txt = 'Need a glass first';
+    else if(player.carry.dirty) txt = 'That glass is dirty';
+    else txt = '[Hold E] '+hover.label;
+  }
+  else if(hover.kind==='rack'){
+    txt = player.carry ? 'Hands full' : '[E] Take a clean glass';
+  }
+  else if(hover.kind==='sink'){
+    txt = player.carry ? '[E] Wash / empty the glass' : '[E] Sink';
+  }
+  else if(hover.kind==='patron'){
+    const p=hover.patron;
+    txt = player.carry && player.carry.fill>0.1
+      ? '[E] Serve '+p.name+' — wants '+DRINK[p.want].name
+      : p.name+' wants '+DRINK[p.want].name;
+  }
+  else txt='[E] '+hover.label;
+  el.textContent=txt;
+  el.style.opacity=1;
+}
+
+function tryInteractDown(){
+  if(!Director.running){ return; }
+  const h=hover;
+  if(!h) return;
+  if(h.kind==='rack'){
+    if(player.carry) return;
+    player.carry={fill:0, drink:null, dirty:false};
+    Audio_.clink();
+  }
+  else if(h.kind==='pour'){
+    if(!player.carry || player.carry.dirty) return;
+    const drinkId = Object.keys(DRINK).find(k=>DRINK[k].station===h.id);
+    if(!drinkId) return;
+    player.pouring = {drink:drinkId, station:h.id};
+    if(player.carry.drink && player.carry.drink!==drinkId){
+      // mixing ruins it
+      player.carry.drink=drinkId; player.carry.fill=Math.min(player.carry.fill,0.3);
+    } else player.carry.drink=drinkId;
+  }
+  else if(h.kind==='sink'){
+    if(player.carry){ player.carry={fill:0, drink:null, dirty:false}; Audio_.noise(0.5,0.12,900); }
+  }
+  else if(h.kind==='patron'){
+    if(!player.carry || player.carry.fill<0.1) return;
+    const ok=h.patron.serve(player.carry.drink, glassQuality(player.carry.fill));
+    if(ok) player.carry=null;
+  }
+  else if(h.kind==='juke'){
+    Audio_.ui();
+    Director.jukeKick();
+  }
+  else if(h.kind==='door'){
+    Director.tryDoor();
+  }
+  else if(h.kind==='hatch'){
+    Director.tryHatch();
+  }
+}
+function tryInteractUp(){ player.pouring=null; }
+
+// A good pour lands near 0.88 fill. Over the top and it's foam and mess.
+function glassQuality(f){
+  if(f>1.0) return clamp(1-(f-1.0)*3.2, 0, 1);
+  return clamp(1-Math.abs(0.88-f)*2.4, 0, 1);
+}
+
+function updatePour(dt){
+  const bar=$('#glassbar');
+  if(player.carry){
+    bar.style.display='block';
+    const f=clamp(player.carry.fill,0,1.15);
+    const q=glassQuality(player.carry.fill);
+    bar.firstElementChild.style.width=(f/1.15*100)+'%';
+    bar.firstElementChild.style.background = player.carry.fill>1.0
+      ? '#8e1f1f' : (q>0.7 ? 'linear-gradient(90deg,#c98a2a,#e8bd63)' : '#9a7a3a');
+  } else bar.style.display='none';
+
+  if(!player.pouring || !player.carry) return;
+  const d=DRINK[player.pouring.drink];
+  player.carry.fill += d.pour*0.42*dt;
+  if(Math.random()<dt*22) Audio_.tone(rnd(300,520),0.05,'triangle',0.035);
+  if(player.carry.fill>1.3){
+    player.carry.fill=1.3;
+  }
+}
+
+/* ============================ THE DIRECTOR ============================ */
+// Runs the night, the money, the script, and the escalation.
+const Director = {
+  running:false, night:0, cfg:null,
+  clock:0, dayLen:0, cash:0, quota:0,
+  corrupt:0, dread:0, tilt:0,
+  queue:[], spawnT:0, orderEls:new Map(),
+  beats:[], beatIdx:0,
+  ended:false,
+
+  start(nightIndex){
+    this.night=nightIndex;
+    this.cfg=NIGHTS[nightIndex];
+    this.clock=0; this.dayLen=this.cfg.minutes*60/26; // compressed: minutes -> seconds
+    this.dayLen=this.cfg.minutes* (this.cfg.n===6 ? 3.4 : 4.0); // real seconds per night
+    this.cash=0; this.quota=this.cfg.quota;
+    this.corrupt=this.cfg.corrupt;
+    this.dread=0; this.ended=false;
+    this.beatIdx=0;
+    this.beats = BEATS[this.cfg.n] ? BEATS[this.cfg.n].slice() : [];
+    this.roundsLeft = Math.max(0, this.cfg.wave - 6);
+    this.queue = [];
+    Father.despawn();
+    hatchMesh_open(false);
+    player.nerve=1;
+    player.carry=null;
+    // Behind the bar, in the gap between the counter and the back shelf.
+    // That gap is narrow — see safeSpawn(), which refuses to bury you in it.
+    player.pos.set(BAR_X-1.1, 0, barCz-2.0);
+    safeSpawn();
+    player.yaw=-Math.PI*0.5;          // facing the counter and the stools
+    patrons.forEach(p=>{ p.state='away'; p.g.visible=false; p.served=false; p.angry=false;
+      p.patience=1; p.turned=false; p.dirty=false; p.rounds=1;
+      p.want=p.def.drink;
+      if(p.seat){p.seat.occupied=null; p.seat=null;} });
+    this.orderEls.clear(); $('#orders').innerHTML='';
+    dadStool.visible = true;
+    if(dadGhost) dadGhost.visible=false;
+
+    // stagger arrivals across the night
+    const order = CAST.map((c,i)=>i).sort(()=>Math.random()-0.5);
+    order.forEach((ci,k)=>{
+      this.queue.push({ at: 6 + k*(this.dayLen*0.62/6) + rnd(-2,2), cast:ci, seat:CAST[ci].seat });
+    });
+    if(this.cfg.n===6) this.queue.length=0;   // night six has no customers
+
+    this.running=true;
+    $('#hud').style.opacity=1;
+    setNightUI();
+    Audio_.init();
+  },
+
+  say(who, text, dur=4.2){
+    const el=$('#subs');
+    el.innerHTML = who ? '<b>'+who+'</b> — '+text : text;
+    el.style.opacity=1;
+    clearTimeout(this._sayT);
+    this._sayT=setTimeout(()=>{ el.style.opacity=0; }, dur*1000);
+  },
+
+  onOrder(p){
+    const d=document.createElement('div');
+    d.className='ord';
+    d.innerHTML='<div class="who">'+p.name+'</div><div class="what">'+DRINK[p.want].name+
+                '</div><div class="bar"><i style="width:100%"></i></div>';
+    $('#orders').appendChild(d);
+    this.orderEls.set(p.id, d);
+    this.say(p.name, p.def.order);
+  },
+  // Nights have a fixed number of rounds in them. The six arrivals spend the
+  // first six; the rest are repeat orders, which is where the money is.
+  takeRound(){
+    if(this.roundsLeft<=0) return false;
+    if(this.clock > this.dayLen*0.86) return false;   // no new rounds near close
+    this.roundsLeft--;
+    return true;
+  },
+  clearOrder(p){
+    const d=this.orderEls.get(p.id);
+    if(d){ d.remove(); this.orderEls.delete(p.id); }
+  },
+  pay(amount, p, good){
+    this.cash += amount;
+    if(!good) this.nerveHit(0.05);
+    updateCash();
+  },
+  nerveHit(v){
+    player.nerve = clamp(player.nerve - v, 0, 1);
+    $('#nerve i').style.width = (player.nerve*100)+'%';
+    $('#nerve i').style.background = player.nerve>0.55 ? '#8fae7a'
+      : player.nerve>0.28 ? '#c9a44a' : '#8e1f1f';
+    if(player.nerve<=0) this.kill('Your nerve gave out before the night did.');
+  },
+  nerveGain(v){
+    player.nerve=clamp(player.nerve+v,0,1);
+    $('#nerve i').style.width=(player.nerve*100)+'%';
+  },
+
+  jukeKick(){
+    if(this.corrupt<0.3){ this.say('','The jukebox coughs and picks the song back up.'); this.nerveGain(0.12); }
+    else if(this.corrupt<0.7){ this.say('','You press the button. It plays your dad humming.'); this.nerveHit(0.06); }
+    else { this.say('','The jukebox is warm. Something inside it is breathing.'); this.nerveHit(0.1); Audio_.stinger(); }
+  },
+
+  tryDoor(){
+    if(this.cfg.n>=4){
+      this.say('','The door will not open. It has never opened. You have always been here.');
+      this.nerveHit(0.08);
+      Audio_.bad();
+    } else if(this.orderEls.size>0){
+      this.say('','You can\'t leave with orders up.');
+    } else {
+      this.say('','You could go. You know you won\'t.');
+    }
+  },
+
+  tryHatch(){
+    if(this.cfg.n<4){ this.say('','The cellar hatch. Dad kept it padlocked. It still is.'); return; }
+    if(this.cfg.n===6 && !hatchOpen){
+      hatchMesh_open(true);
+      this.say('','You open it yourself. That was always going to be the answer.');
+      setTimeout(()=>{ if(this.running) Father.spawn(); }, 2600);
+      return;
+    }
+    if(hatchOpen && this.cfg.n===6 && Father.active && Father.state==='hunt'){
+      // going down ends it
+      this.finale();
+      return;
+    }
+    if(hatchOpen){ this.say('','It\'s open. You did not open it.'); this.nerveHit(0.06); }
+    else this.say('','Padlocked again. The cut halves are still on the floor beside it.');
+  },
+
+  kill(reason){
+    if(this.ended) return;
+    this.ended=true; this.running=false;
+    document.exitPointerLock?.();
+    doJumpscare(reason);
+  },
+
+  finale(){
+    if(this.ended) return;
+    this.ended=true; this.running=false;
+    document.exitPointerLock?.();
+    showCard('The End', 'LAST CALL',
+      "You climbed down.<br>The cellar is warm, and the light is the colour of the bar at eight o'clock,<br>and every stool is full, and they are all so pleased to see you.<br><br>The sign stays up. It always stays up.<br><br><i>Thirty-one years. Then yours.</i>",
+      null, 'Play again', ()=>location.reload());
+  },
+
+  win(){
+    if(this.ended) return;
+    this.ended=true; this.running=false;
+    document.exitPointerLock?.();
+    const nxt=this.night+1;
+    const cfg=this.cfg;
+    const made=this.cash, owed=this.quota;
+    if(made<owed){
+      showCard(cfg.title, 'Short',
+        "You made $"+made+" against $"+owed+".<br>The lights go out one at a time, and they don't wait for you.",
+        null, 'Try the night again', ()=>startNight(this.night));
+      return;
+    }
+    if(nxt>=NIGHTS.length){ this.finale(); return; }
+    showCard(cfg.title+' — closed', 'You made rent',
+      CLOSERS[cfg.n] || '',
+      '$'+made+' taken &nbsp;·&nbsp; $'+owed+' owed',
+      'Open tomorrow', ()=>startNight(nxt));
+  },
+
+  update(dt){
+    if(!this.running) return;
+    this.clock += dt;
+    this.dread = Math.max(0, this.dread - dt*0.6);
+
+    // spawn queue
+    for(let i=this.queue.length-1;i>=0;i--){
+      if(this.clock>=this.queue[i].at){
+        const q=this.queue.splice(i,1)[0];
+        const p=patrons[q.cast];
+        if(p.state==='away'){
+          p.arrive(q.seat);
+          setTimeout(()=>{ if(this.running) this.say(p.name, p.def.hello); }, 2200);
+        }
+      }
+    }
+
+    // scripted beats
+    while(this.beatIdx<this.beats.length && this.clock>=this.beats[this.beatIdx].t){
+      const b=this.beats[this.beatIdx++];
+      try{ b.do(); }catch(e){ console.warn('beat failed',e); }
+    }
+
+    // orders UI
+    for(const p of patrons){
+      const el=this.orderEls.get(p.id);
+      if(!el) continue;
+      el.querySelector('.bar i').style.width=(clamp(p.patience,0,1)*100)+'%';
+      el.classList.toggle('angry', p.patience<0.35);
+    }
+
+    // clock display
+    const frac = clamp(this.clock/this.dayLen, 0, 1);
+    const totalMin = 8*60 + frac*6*60;              // 8:00pm -> 2:00am
+    let hh = Math.floor(totalMin/60)%12; if(hh===0) hh=12;
+    const mm = Math.floor(totalMin%60);
+    $('#clock').textContent = hh+':'+String(mm).padStart(2,'0');
+
+    if(frac>=1){
+      if(this.cfg.n===6) this.finale(); else this.win();
+    }
+
+    // ambient corruption pressure
+    if(this.corrupt>0.5 && Math.random()<dt*0.09) this.nerveHit(0.012);
+    if(this.corrupt<0.3 && Math.random()<dt*0.05) this.nerveGain(0.01);
+
+    Father.update(dt);
+  }
+};
+
+/* ---------------- night scripts: the actual turn ---------------- */
+let dadGhost=null;
+function makeDadGhost(){
+  if(dadGhost) return dadGhost;
+  const def={id:'dad', skin:0x6b5548, shirt:0x241a14};
+  dadGhost = buildBody(def);
+  dadGhost.userData.face.material.map = makeFace('hollow');
+  dadGhost.position.set(DAD_SEAT.x, 0.28, DAD_SEAT.z);
+  dadGhost.rotation.y=-Math.PI/2;
+  dadGhost.visible=false;
+  scene.add(dadGhost);
+  return dadGhost;
+}
+
+const D_ = Director;   // shorthand for beat bodies
+const BEATS = {
+  1: [
+    { t: 3,   do:()=> D_.say('', "The Weathervane. Thirty-one years, and now it's yours.") },
+    { t: 9,   do:()=> D_.say('', "Take a glass from the rack, pour what they ask for, hand it over.") },
+    { t: 74,  do:()=> D_.say('', "It's a good room. It's a good night.") },
+    { t: 150, do:()=> { lamps[2].flick=0.5; Audio_.tone(120,0.4,'sine',0.06); } }
+  ],
+  2: [
+    { t: 12,  do:()=> D_.say('', "There's a drink slip on the bar in your father's handwriting. It's for a drink nobody ordered.") },
+    { t: 40,  do:()=> { lamps[1].flick=1.2; Audio_.noise(0.3,0.14,700); } },
+    { t: 62,  do:()=> { const p=pick(patrons.filter(p=>p.state!=='away')); if(p) D_.say(p.name, p.def.turn); } },
+    { t: 95,  do:()=> { bell.position.y=2.35; Audio_.door();
+                        D_.say('', "The bell over the door goes. Nobody comes in."); D_.nerveHit(0.05); } },
+    { t: 130, do:()=> { photo.material.map = (()=>{ const c=document.createElement('canvas');
+        c.width=128;c.height=160; const g=c.getContext('2d');
+        g.fillStyle='#c9b898'; g.fillRect(0,0,128,160);
+        g.fillStyle='#6a5a48'; g.fillRect(8,8,112,144);
+        g.fillStyle='#1a1410'; g.beginPath(); g.ellipse(64,64,26,32,0,0,7); g.fill();
+        g.fillRect(30,96,68,50);
+        g.fillStyle='#c9b898'; g.font='11px Georgia'; g.textAlign='center';
+        g.fillText('31 YEARS', 64, 154);
+        const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; })();
+        photo.material.needsUpdate=true;
+        D_.say('', "The photo behind you. His face has gone out of it."); D_.nerveHit(0.07); } },
+    { t: 168, do:()=> D_.say('', "Keep pouring. That's the job.") }
+  ],
+  3: [
+    { t: 8,   do:()=> D_.say('', "Somebody has put a clean glass on your father's stool.") },
+    { t: 26,  do:()=> { dadLight.intensity=0.55; Audio_.tone(70,1.2,'sine',0.12); } },
+    { t: 55,  do:()=> { const g=makeDadGhost(); g.visible=true;
+                        D_.say('', "There is a man on the seventh stool. Nobody sits on the seventh stool.");
+                        D_.nerveHit(0.12); Audio_.stinger(); } },
+    { t: 88,  do:()=> { patrons.forEach(p=>{ if(p.state!=='away') p.turned=true; });
+                        D_.say('', "The regulars have all turned around. All six of them are looking at you.");
+                        D_.nerveHit(0.1); } },
+    { t: 120, do:()=> { if(dadGhost) dadGhost.visible=false; dadLight.intensity=0;
+                        D_.say('', "He's gone. The glass on his stool is empty and warm."); } },
+    { t: 165, do:()=> { lamps.forEach(l=>l.flick=1.6); Audio_.noise(0.6,0.2,400); } },
+    { t: 200, do:()=> D_.say('Boone', "You pour just like him. That's not a compliment, kid.") }
+  ],
+  4: [
+    { t: 6,   do:()=> D_.say('', "The padlock on the cellar hatch is on the floor. Cut clean through.") },
+    { t: 30,  do:()=> { hatchMesh_open(true); Audio_.noise(0.7,0.25,300);
+                        D_.say('', "The hatch opens by itself. It doesn't hurry."); D_.nerveHit(0.1); } },
+    { t: 58,  do:()=> { Audio_.tone(52,2.5,'sine',0.16); D_.say('', "Something down there is climbing. Slowly. It has time."); } },
+    { t: 84,  do:()=> { patrons.forEach(p=>p.turned=true);
+                        D_.say('Harker', "Don't look at the hatch. He hates being watched while he works.");
+                        D_.nerveHit(0.08); } },
+    { t: 118, do:()=> { lamps.forEach((l,i)=>{ if(i%2) l.light.intensity=0; });
+                        D_.say('', "Half the lights are out. Nobody touched the switch."); } },
+    { t: 150, do:()=> { Father.spawn(); } },
+    { t: 154, do:()=> D_.say('', "He is slow and you are not. Keep the room between you — "
+                              +"or get behind the bar and crouch [C] until he loses you.", 8) },
+    { t: 210, do:()=> { Father.despawn(); hatchMesh_open(false);
+                        D_.say('', "He goes back down. The hatch closes politely behind him.");
+                        D_.nerveGain(0.25); } }
+  ],
+  5: [
+    { t: 5,   do:()=> D_.say('', "Last call. Serve them and get out. That's all you have to do.") },
+    { t: 34,  do:()=> { patrons.forEach(p=>p.turned=true); D_.nerveHit(0.08);
+                        D_.say('', "None of them have blinked since you opened."); } },
+    { t: 70,  do:()=> { hatchMesh_open(true); Father.spawn(); } },
+    { t: 76,  do:()=> D_.say('', "Keep serving. He is slow. You are not.", 6) },
+    { t: 140, do:()=> { Father.speed=1.28; D_.say('', "He's learned the room.") } },
+    { t: 190, do:()=> { Father.speed=1.45;
+                        D_.say('', "Every stool is full and you only ever poured six."); D_.nerveHit(0.1); } }
+  ],
+  6: [
+    { t: 3,   do:()=> D_.say('', "Nobody came tonight.") },
+    { t: 14,  do:()=> D_.say('', "The bar is set for seven. It was always set for seven.") },
+    { t: 34,  do:()=> { patrons.forEach((p,i)=>{ p.g.visible=true; p.turned=true;
+                          const s=SEATS[i]; p.g.position.set(s.x,0.28,s.z);
+                          p.state='waiting'; p.want='hollow'; p.patience=1; });
+                        D_.say('', "They are all here. They were always here. They want the usual.");
+                        Audio_.stinger(); D_.nerveHit(0.15); } },
+    { t: 62,  do:()=> { const g=makeDadGhost(); g.visible=true;
+                        D_.say('', "And so is he."); D_.nerveHit(0.1); } },
+    { t: 90,  do:()=> D_.say('', "You cannot pour what they're asking for. It isn't behind the bar.") },
+    { t: 110, do:()=> D_.say('', "It's under it. [Open the cellar hatch.]", 8) },
+    { t: 200, do:()=> { if(!Father.active){ hatchMesh_open(true); Father.spawn(); } } },
+    { t: 210, do:()=> D_.say('', "He's tired of waiting for you to volunteer.") }
+  ]
+};
+
+const CLOSERS = {
+  1: "You wipe down the bar the way he did, left to right, and the room feels like a held breath.<br>It was a good night.",
+  2: "You lock up. On the walk out you count the stools twice and get a different number.",
+  3: "You leave the light on over his stool. You tell yourself it's for the look of the place.",
+  4: "You don't remember locking the hatch. You lock it again anyway. It's already locked.",
+  5: "You made rent. There is nothing left to make rent for.<br>Tomorrow is the last one."
+};
+
+/* ============================ FX ============================ */
+// grain
+const grain=$('#grain'), gctx=grain.getContext('2d');
+function sizeGrain(){ grain.width=Math.floor(innerWidth/3); grain.height=Math.floor(innerHeight/3); }
+sizeGrain();
+let grainT=0;
+function updateGrain(dt){
+  grainT-=dt; if(grainT>0) return; grainT=1/18;
+  const w=grain.width,h=grain.height;
+  const img=gctx.createImageData(w,h), d=img.data;
+  const amt = 40 + Director.corrupt*130 + Director.dread*90;
+  for(let i=0;i<d.length;i+=4){
+    const v=Math.random()*amt;
+    d[i]=d[i+1]=d[i+2]=v; d[i+3]=255;
+  }
+  gctx.putImageData(img,0,0);
+  grain.style.opacity = (0.035 + Director.corrupt*0.10 + Director.dread*0.10).toFixed(3);
+}
+
+function updateAtmosphere(dt){
+  const c=Director.corrupt, dr=Director.dread;
+  // palette drift: warm amber -> bloodless -> blood
+  const warm=new THREE.Color(0xffb04a), cold=new THREE.Color(0x6a7a8a), blood=new THREE.Color(0xb03a2a);
+  const t1=clamp(c*1.6,0,1), t2=clamp((c-0.55)/0.45,0,1);
+  const lc=warm.clone().lerp(cold,t1*0.7).lerp(blood,t2*0.85);
+
+  for(const L of lamps){
+    if(L.flick>0){
+      L.flick-=dt;
+      L.light.intensity = L.base*(Math.random()<0.4?rnd(0.05,0.4):rnd(0.8,1.2));
+    } else if(L.light.intensity>0.02 || c<0.62){
+      const base=L.base*(1-c*0.45);
+      L.light.intensity = base*(1 + Math.sin(performance.now()*0.001+L.x)*0.04*(1+c*3));
+    }
+    L.light.color.copy(lc);
+    L.bulb.material.emissive.copy(lc);
+  }
+  barLight.color.copy(lc);
+  barLight.intensity = 2.6*(1-c*0.4);
+
+  amb.intensity = 1.05*(1-c*0.55);
+  amb.color.setHex(c>0.7?0x2a1414:0x59432c);
+  hemi.intensity = 0.75*(1-c*0.62);
+
+  const fogC = new THREE.Color(0x0a0705).lerp(new THREE.Color(0x180505), t2);
+  scene.fog.color.copy(fogC); scene.background.copy(fogC);
+  scene.fog.density = 0.014 + c*0.05 + dr*0.05;
+
+  renderer.toneMappingExposure = 1.25 - c*0.28 + Math.sin(performance.now()*0.002)*0.01*c;
+
+  $('#vig').style.boxShadow = 'inset 0 0 '+(150+c*180+dr*180)+'px '+(20+c*100+dr*90)+'px rgba(0,0,0,.9)';
+  $('#bloodv').style.opacity = clamp(t2*0.8 + dr*0.5, 0, 1);
+
+  // camera tilt as things rot
+  Director.tilt = Math.sin(performance.now()*0.00042)*0.035*c + dr*0.02*Math.sin(performance.now()*0.01);
+
+  // bottles subtly rearrange themselves at high corruption
+  if(c>0.6 && Math.random()<dt*0.5){
+    const b=pick(bottles); b.position.y += rnd(-0.01,0.01);
+  }
+  dadStool.position.y = 0.74 + Math.sin(performance.now()*0.0006)*0.006*c;
+}
+
+/* ---------------- jumpscare ---------------- */
+const scareCv=$('#scare canvas'), sctx=scareCv.getContext('2d');
+function doJumpscare(reason){
+  const el=$('#scare');
+  el.style.display='block';
+  scareCv.width=Math.min(innerWidth,1100); scareCv.height=Math.min(innerHeight,800);
+  const w=scareCv.width,h=scareCv.height;
+  Audio_.stinger(); Audio_.noise(1.2,0.5,4000,'highpass');
+  $('#flash').style.opacity=1;
+  setTimeout(()=>{ $('#flash').style.transition='opacity .5s'; $('#flash').style.opacity=0; },40);
+
+  let f=0;
+  const iv=setInterval(()=>{
+    f++;
+    const jx=rnd(-14,14), jy=rnd(-14,14), s=1+f*0.014;
+    sctx.setTransform(1,0,0,1,0,0);
+    sctx.fillStyle='#000'; sctx.fillRect(0,0,w,h);
+    sctx.save();
+    sctx.translate(w/2+jx, h/2+jy); sctx.scale(s,s);
+    // face
+    sctx.fillStyle='#4a3a30';
+    sctx.beginPath(); sctx.ellipse(0,0,w*0.20,h*0.30,0,0,7); sctx.fill();
+    sctx.fillStyle='#000';
+    sctx.beginPath(); sctx.ellipse(-w*0.075,-h*0.05,w*0.035,h*0.07,0,0,7); sctx.fill();
+    sctx.beginPath(); sctx.ellipse( w*0.075,-h*0.05,w*0.035,h*0.07,0,0,7); sctx.fill();
+    sctx.beginPath(); sctx.ellipse(0,h*0.13,w*0.05,h*0.10,0,0,7); sctx.fill();
+    sctx.strokeStyle='rgba(140,20,20,'+(0.5+Math.random()*0.5)+')'; sctx.lineWidth=3;
+    for(let i=0;i<7;i++){
+      sctx.beginPath();
+      sctx.moveTo(-w*0.12+i*w*0.04, -h*0.02);
+      sctx.lineTo(-w*0.13+i*w*0.04+rnd(-8,8), h*0.28);
+      sctx.stroke();
+    }
+    sctx.restore();
+    // scanline tear
+    sctx.fillStyle='rgba(255,255,255,'+(Math.random()*0.06)+')';
+    sctx.fillRect(0, Math.random()*h, w, rnd(1,5));
+    if(f>34){
+      clearInterval(iv);
+      el.style.display='none';
+      showCard('You closed early', 'LAST CALL',
+        reason+"<br><br><i>He never once closed early.</i>",
+        null, 'Open again', ()=>startNight(Director.night));
+    }
+  }, 42);
+}
+
+/* ============================ UI ============================ */
+function updateCash(){
+  $('#cash .big').textContent='$'+Director.cash;
+  $('#cash .sub').innerHTML = Director.quota>0
+    ? 'of $'+Director.quota+' owed' : 'nothing left to owe';
+}
+function setNightUI(){
+  $('#night').textContent=Director.cfg.title;
+  updateCash();
+  $('#nerve i').style.width='100%';
+  $('#nerve i').style.background='#8fae7a';
+}
+function showCard(kicker, title, body, stats, btnLabel, onBtn){
+  const c=$('#card');
+  c.innerHTML = '<div class="k">'+kicker+'</div><div class="t">'+title+'</div>'
+    + (body?'<div class="b">'+body+'</div>':'')
+    + (stats?'<div class="stats">'+stats+'</div>':'')
+    + '<button class="btn" id="cardBtn">'+btnLabel+'</button>';
+  c.style.display='flex';
+  $('#hud').style.opacity=0;
+  $('#cardBtn').onclick=()=>{ c.style.display='none'; Audio_.ui(); onBtn(); };
+}
+
+function startNight(i){
+  $('#card').style.display='none';
+  const cfg=NIGHTS[i];
+  showCard(cfg.title, cfg.sub, INTROS[cfg.n]||'', null, 'Open the doors', ()=>{
+    Director.start(i);
+    renderer.domElement.requestPointerLock();
+  });
+}
+const INTROS = {
+  1: "Six regulars. Six drinks they've ordered for thirty years.<br>Rent is due at two.",
+  2: "You slept badly. The bar smells like it did when you were nine.",
+  3: "You counted the stools before you unlocked. Seven.<br>There have only ever been six.",
+  4: "The padlock on the cellar is on the floor in two pieces.<br>You still open.",
+  5: "Last one before you sell the place. That's what you keep telling the room.",
+  6: "You didn't come here tonight.<br>You woke up behind the bar with a rag in your hand."
+};
+
+$('#playBtn').onclick=()=>{
+  Audio_.init();
+  $('#title').style.display='none';
+  startNight(0);
+};
+
+// Test hook. Lets the headless harness drive the real systems instead of
+// re-implementing them (and therefore testing a lie).
+window.__LC = { Director, player, patrons, Father, DRINK, SEATS, STATION,
+                startNight, glassQuality, interactables, colliders,
+                get hover(){return hover;},
+                interact(){ tryInteractDown(); }, release(){ tryInteractUp(); } };
+
+/* ============================ MAIN LOOP ============================ */
+let last=performance.now();
+function frame(now){
+  requestAnimationFrame(frame);
+  let dt=(now-last)/1000; last=now;
+  dt=Math.min(dt,0.05);
+
+  if(Director.running){
+    updatePlayer(dt);
+    updatePour(dt);
+    updateHeld(dt);
+    updatePrompt();
+    for(const p of patrons) p.update(dt, Director.corrupt);
+    Director.update(dt);
+  }
+  updateAtmosphere(dt);
+  updateGrain(dt);
+  Audio_.tickMusic(dt, Director.corrupt);
+
+  // bell settles
+  bell.position.y = lerp(bell.position.y, 2.32, dt*4);
+
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(frame);
+</script>

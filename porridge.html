@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PORRIDGE</title>
+<style>
+  html,body{margin:0;padding:0;background:#06070a;overflow:hidden;height:100%;}
+  body{display:flex;align-items:center;justify-content:center;
+       font-family:Georgia,'Times New Roman',serif;color:#d3c8b6;}
+  #wrap{position:relative;}
+  canvas{display:block;background:#000;box-shadow:0 0 60px rgba(0,0,0,.9);}
+  #hint{position:absolute;bottom:6px;right:10px;font-size:11px;
+        color:#39393f;letter-spacing:1px;pointer-events:none;font-family:monospace;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="960" height="576"></canvas>
+  <div id="hint">WASD move &middot; E hold to act &middot; M mute</div>
+</div>
+<script>
+"use strict";
+/* ============================================================
+   PORRIDGE
+   "once upon a time there was a dead bear in goldilocks' yard.
+    she did it. she shot the bear."          - the user, 2026-08-13
+   You are the bear. First alive. Then not.
+   Canvas 2D only - no WebGL, nothing heavy.
+   ============================================================ */
+
+const W = 960, H = 576, TS = 32, COLS = 30, ROWS = 18;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+
+/* ---------------- input ---------------- */
+const keys = Object.create(null), pressed = Object.create(null);
+addEventListener('keydown', e => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (!keys[k]) pressed[k] = true;
+  keys[k] = true;
+  if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.key) >= 0) e.preventDefault();
+});
+addEventListener('keyup', e => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  keys[k] = false;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = false; return true; } return false; }
+function anyHit() { for (const k in pressed) if (pressed[k]) { pressed[k] = false; return true; } return false; }
+function held(a, b) { return !!(keys[a] || keys[b]); }
+function clearPressed() { for (const k in pressed) pressed[k] = false; }
+
+/* ---------------- audio ---------------- */
+const A = {
+  ac: null, muted: false, gainDrone: null,
+  init() { if (this.ac) return; try { this.ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ac = null; } },
+  tone(f, d, type, v) {
+    if (!this.ac || this.muted) return;
+    const t = this.ac.currentTime, o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(v == null ? 0.1 : v, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(this.ac.destination); o.start(t); o.stop(t + d + 0.02);
+  },
+  noise(d, v, cut) {
+    if (!this.ac || this.muted) return;
+    const n = Math.floor(this.ac.sampleRate * d), b = this.ac.createBuffer(1, n, this.ac.sampleRate);
+    const c = b.getChannelData(0);
+    for (let i = 0; i < n; i++) c[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const s = this.ac.createBufferSource(); s.buffer = b;
+    const g = this.ac.createGain(); g.gain.value = v == null ? 0.08 : v;
+    const f = this.ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cut || 1000;
+    s.connect(f); f.connect(g); g.connect(this.ac.destination); s.start();
+  },
+  drone() {
+    if (!this.ac || this.gainDrone) return;
+    const o = this.ac.createOscillator(), o2 = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = 'sine'; o.frequency.value = 52; o2.type = 'sine'; o2.frequency.value = 78;
+    g.gain.value = 0; o.connect(g); o2.connect(g); g.connect(this.ac.destination);
+    o.start(); o2.start(); this.gainDrone = g;
+  },
+  setDrone(v) { if (this.gainDrone) this.gainDrone.gain.value = this.muted ? 0 : v; },
+  step() { this.noise(0.07, 0.035, 500); },
+  eat() { this.tone(300 + Math.random() * 60, 0.12, 'triangle', 0.05); },
+  chirp() { this.tone(760, 0.09, 'sine', 0.06); this.tone(980, 0.09, 'sine', 0.04); },
+  gunshot() { this.noise(0.9, 0.5, 3000); this.tone(60, 0.9, 'sawtooth', 0.35); },
+  spend() { this.tone(160, 0.25, 'sine', 0.06); },
+  dread() { this.tone(1100, 0.35, 'sawtooth', 0.05); this.tone(74, 0.9, 'sine', 0.08); },
+  bell() { this.tone(392, 1.3, 'sine', 0.07); this.tone(588, 1.1, 'sine', 0.04); }
+};
+
+/* ---------------- maps ---------------- */
+function mk() {
+  let s = '';
+  for (let i = 0; i < arguments.length; i++) {
+    const p = arguments[i];
+    s += (typeof p === 'string') ? p : p[0].repeat(p[1]);
+  }
+  return s;
+}
+/* legend  # rock/fence   . floor   " tree   ~ water   , grass
+           C cub   b berry   h honey   f fishing spot
+           H house   W window   O well   S shed   F flowerbed
+           > east exit   < west exit                              */
+const ROOMS = [
+  { name: 'THE DEN', ground: '#241d18', wall: '#120e0c', dark: true,
+    map: [
+      mk(['#', 30]),
+      mk(['#', 3], ['.', 24], ['#', 3]),
+      mk(['#', 2], ['.', 26], ['#', 2]),
+      mk(['#', 2], ['.', 26], ['#', 2]),
+      mk(['#', 2], ['.', 3], 'C', ['.', 22], ['#', 2]),
+      mk(['#', 2], ['.', 26], ['#', 2]),
+      mk(['#', 2], ['.', 26], ['#', 2]),
+      mk(['#', 2], ['.', 26], ['#', 2]),
+      mk(['#', 2], ['.', 27], '>'),
+      mk(['#', 2], ['.', 26], ['#', 2]),
+      mk(['#', 2], ['.', 26], ['#', 2]),
+      mk(['#', 2], ['.', 26], ['#', 2]),
+      mk(['#', 3], ['.', 24], ['#', 3]),
+      mk(['#', 4], ['.', 22], ['#', 4]),
+      mk(['#', 30]),
+      mk(['#', 30]),
+      mk(['#', 30]),
+      mk(['#', 30])
+    ] },
+  { name: 'THE BIRCH WOOD', ground: '#1b2416', wall: '#0b1008',
+    map: [
+      mk(['"', 30]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 3], 'b', [',', 22], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 8], ['"', 3], [',', 15], ['"', 2]),
+      mk(['"', 2], [',', 8], ['"', 3], [',', 15], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk('<', [',', 28], '>'),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 18], ['"', 2], [',', 6], ['"', 2]),
+      mk(['"', 2], [',', 18], ['"', 1], 'h', [',', 6], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 3], [',', 24], ['"', 3]),
+      mk(['"', 30]),
+      mk(['"', 30])
+    ] },
+  { name: 'THE STREAM', ground: '#1a2318', wall: '#0a1008',
+    map: [
+      mk(['"', 30]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 11], ['~', 6], [',', 9], ['"', 2]),
+      mk(['"', 2], [',', 11], ['~', 6], [',', 9], ['"', 2]),
+      mk(['"', 2], [',', 11], ['~', 6], [',', 9], ['"', 2]),
+      mk('<', [',', 11], 'f', [',', 3], [',', 2], [',', 11], '>'),
+      mk(['"', 2], [',', 11], ['~', 6], [',', 9], ['"', 2]),
+      mk(['"', 2], [',', 11], ['~', 6], [',', 9], ['"', 2]),
+      mk(['"', 2], [',', 11], ['~', 6], [',', 9], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 2], [',', 26], ['"', 2]),
+      mk(['"', 3], [',', 24], ['"', 3]),
+      mk(['"', 30]),
+      mk(['"', 30])
+    ] },
+  { name: "GOLDILOCKS' YARD", ground: '#1e2618', wall: '#101208',
+    map: [
+      mk(['#', 30]),
+      mk(['#', 1], [',', 6], ['H', 16], [',', 6], ['#', 1]),
+      mk(['#', 1], [',', 6], ['H', 4], ['W', 2], ['H', 4], ['W', 2], ['H', 4], [',', 6], ['#', 1]),
+      mk(['#', 1], [',', 6], ['H', 16], [',', 6], ['#', 1]),
+      mk(['#', 1], [',', 8], ['.', 12], [',', 8], ['#', 1]),
+      mk(['#', 1], [',', 28], ['#', 1]),
+      mk(['#', 1], [',', 28], ['#', 1]),
+      mk(['#', 1], [',', 28], ['#', 1]),
+      mk('<', [',', 28], ['#', 1]),
+      mk(['#', 1], [',', 28], ['#', 1]),
+      mk(['#', 1], [',', 3], ['O', 2], [',', 23], ['#', 1]),
+      mk(['#', 1], [',', 3], ['O', 2], [',', 23], ['#', 1]),
+      mk(['#', 1], [',', 28], ['#', 1]),
+      mk(['#', 1], [',', 20], ['S', 4], [',', 4], ['#', 1]),
+      mk(['#', 1], [',', 20], ['S', 4], [',', 4], ['#', 1]),
+      mk(['#', 1], [',', 12], ['F', 6], [',', 10], ['#', 1]),
+      mk(['#', 1], [',', 28], ['#', 1]),
+      mk(['#', 30])
+    ] }
+];
+const SOLID = '#"~HOS';
+function tileAt(r, tx, ty) {
+  if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) return '#';
+  const row = ROOMS[r].map[ty];
+  return row && row[tx] ? row[tx] : '#';
+}
+function solidAt(r, px, py) { return SOLID.indexOf(tileAt(r, Math.floor(px / TS), Math.floor(py / TS))) >= 0; }
+
+/* ---------------- state ---------------- */
+const G = {
+  scene: 'title', t: 0,
+  room: 0, px: 6 * TS, py: 5 * TS, dir: 1, walk: 0,
+  fade: 0, fadeTo: 0, shake: 0,
+  msg: null, msgT: 0, msgQ: [],
+  /* act 1 */
+  carrying: null, fed: 0, smelled: false, act1T: 0,
+  /* act 2 */
+  presence: 40, dread: 0, ghostT: 0, markers: [], haunted: {},
+  gPhase: 'dig', gx: 700, gy: 420,
+  ending: null, hold: 0, holdId: null
+};
+const FEED_TARGET = 2;          // how many meals before the porridge takes over
+const ACT2_LENGTH = 200;        // seconds before she finishes and goes inside
+const MARKER_COST = 25;
+const HAUNT_COST = 20;
+const DREAD_TO_FOLLOW = 40;
+
+/* ---------------- text ---------------- */
+function say(lines, opts) {
+  G.msgQ.push({ lines: Array.isArray(lines) ? lines : String(lines).split('\n'), opts: opts || {} });
+  if (!G.msg) nextMsg();
+}
+function nextMsg() { G.msg = G.msgQ.length ? (G.msgT = 0, G.msgQ.shift()) : null; }
+function msgActive() { return !!G.msg; }
+function updateMsg(dt) {
+  if (!G.msg) return;
+  G.msgT += dt;
+  const total = G.msg.lines.join('').length, done = G.msgT * 44 >= total;
+  if (hit(' ') || hit('e') || hit('Enter')) {
+    if (!done) G.msgT = total / 44 + 1;
+    else { const cb = G.msg.opts.then; nextMsg(); if (cb && !G.msg) cb(); }
+  }
+}
+function drawMsg() {
+  if (!G.msg) return;
+  const L = G.msg.lines, bh = 26 + L.length * 26, by = H - bh - 26;
+  ctx.fillStyle = 'rgba(5,5,8,.90)'; ctx.fillRect(40, by, W - 80, bh);
+  ctx.strokeStyle = 'rgba(130,118,98,.35)'; ctx.lineWidth = 1;
+  ctx.strokeRect(40.5, by + .5, W - 81, bh - 1);
+  ctx.font = '19px Georgia, serif'; ctx.textAlign = 'left';
+  let budget = Math.floor(G.msgT * 44);
+  for (let i = 0; i < L.length; i++) {
+    ctx.fillStyle = G.msg.opts.color || '#cdc2ae';
+    ctx.fillText(L[i].slice(0, Math.max(0, budget)), 66, by + 34 + i * 26);
+    budget -= L[i].length;
+    if (budget <= 0) break;
+  }
+  if (G.msgT * 44 >= L.join('').length && Math.floor(G.t * 2) % 2 === 0) {
+    ctx.fillStyle = '#6f6656'; ctx.fillText('▾', W - 78, by + bh - 12);
+  }
+}
+
+/* ---------------- draw helpers ---------------- */
+function rr(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
+
+function drawBear(x, y, dir, walk, ghost, scale) {
+  const s = scale == null ? 1 : scale;
+  const bob = Math.sin(walk * 8) * 1.6;
+  ctx.save(); ctx.translate(x, y + bob); ctx.scale(dir < 0 ? -s : s, s);
+  if (ghost) ctx.globalAlpha = 0.42;
+  const body = ghost ? '#9fb6c9' : '#4a352a';
+  const dark = ghost ? '#7f9bb2' : '#382720';
+  // haunches
+  ctx.fillStyle = dark;
+  ctx.beginPath(); ctx.ellipse(-16, 6, 13, 11, 0, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(16, 6, 13, 11, 0, 0, 6.283); ctx.fill();
+  // body
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.ellipse(0, 0, 26, 19, 0, 0, 6.283); ctx.fill();
+  // head
+  ctx.beginPath(); ctx.ellipse(20, -8, 14, 12, 0, 0, 6.283); ctx.fill();
+  // ears
+  ctx.fillStyle = dark;
+  ctx.beginPath(); ctx.arc(14, -18, 5, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.arc(27, -16, 5, 0, 6.283); ctx.fill();
+  // snout
+  ctx.fillStyle = ghost ? '#c3d6e4' : '#6b5040';
+  ctx.beginPath(); ctx.ellipse(31, -5, 7, 5, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = ghost ? '#e8f2f8' : '#161010';
+  ctx.beginPath(); ctx.arc(36, -5, 2.4, 0, 6.283); ctx.fill();
+  // eye
+  ctx.fillStyle = ghost ? 'rgba(240,250,255,.95)' : '#100c0a';
+  ctx.beginPath(); ctx.arc(25, -11, 2.1, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+function drawCub(x, y, t, happy) {
+  ctx.save(); ctx.translate(x, y + Math.sin(t * 2) * 1.2);
+  ctx.fillStyle = '#5b4232';
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 10, 0, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(10, -5, 8, 7, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#3e2c22';
+  ctx.beginPath(); ctx.arc(6, -11, 3.2, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.arc(14, -10, 3.2, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#120d0b';
+  ctx.beginPath(); ctx.arc(13, -6, 1.6, 0, 6.283); ctx.fill();
+  if (happy) {
+    ctx.fillStyle = 'rgba(255,225,160,' + (0.35 + Math.sin(t * 5) * 0.2) + ')';
+    ctx.beginPath(); ctx.arc(0, -22, 3, 0, 6.283); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawGirl(x, y, t, phase) {
+  ctx.save(); ctx.translate(x, y);
+  const lean = phase === 'dig' || phase === 'bury' ? 0.35 : 0;
+  ctx.rotate(lean);
+  rr(-7, -14, 14, 20, '#7d5f8e');           // dress
+  rr(-7, -14, 14, 5, '#8f6ea0');
+  rr(-6, 6, 5, 8, '#3b3038'); rr(1, 6, 5, 8, '#3b3038');
+  ctx.fillStyle = '#e8cf7a';                 // hair
+  ctx.beginPath(); ctx.arc(0, -22, 10, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#f0dcae';
+  ctx.beginPath(); ctx.arc(0, -21, 6.5, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+function vignette(s) {
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * .25, W / 2, H / 2, H * .88);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,' + s + ')');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+function grain(a) {
+  ctx.fillStyle = 'rgba(255,255,255,' + (a * 0.013) + ')';
+  for (let i = 0; i < 110; i++) ctx.fillRect((Math.random() * W) | 0, (Math.random() * H) | 0, 1, 1);
+}
+
+/* ---------------- room render ---------------- */
+function drawRoom(tint) {
+  const R = ROOMS[G.room];
+  rr(0, 0, W, H, R.ground);
+  for (let ty = 0; ty < ROWS; ty++) {
+    const row = R.map[ty];
+    for (let tx = 0; tx < COLS; tx++) {
+      const c = row[tx], x = tx * TS, y = ty * TS;
+      switch (c) {
+        case '#': rr(x, y, TS, TS, R.wall); rr(x, y, TS, 3, '#2a2620'); break;
+        case '"':
+          rr(x, y, TS, TS, R.wall);
+          ctx.fillStyle = '#16200f';
+          ctx.beginPath(); ctx.arc(x + 16 + ((tx * 7 + ty * 5) % 5) - 2, y + 14, 13, 0, 6.283); ctx.fill();
+          rr(x + 14, y + 20, 4, 12, '#0e1309'); break;
+        case '~':
+          rr(x, y, TS, TS, '#16303c');
+          ctx.fillStyle = 'rgba(150,200,220,.10)';
+          ctx.fillRect(x, y + ((Math.sin(G.t * 1.6 + tx) * 6 + 12) | 0), TS, 3); break;
+        case 'H': rr(x, y, TS, TS, '#3a2b24'); rr(x, y, TS, 4, '#4a382d'); break;
+        case 'W':
+          rr(x, y, TS, TS, '#3a2b24');
+          rr(x + 3, y + 6, TS - 6, TS - 12, '#d9c07a');
+          ctx.fillStyle = 'rgba(255,220,140,.10)';
+          ctx.beginPath(); ctx.arc(x + 16, y + 16, 30, 0, 6.283); ctx.fill(); break;
+        case 'O': rr(x, y, TS, TS, '#2e2a25'); rr(x + 3, y + 3, TS - 6, TS - 6, '#0a0a0c'); break;
+        case 'S': rr(x, y, TS, TS, '#33281e'); rr(x, y, TS, 4, '#41332600'); break;
+        case 'F': rr(x, y, TS, TS, '#2b2117'); break;
+        case '.': rr(x, y, TS, TS, '#2c2418'); break;
+        case '>': case '<':
+          rr(x, y, TS, TS, '#000');
+          ctx.fillStyle = 'rgba(70,64,52,.35)'; ctx.fillRect(x, y, TS, TS); break;
+        default:
+          rr(x, y, TS, TS, R.ground);
+          if ((tx * 3 + ty * 5) % 7 === 0) rr(x + 9, y + 13, 3, 6, '#26301c');
+      }
+    }
+  }
+  if (tint) { ctx.fillStyle = tint; ctx.fillRect(0, 0, W, H); }
+  ctx.font = '13px Georgia, serif'; ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(160,150,128,.22)';
+  ctx.fillText(ROOMS[G.room].name, 14, 22);
+}
+
+/* ---------------- interactables ---------------- */
+const FOODS = [
+  { id: 'berry', room: 1, tx: 5, ty: 2, name: 'a mouthful of brambleberries',
+    line: 'Sour. Small. You would need a hundred.' },
+  { id: 'honey', room: 1, tx: 21, ty: 12, name: 'a comb of wild honey',
+    line: 'The bees are slow with the cold. You take it and they let you.' },
+  { id: 'fish',  room: 2, tx: 13, ty: 8, name: 'a grayling from the shallows',
+    line: 'You stand in the water a long time doing nothing at all. Then you have it.' }
+];
+function near(tx, ty, r) {
+  return Math.abs(G.px - (tx * TS + 16)) < r * TS && Math.abs(G.py - (ty * TS + 16)) < r * TS;
+}
+function nearPx(x, y, r) { return Math.hypot(G.px - x, G.py - y) < r; }
+
+/* the ghost's haunts, all in the yard */
+const HAUNTS = [
+  { id: 'window', x: 12 * TS, y: 3 * TS + 20, uses: 2, dread: 13, label: 'breathe on the glass',
+    line: 'The kitchen window fogs from the outside.\nShe stops. She looks at it for a long time.' },
+  { id: 'well',   x: 4 * TS + 16, y: 11 * TS, uses: 2, dread: 13, label: 'sound in the well',
+    line: 'A low sound comes up out of the well.\nIt is the sound you made when you were hungry.' },
+  { id: 'bowl',   x: 14 * TS, y: 4 * TS + 26, uses: 2, dread: 12, label: 'tip the bowl',
+    line: 'The bowl on the step goes over. The porridge goes into the grass.\nShe does not pick it up.' },
+  { id: 'shed',   x: 22 * TS, y: 14 * TS, uses: 2, dread: 12, label: 'move in the shed',
+    line: 'Something heavy shifts inside the woodshed.\nShe had shut that door. She is sure she had shut that door.' },
+  { id: 'line',   x: 8 * TS, y: 7 * TS, uses: 2, dread: 11, label: 'pull the washing',
+    line: 'The washing line goes taut and stays taut,\nas though a big animal were leaning on it.' },
+  { id: 'gun',    x: 17 * TS, y: 4 * TS + 26, uses: 2, dread: 15, label: 'the gun',
+    line: 'The gun slides off the step and lands in the wet grass.\nShe picks it up with two fingers, like it is not hers.' }
+];
+/* three places to leave your fur - a trail from her yard to the den */
+const MARKERS = [
+  { id: 'm1', room: 3, tx: 2,  ty: 8,  line: 'You leave a tuft of your fur on the gate latch.' },
+  { id: 'm2', room: 2, tx: 15, ty: 13, line: 'You leave your fur on a stone at the crossing.' },
+  { id: 'm3', room: 1, tx: 6,  ty: 8,  line: 'You leave the last of your fur where the birches thin.' }
+];
+/* anchors: things of yours. presence comes back fastest near them. */
+function anchors() {
+  if (G.room !== 3) return [];
+  return [{ x: 430, y: 300 }, { x: 470, y: 330 }, { x: 396, y: 268 }];
+}
+
+/* ---------------- ACT 1 ---------------- */
+function startAct1() {
+  G.scene = 'act1'; G.room = 0; G.px = 8 * TS; G.py = 5 * TS;
+  G.carrying = null; G.fed = 0; G.smelled = false; G.act1T = 0;
+  G.fade = 1; G.fadeTo = 0; G.msg = null; G.msgQ = [];
+  clearPressed();
+  say(['You are a bear. It is the back end of autumn and you are hungry',
+       'in the particular way that means winter is coming.'], { color: '#c8bda6' });
+  say(['Your cub is here, in the den, and is hungrier than you are.',
+       'Bring it something. Then bring it something else.'], { color: '#c8bda6' });
+}
+function objective() {
+  if (G.carrying) return 'Take ' + G.carrying.name + ' back to the den.';
+  if (G.smelled) return 'Something is cooking, east, past the stream.';
+  if (G.fed >= FEED_TARGET) return 'The cub is fed.';
+  return 'Find food in the wood. (' + G.fed + '/' + FEED_TARGET + ')';
+}
+function updateAct1(dt) {
+  updateMsg(dt); if (msgActive()) return;
+  G.act1T += dt;
+  move(dt, 150);
+
+  // room change
+  const t = tileAt(G.room, Math.floor(G.px / TS), Math.floor(G.py / TS));
+  if (t === '>') {
+    if (G.room === 2 && !G.smelled) {
+      G.px = (COLS - 3) * TS;
+      say(['There is nothing that way but the human house,',
+           'and nothing at the human house for you.'], { color: '#9a9284' });
+    } else { G.room++; G.px = 1.7 * TS; }
+  } else if (t === '<' && G.room > 0) { G.room--; G.px = (COLS - 2.2) * TS; }
+
+  // hold-E interactions
+  const target = act1Target();
+  if (target && held('e', 'E')) {
+    if (G.holdId !== target.id) { G.holdId = target.id; G.hold = 0; }
+    G.hold += dt;
+    if (G.hold >= target.time) { G.hold = 0; G.holdId = null; target.act(); }
+  } else { G.hold = 0; G.holdId = null; }
+}
+function act1Target() {
+  // deliver to cub
+  if (G.room === 0 && G.carrying && near(5, 4, 2.4))
+    return { id: 'cub', time: 1.0, act: deliver };
+  if (G.room === 0 && !G.carrying && near(5, 4, 2.4))
+    return { id: 'cubpet', time: 0.8, act: () => {
+      A.chirp();
+      say(['The cub pushes its head into your side and complains.',
+           'It has your mother\'s temper and none of her sense.'], { color: '#bcb49c' });
+    } };
+  if (G.carrying) return null;
+  for (const f of FOODS) {
+    if (f.room === G.room && near(f.tx, f.ty, 2.2) && G.fedIds !== undefined) { /* noop */ }
+    if (f.room === G.room && near(f.tx, f.ty, 2.2))
+      return { id: f.id, time: 1.6, act: () => {
+        G.carrying = f; A.eat();
+        say([f.line], { color: '#bcb49c' });
+      } };
+  }
+  // the windowsill
+  if (G.room === 3 && near(12, 3, 2.6))
+    return { id: 'sill', time: 1.4, act: theShot };
+  return null;
+}
+function deliver() {
+  G.fed++; A.eat(); A.chirp();
+  const was = G.carrying; G.carrying = null;
+  say(['You put it down. The cub eats without looking up.'], { color: '#bcb49c' });
+  if (G.fed === 1) say(['It is not enough. You know exactly how not enough it is.'], { color: '#a8a08c' });
+  if (G.fed >= FEED_TARGET && !G.smelled) {
+    G.smelled = true;
+    A.bell();
+    say(['Then the wind turns, and it comes over the ridge:',
+         'something hot and sweet and thick, cooking, east, past the stream.',
+         '',
+         'Nothing in the wood has ever smelled like that.',
+         'Nothing in the wood ever will.'], { color: '#e2cf9c' });
+  }
+}
+function theShot() {
+  G.scene = 'shot'; G.t = 0; G.fade = 0;
+  G.msg = null; G.msgQ = [];
+  A.gunshot(); G.shake = 1.6;
+  A.drone(); A.setDrone(0.08);
+}
+
+/* movement shared by both acts */
+function move(dt, spd) {
+  let vx = 0, vy = 0;
+  if (held('a', 'ArrowLeft')) vx--;
+  if (held('d', 'ArrowRight')) vx++;
+  if (held('w', 'ArrowUp')) vy--;
+  if (held('s', 'ArrowDown')) vy++;
+  if (!vx && !vy) return;
+  const m = Math.hypot(vx, vy);
+  vx = vx / m * spd * dt; vy = vy / m * spd * dt;
+  if (vx) G.dir = vx > 0 ? 1 : -1;
+  G.walk += dt;
+  if (Math.floor(G.walk * 4) !== Math.floor((G.walk - dt) * 4)) A.step();
+  const HB = 11, ghost = G.scene === 'act2';
+  const blocked = (x, y) => !ghost && (
+    solidAt(G.room, x - HB, y) || solidAt(G.room, x + HB, y) ||
+    solidAt(G.room, x - HB, y + 10) || solidAt(G.room, x + HB, y + 10));
+  if (!blocked(G.px + vx, G.py)) G.px += vx;
+  if (!blocked(G.px, G.py + vy)) G.py += vy;
+  if (ghost) {   // the ghost drifts through walls but not off the world
+    G.px = Math.max(14, Math.min(W - 14, G.px));
+    G.py = Math.max(14, Math.min(H - 14, G.py));
+  } else {
+    G.px = Math.max(12, Math.min(W - 12, G.px));
+    G.py = Math.max(12, Math.min(H - 12, G.py));
+  }
+}
+
+function drawAct1() {
+  ctx.save();
+  if (G.shake > 0) ctx.translate((Math.random() - .5) * G.shake * 12, (Math.random() - .5) * G.shake * 12);
+  // evening comes on across act 1
+  const dusk = Math.min(0.42, G.act1T / 260 * 0.42);
+  drawRoom('rgba(20,18,40,' + dusk + ')');
+  if (G.room === 0) drawCub(5 * TS + 16, 4 * TS + 16, G.t, G.fed > 0);
+  for (const f of FOODS) {
+    if (f.room !== G.room) continue;
+    if (G.carrying === f) continue;
+    const x = f.tx * TS + 16, y = f.ty * TS + 16;
+    if (f.id === 'berry') {
+      ctx.fillStyle = '#5b1f33';
+      for (let i = 0; i < 7; i++) { ctx.beginPath(); ctx.arc(x + (i % 4) * 7 - 10, y + Math.floor(i / 4) * 8 - 4, 3.4, 0, 6.283); ctx.fill(); }
+    } else if (f.id === 'honey') {
+      ctx.fillStyle = '#8a6a1e';
+      ctx.beginPath(); ctx.ellipse(x, y, 12, 9, 0, 0, 6.283); ctx.fill();
+      ctx.fillStyle = '#c99a2a';
+      ctx.beginPath(); ctx.ellipse(x, y - 2, 8, 6, 0, 0, 6.283); ctx.fill();
+    } else {
+      ctx.fillStyle = '#7f97a6';
+      ctx.beginPath(); ctx.ellipse(x, y, 12, 5, 0.3, 0, 6.283); ctx.fill();
+    }
+  }
+  drawBear(G.px, G.py, G.dir, G.walk, false);
+  if (G.carrying) {
+    ctx.fillStyle = 'rgba(230,215,170,.85)'; ctx.font = '12px Georgia, serif'; ctx.textAlign = 'center';
+    ctx.fillText('carrying', G.px, G.py - 34);
+  }
+  ctx.restore();
+
+  const t = act1Target();
+  if (t && !msgActive()) {
+    ctx.textAlign = 'center'; ctx.font = '15px Georgia, serif';
+    ctx.fillStyle = 'rgba(220,210,180,.75)';
+    ctx.fillText('hold E', W / 2, H - 34);
+    if (G.holdId === t.id && G.hold > 0) {
+      rr(W / 2 - 60, H - 26, 120, 6, 'rgba(0,0,0,.6)');
+      rr(W / 2 - 59, H - 25, 118 * Math.min(1, G.hold / t.time), 4, '#c9b07a');
+    }
+  }
+  ctx.textAlign = 'right'; ctx.font = '14px Georgia, serif';
+  ctx.fillStyle = 'rgba(190,180,158,.5)'; ctx.fillText(objective(), W - 16, 26);
+  vignette(0.5 + dusk * 0.4); grain(0.6);
+  drawMsg();
+}
+
+/* ---------------- THE SHOT ---------------- */
+const SHOT_LINES = [
+  { t: 1.2, s: 'The bowl is on the sill and it is still steaming.' },
+  { t: 4.0, s: 'You have never in your life wanted anything the way you want this.' },
+  { t: 7.5, s: 'You do not hear the door.' },
+  { t: 10.0, s: 'You hear the shot, but only afterwards, and only as a fact' },
+  { t: 12.5, s: 'about a thing that has already happened to you.' },
+  { t: 16.5, s: 'She is small and she is holding it wrong and her hands are shaking' },
+  { t: 19.0, s: 'and she does it anyway, twice, to be sure.' },
+  { t: 23.5, s: 'You go down in her yard, six feet from the porridge,' },
+  { t: 26.0, s: 'and you think about the den, and about how far it is,' },
+  { t: 28.5, s: 'and about how you are not going to get there.' }
+];
+function updateShot(dt) {
+  G.t += dt;
+  A.setDrone(0.05 + Math.min(0.08, G.t * 0.004));
+  if (G.t > 33 || (G.t > 4 && (hit('Escape') || hit(' ')))) startAct2();
+}
+function drawShot() {
+  rr(0, 0, W, H, '#08070a');
+  const t = G.t;
+  if (t < 0.45) { rr(0, 0, W, H, t < 0.2 ? '#fff' : '#c06a5a'); }
+  ctx.save();
+  ctx.translate(W / 2, H / 2 + 70);
+  ctx.globalAlpha = Math.min(1, t / 2);
+  ctx.fillStyle = '#2a1c16';
+  ctx.beginPath(); ctx.ellipse(0, 0, 120, 46, 0.08, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#3a281f';
+  ctx.beginPath(); ctx.ellipse(-70, -14, 34, 26, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = 'rgba(120,20,24,' + Math.min(0.75, t / 8) + ')';
+  ctx.beginPath(); ctx.ellipse(30, 26, 70, 20, 0, 0, 6.283); ctx.fill();
+  ctx.restore();
+  ctx.textAlign = 'center'; ctx.font = '21px Georgia, serif';
+  let y = 92;
+  for (const L of SHOT_LINES) {
+    if (t < L.t) continue;
+    ctx.fillStyle = 'rgba(206,194,174,' + (Math.min(1, (t - L.t) / 1.1) * .92) + ')';
+    ctx.fillText(L.s, W / 2, y); y += 30;
+  }
+  vignette(0.7); grain(1.4);
+  ctx.font = '13px Georgia, serif'; ctx.fillStyle = 'rgba(96,90,80,.5)';
+  ctx.fillText('esc to continue', W / 2, H - 14);
+}
+
+/* ---------------- ACT 2 : the ghost ---------------- */
+function startAct2() {
+  G.scene = 'act2'; G.room = 3; G.px = 430; G.py = 340;
+  G.presence = 40; G.dread = 0; G.ghostT = 0; G.markers = []; G.haunted = {};
+  G.gPhase = 'dig'; G.gx = 700; G.gy = 430;
+  G.fade = 1; G.fadeTo = 0; G.msg = null; G.msgQ = [];
+  G.ending = null; clearPressed();
+  A.setDrone(0.06);
+  say(['You are still here.', 'That is the first surprise.'], { color: '#b9c8d4' });
+  say(['You cannot lift anything. You cannot bite. She cannot see you.',
+       'But you are cold, and where you are is cold, and cold is a thing',
+       'a person can notice.'], { color: '#b9c8d4' });
+  say(['Stand near what was yours to gather yourself.  Hold E to touch the world.',
+       'Your cub is west, past the stream, in the den, and it is still waiting.'],
+      { color: '#a8bccb' });
+}
+function girlTarget() {
+  switch (G.gPhase) {
+    case 'dig':   return [15 * TS + 90, 15 * TS + 10];
+    case 'drag':  return [450, 320];
+    case 'bury':  return [15 * TS + 90, 15 * TS + 10];
+    case 'scrub': return [470, 300];
+    default:      return [13 * TS, 5 * TS];
+  }
+}
+function updateAct2(dt) {
+  updateMsg(dt); if (msgActive()) return;
+  if (G.ending) return;
+  G.ghostT += dt;
+  move(dt, 132);
+
+  // room travel (the ghost may leave; she may not)
+  const tt = tileAt(G.room, Math.floor(G.px / TS), Math.floor(G.py / TS));
+  if (tt === '<' && G.room > 0) { G.room--; G.px = (COLS - 2.2) * TS; }
+  else if (tt === '>' && G.room < 3) { G.room++; G.px = 1.7 * TS; }
+
+  // presence regenerates - fast near your own remains
+  let regen = 3.5;
+  for (const a of anchors()) if (nearPx(a.x, a.y, 92)) { regen = 19; break; }
+  G.presence = Math.min(100, G.presence + regen * dt);
+
+  // her routine
+  const p = G.ghostT / ACT2_LENGTH;
+  G.gPhase = p < 0.30 ? 'dig' : p < 0.48 ? 'drag' : p < 0.72 ? 'bury' : p < 0.95 ? 'scrub' : 'done';
+  const [tx, ty] = girlTarget();
+  G.gx += (tx - G.gx) * dt * 1.1;
+  G.gy += (ty - G.gy) * dt * 1.1;
+
+  // hold-E
+  const target = act2Target();
+  if (target && held('e', 'E')) {
+    if (G.holdId !== target.id) { G.holdId = target.id; G.hold = 0; }
+    G.hold += dt;
+    if (G.hold >= target.time) { G.hold = 0; G.holdId = null; target.act(); }
+  } else { G.hold = 0; G.holdId = null; }
+
+  // resolutions
+  if (G.dread >= 100) endAct2('hot');
+  else if (G.markers.length >= 3 && G.dread >= DREAD_TO_FOLLOW) endAct2('right');
+  else if (G.ghostT >= ACT2_LENGTH) endAct2('cold');
+
+  A.setDrone(0.04 + (G.dread / 100) * 0.09);
+}
+function act2Target() {
+  // leave fur
+  for (const m of MARKERS) {
+    if (m.room !== G.room) continue;
+    if (G.markers.indexOf(m.id) >= 0) continue;
+    if (!near(m.tx, m.ty, 2.4)) continue;
+    if (G.presence < MARKER_COST) return null;
+    return { id: m.id, time: 1.3, act: () => {
+      G.markers.push(m.id); G.presence -= MARKER_COST; A.spend();
+      say([m.line, 'Trail: ' + G.markers.length + ' of 3.'], { color: '#a8bccb' });
+    } };
+  }
+  if (G.room !== 3) return null;
+  for (const h of HAUNTS) {
+    if ((G.haunted[h.id] || 0) >= h.uses) continue;
+    if (!nearPx(h.x, h.y, 74)) continue;
+    if (G.presence < HAUNT_COST) return null;
+    return { id: h.id, time: 1.1, act: () => {
+      G.haunted[h.id] = (G.haunted[h.id] || 0) + 1;
+      G.presence -= HAUNT_COST;
+      G.dread = Math.min(100, G.dread + h.dread);
+      G.shake = 0.3; A.dread();
+      say(h.line.split('\n'), { color: '#b6c6d2' });
+    } };
+  }
+  return null;
+}
+function endAct2(kind) {
+  G.ending = kind; G.scene = 'ending'; G.t = 0;
+  A.bell(); A.setDrone(0.03);
+}
+
+function drawAct2() {
+  ctx.save();
+  if (G.shake > 0) ctx.translate((Math.random() - .5) * G.shake * 12, (Math.random() - .5) * G.shake * 12);
+  const night = Math.min(0.55, 0.25 + G.ghostT / ACT2_LENGTH * 0.35);
+  drawRoom('rgba(14,16,38,' + night + ')');
+
+  if (G.room === 3) {
+    // your body, and what came out of you
+    ctx.fillStyle = 'rgba(96,18,22,.55)';
+    for (const a of anchors()) { ctx.beginPath(); ctx.ellipse(a.x, a.y + 14, 30, 13, 0, 0, 6.283); ctx.fill(); }
+    if (G.gPhase === 'dig' || G.gPhase === 'drag') drawBear(430, 300, -1, 0, false, 1.05);
+    // the grave
+    if (G.gPhase !== 'dig') { ctx.fillStyle = '#150f0a'; ctx.beginPath(); ctx.ellipse(15 * TS + 90, 15 * TS + 16, 52, 22, 0, 0, 6.283); ctx.fill(); }
+    // haunt points
+    for (const h of HAUNTS) {
+      const used = (G.haunted[h.id] || 0) >= h.uses;
+      const canDo = !used && G.presence >= HAUNT_COST;
+      ctx.fillStyle = used ? 'rgba(90,100,110,.16)'
+                   : canDo ? 'rgba(170,215,235,' + (0.16 + Math.sin(G.t * 3) * 0.08) + ')'
+                           : 'rgba(120,140,155,.10)';
+      ctx.beginPath(); ctx.arc(h.x, h.y, 20, 0, 6.283); ctx.fill();
+    }
+    drawGirl(G.gx, G.gy, G.t, G.gPhase);
+  }
+  // markers already left
+  for (const m of MARKERS) {
+    if (m.room !== G.room || G.markers.indexOf(m.id) < 0) continue;
+    ctx.fillStyle = 'rgba(190,175,150,.8)';
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.arc(m.tx * TS + 16 + (i % 3) * 6 - 6, m.ty * TS + 16 + Math.floor(i / 3) * 6, 2.4, 0, 6.283);
+      ctx.fill();
+    }
+  }
+  // unplaced marker spot, faintly
+  for (const m of MARKERS) {
+    if (m.room !== G.room || G.markers.indexOf(m.id) >= 0) continue;
+    ctx.strokeStyle = 'rgba(180,200,215,' + (0.12 + Math.sin(G.t * 2) * 0.06) + ')';
+    ctx.lineWidth = 1; ctx.setLineDash([4, 6]);
+    ctx.beginPath(); ctx.arc(m.tx * TS + 16, m.ty * TS + 16, 24, 0, 6.283); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  drawBear(G.px, G.py, G.dir, G.walk, true);
+  ctx.restore();
+
+  // HUD
+  const t = act2Target();
+  if (t && !msgActive()) {
+    ctx.textAlign = 'center'; ctx.font = '15px Georgia, serif';
+    ctx.fillStyle = 'rgba(210,225,235,.8)';
+    const h = HAUNTS.filter(x => x.id === t.id)[0];
+    ctx.fillText('hold E — ' + (h ? h.label : 'leave your fur'), W / 2, H - 34);
+    if (G.holdId === t.id && G.hold > 0) {
+      rr(W / 2 - 60, H - 26, 120, 6, 'rgba(0,0,0,.6)');
+      rr(W / 2 - 59, H - 25, 118 * Math.min(1, G.hold / t.time), 4, '#9dc6dd');
+    }
+  } else if (!msgActive() && G.presence < HAUNT_COST) {
+    ctx.textAlign = 'center'; ctx.font = '14px Georgia, serif';
+    ctx.fillStyle = 'rgba(150,170,185,.45)';
+    ctx.fillText('too thin. go and stand near what was yours.', W / 2, H - 34);
+  }
+  bar(18, 22, 150, G.presence / 100, '#6f9fbb', 'presence');
+  bar(18, 56, 150, G.dread / 100, '#a05a5a', 'her dread');
+  ctx.textAlign = 'right'; ctx.font = '14px Georgia, serif';
+  ctx.fillStyle = 'rgba(190,200,210,.5)';
+  ctx.fillText('trail west: ' + G.markers.length + ' of 3', W - 16, 26);
+  ctx.fillStyle = 'rgba(190,200,210,.32)';
+  ctx.fillText(Math.max(0, Math.ceil(ACT2_LENGTH - G.ghostT)) + 's until she is finished', W - 16, 46);
+  vignette(0.55); grain(0.9);
+  drawMsg();
+}
+function bar(x, y, w, frac, col, label) {
+  rr(x, y, w, 9, 'rgba(0,0,0,.55)');
+  rr(x + 1, y + 1, Math.max(0, (w - 2) * Math.min(1, frac)), 7, col);
+  ctx.strokeStyle = 'rgba(170,180,190,.3)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, y + .5, w - 1, 8);
+  ctx.font = '12px Georgia, serif'; ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(190,198,208,.55)'; ctx.fillText(label, x, y - 4);
+}
+
+/* ---------------- endings ---------------- */
+const ENDINGS = {
+  hot: { title: 'TOO HOT', color: '#c98a72', lines: [
+    'You break her, in the end. It is not even hard.',
+    'She goes over the fence at about two in the morning, in her nightdress,',
+    'running from a yard where nothing at all is happening,',
+    'and the wood takes her the way the wood takes everything.',
+    '',
+    'You got what you wanted. You stand in the empty yard and find',
+    'that it was not what you wanted.',
+    '',
+    'West, past the stream, in the den, your cub waits three more days.',
+    'Nobody comes. Nobody was ever going to come.' ] },
+  cold: { title: 'TOO COLD', color: '#8fa4b4', lines: [
+    'You do nothing, or not enough, which is the same size in the end.',
+    'She finishes the hole. She rolls you in. She is careful about it,',
+    'in her way — she folds your paws in, and she is crying, and she',
+    'still does it, and then she goes inside and washes her hands.',
+    '',
+    'The light in the kitchen goes off at eleven.',
+    '',
+    'West, past the stream, in the den, your cub waits three more days.',
+    'It does not understand. That is the part you cannot stop thinking about.' ] },
+  right: { title: 'JUST RIGHT', color: '#a8c49a', lines: [
+    'She is frightened enough to look, and you give her something to look at:',
+    'your fur on the gate, your fur on the stone at the crossing,',
+    'your fur where the birches thin — a line drawn west, in the only ink you have left.',
+    '',
+    'She follows it at dawn with the shovel still in her hand,',
+    'and she is shaking the whole way, and she goes anyway.',
+    '',
+    'What she finds in the den is very small and very loud and has your temper.',
+    'She stands there a long time.',
+    'Then she puts down the shovel, and she picks it up, and she carries it home.',
+    '',
+    'She will feed it in the mornings. She will never once tell it what she did.',
+    'It is not forgiveness. Nobody here gets that.',
+    'But the cub eats, and it is warm, and that is the whole of what you wanted.' ] }
+};
+function drawEnding() {
+  const E = ENDINGS[G.ending] || ENDINGS.cold;
+  rr(0, 0, W, H, '#07070a');
+  ctx.textAlign = 'center';
+  ctx.font = '36px Georgia, serif';
+  ctx.fillStyle = 'rgba(200,190,170,' + Math.min(1, G.t / 1.4) + ')';
+  ctx.fillText(E.title, W / 2, E.lines.length > 11 ? 84 : 110);
+  const fs = E.lines.length > 11 ? 16 : 19, sp = fs + 7;
+  const top = E.lines.length > 11 ? 132 : 172;
+  ctx.font = fs + 'px Georgia, serif';
+  for (let i = 0; i < E.lines.length; i++) {
+    const a = Math.min(1, Math.max(0, (G.t - 1.1 - i * 0.7) / 1.05));
+    ctx.fillStyle = 'rgba(184,176,158,' + (a * 0.92) + ')';
+    ctx.fillText(E.lines[i], W / 2, top + i * sp);
+  }
+  const tail = 1.1 + E.lines.length * 0.7 + 2;
+  if (G.t > tail) {
+    ctx.font = '14px Georgia, serif';
+    ctx.fillStyle = 'rgba(120,114,102,.6)';
+    ctx.fillText('her dread ' + Math.round(G.dread) + '  ·  trail ' + G.markers.length + ' of 3',
+                 W / 2, H - 76);
+    ctx.fillStyle = 'rgba(104,98,88,' + (0.4 + Math.sin(G.t * 2) * 0.2) + ')';
+    ctx.fillText('press any key', W / 2, H - 42);
+    if (anyHit()) reset();
+  }
+  vignette(0.7); grain(0.8);
+}
+function reset() {
+  G.scene = 'title'; G.t = 0; G.ending = null; G.fade = 0; G.fadeTo = 0;
+  G.msg = null; G.msgQ = []; G.dread = 0; G.markers = []; G.haunted = {};
+  A.setDrone(0.02); clearPressed();
+}
+
+/* ---------------- title ---------------- */
+function drawTitle() {
+  rr(0, 0, W, H, '#07080b');
+  ctx.save(); ctx.globalAlpha = .5;
+  drawBear(W / 2 - 190, 400, 1, 0, false, 1.4);
+  ctx.restore();
+  ctx.save(); ctx.globalAlpha = .22;
+  drawGirl(W / 2 + 210, 392, G.t, 'idle');
+  ctx.restore();
+  ctx.textAlign = 'center';
+  ctx.font = '70px Georgia, serif'; ctx.fillStyle = '#c6b48d';
+  ctx.fillText('PORRIDGE', W / 2, 150);
+  ctx.font = 'italic 18px Georgia, serif'; ctx.fillStyle = 'rgba(158,148,128,.72)';
+  ctx.fillText('once upon a time there was a dead bear in goldilocks\' yard.', W / 2, 196);
+  ctx.fillText('she did it. she shot the bear.', W / 2, 224);
+  ctx.font = '16px Georgia, serif'; ctx.fillStyle = 'rgba(150,142,124,.6)';
+  ctx.fillText('you are the bear', W / 2, 268);
+  ctx.font = '17px Georgia, serif';
+  ctx.fillStyle = 'rgba(178,166,144,' + (0.45 + Math.sin(G.t * 2.2) * 0.3) + ')';
+  ctx.fillText('press any key', W / 2, H - 92);
+  ctx.font = '13px Georgia, serif'; ctx.fillStyle = 'rgba(94,90,80,.62)';
+  ctx.fillText('WASD move   ·   hold E to act', W / 2, H - 54);
+  vignette(0.66); grain(0.7);
+}
+
+/* ---------------- loop ---------------- */
+let last = performance.now();
+function frame(now) {
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.05) dt = 0.05;
+  G.t += dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 1.7);
+  if (hit('m')) { A.muted = !A.muted; A.setDrone(A.muted ? 0 : 0.04); }
+
+  switch (G.scene) {
+    case 'title':
+      if (anyHit()) { A.init(); A.drone(); A.setDrone(0.03); startAct1(); }
+      drawTitle(); break;
+    case 'act1':  updateAct1(dt);  drawAct1(); break;
+    case 'shot':  updateShot(dt);  drawShot(); break;
+    case 'act2':  updateAct2(dt);  drawAct2(); break;
+    case 'ending': drawEnding(); break;
+  }
+  if (G.fade > 0 && G.scene !== 'title' && G.scene !== 'ending') {
+    ctx.fillStyle = 'rgba(0,0,0,' + Math.min(1, G.fade) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (G.scene === 'act1' || G.scene === 'act2') G.fade = Math.max(G.fadeTo, G.fade - dt * 1.1);
+  clearPressed();
+  requestAnimationFrame(frame);
+}
+
+window.__PORRIDGE__ = {
+  G: G, ROOMS: ROOMS, FOODS: FOODS, HAUNTS: HAUNTS, MARKERS: MARKERS, ENDINGS: ENDINGS,
+  solidAt: solidAt, tileAt: tileAt, near: near, nearPx: nearPx, anchors: anchors,
+  startAct1: startAct1, startAct2: startAct2, theShot: theShot, endAct2: endAct2,
+  act1Target: act1Target, act2Target: act2Target, say: say, keys: keys,
+  FEED_TARGET: FEED_TARGET, ACT2_LENGTH: ACT2_LENGTH, MARKER_COST: MARKER_COST,
+  HAUNT_COST: HAUNT_COST, DREAD_TO_FOLLOW: DREAD_TO_FOLLOW, SOLID: SOLID
+};
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

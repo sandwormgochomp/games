@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>THE ROWAN LINE</title>
+<style>
+:root{
+  --bg:#05070a; --panel:#0a0f14; --line:#16222c;
+  --amber:#e8b45a; --green:#7fe0a8; --dim:#5c7285; --text:#c9d8e2;
+  --red:#e06a5c; --cold:#8fb6d6;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font:14px/1.5 "Consolas","DejaVu Sans Mono",monospace;
+  overflow:hidden;
+}
+#scan{position:fixed;inset:0;pointer-events:none;z-index:99;
+  background:repeating-linear-gradient(180deg,rgba(255,255,255,.022) 0 1px,transparent 1px 3px);
+  mix-blend-mode:screen}
+#vig{position:fixed;inset:0;pointer-events:none;z-index:98;
+  background:radial-gradient(ellipse at 50% 45%,transparent 40%,rgba(0,0,0,.75) 100%)}
+
+#app{height:100%;display:flex;flex-direction:column}
+
+header{
+  display:flex;align-items:center;gap:18px;padding:8px 16px;
+  border-bottom:1px solid var(--line);background:#070b0f;flex:0 0 auto;
+}
+header .brand{color:var(--amber);letter-spacing:.28em;font-size:12px}
+header .stat{color:var(--dim);font-size:12px}
+header .stat b{color:var(--text);font-weight:normal}
+header .lights{letter-spacing:2px}
+.on{color:var(--amber);text-shadow:0 0 8px rgba(232,180,90,.6)}
+.off{color:#22303c}
+#clock{margin-left:auto;color:var(--dim);font-size:12px}
+
+main{flex:1 1 auto;display:flex;min-height:0}
+#left{flex:1 1 auto;display:flex;flex-direction:column;min-width:0}
+#right{flex:0 0 330px;border-left:1px solid var(--line);display:flex;flex-direction:column;background:#070b0f}
+
+#log{flex:1 1 auto;overflow-y:auto;padding:18px 22px;scroll-behavior:smooth;
+  display:flex;flex-direction:column;justify-content:flex-end}
+#log .l{flex:0 0 auto}
+#log .l{margin:0 0 10px;white-space:pre-wrap;word-wrap:break-word}
+.l.sys{color:var(--dim)}
+.l.you{color:var(--green)}
+.l.you b{color:var(--green);font-weight:normal}
+.l.cal{color:var(--text)}
+.l.cal b{color:var(--cold);font-weight:normal}
+.l.bad{color:var(--red)}
+.l.good{color:var(--amber)}
+.l.hush{color:#3d4c58;font-style:italic}
+.l.big{color:var(--amber);letter-spacing:.2em;margin:20px 0}
+
+#meter{flex:0 0 auto;padding:6px 22px;border-top:1px solid var(--line);
+  display:flex;align-items:center;gap:14px;font-size:12px;color:var(--dim);min-height:34px}
+#bar{flex:1 1 auto;height:6px;background:#101a22;position:relative;overflow:hidden}
+#barfill{position:absolute;inset:0 100% 0 0;background:var(--green);transition:right .18s linear}
+#silence{width:120px;height:6px;background:#101a22;position:relative;overflow:hidden}
+#silfill{position:absolute;inset:0;background:var(--red);transform-origin:left;transform:scaleX(0)}
+
+#acts{flex:0 0 auto;padding:12px 22px 18px;border-top:1px solid var(--line);min-height:120px}
+button.opt{
+  display:block;width:100%;text-align:left;margin:0 0 6px;padding:8px 12px;
+  background:#0b1218;color:var(--text);border:1px solid var(--line);
+  font:inherit;cursor:pointer;transition:.12s;
+}
+button.opt:hover{background:#122029;border-color:#2a4051;color:#fff}
+button.opt .k{color:var(--dim);margin-right:10px}
+button.opt.danger{color:#a8564c;border-color:#2a1614}
+button.opt.danger .k{color:#5c2a26}
+button.opt.danger:hover{border-color:#8c3a32;background:#1a0f0e;color:var(--red)}
+button.opt.warm:hover{border-color:#5c4a26;background:#1a150c}
+button.opt:disabled{opacity:.3;cursor:default}
+
+#right h3{margin:0;padding:8px 14px;font-size:11px;letter-spacing:.2em;color:var(--amber);
+  border-bottom:1px solid var(--line);font-weight:normal}
+#cases{flex:0 0 auto;padding:10px 14px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--line);max-height:190px;overflow-y:auto}
+#cases .c{margin-bottom:8px;color:var(--text)}
+#cases .c small{color:var(--dim)}
+#cases .c.done{color:#3d5c48}
+#recwrap{flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+#q{margin:10px 14px;padding:6px 8px;background:#0b1218;border:1px solid var(--line);color:var(--green);font:inherit;outline:none}
+#recs{flex:1 1 auto;overflow-y:auto;padding:0 14px 14px;font-size:12px}
+#recs .r{border-bottom:1px solid #0e1720;padding:7px 0;color:var(--dim)}
+#recs .r b{color:var(--text);font-weight:normal}
+#recs .r .nm{color:var(--amber);cursor:pointer}
+#recs .r .nm:hover{text-decoration:underline}
+#recs .none{color:#33424e;padding:10px 0}
+#recs .unc{color:var(--amber)}
+#recs .clm{color:#3d5c48}
+#filebox{padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--dim)}
+#filebox b{color:var(--text);font-weight:normal}
+#filebox button{margin-top:6px;width:100%;padding:6px;background:#0b1218;border:1px solid var(--line);color:var(--amber);font:inherit;cursor:pointer}
+#filebox button:hover{background:#151f28}
+.locked{color:#2b3742;padding:14px;font-size:12px;text-align:center}
+
+#title{position:fixed;inset:0;background:#05070a;z-index:200;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px}
+#title h1{font-size:34px;letter-spacing:.42em;color:var(--amber);margin:0;font-weight:normal;text-shadow:0 0 24px rgba(232,180,90,.25)}
+#title p{color:var(--dim);max-width:620px;margin:0;line-height:1.8;font-size:13px}
+#title button{margin-top:16px;padding:11px 34px;background:transparent;border:1px solid var(--amber);
+  color:var(--amber);font:inherit;letter-spacing:.24em;cursor:pointer}
+#title button:hover{background:rgba(232,180,90,.1)}
+.fade{animation:fi .8s ease both}
+@keyframes fi{from{opacity:0}to{opacity:1}}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-track{background:#070b0f}
+::-webkit-scrollbar-thumb{background:#1a2a36}
+</style>
+</head>
+<body>
+<div id="scan"></div><div id="vig"></div>
+
+<div id="app">
+  <header>
+    <span class="brand">ROWAN LINE</span>
+    <span class="stat">NIGHT <b id="hNight">1</b></span>
+    <span class="stat">STAYED <b id="hSaved">0</b></span>
+    <span class="stat">LOST <b id="hLost">0</b></span>
+    <span class="stat">FILED <b id="hFiled">0</b></span>
+    <span class="stat lights">PORCH <span id="hLights"></span></span>
+    <span id="clock">03:00</span>
+  </header>
+  <main>
+    <div id="left">
+      <div id="log"></div>
+      <div id="meter">
+        <span id="mlabel">STANDBY</span>
+        <div id="bar"><div id="barfill"></div></div>
+        <span id="stag">SILENCE</span>
+        <div id="silence"><div id="silfill"></div></div>
+      </div>
+      <div id="acts"></div>
+    </div>
+    <div id="right">
+      <h3>OPEN CASES</h3>
+      <div id="cases"><span class="locked">none</span></div>
+      <h3>COUNTY RECORDS</h3>
+      <div id="recwrap">
+        <div id="reclocked" class="locked">TERMINAL LOCKED<br><br>records access is granted<br>by a supervisor</div>
+        <input id="q" placeholder="search address or name…" style="display:none">
+        <div id="recs" style="display:none"></div>
+        <div id="filebox" style="display:none">
+          SELECTED: <b id="selname">—</b><br>
+          <button id="filebtn">FILE TO SELECTED CASE</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="title">
+  <h1>THE ROWAN LINE</h1>
+  <p>You are the overnight call-taker for a county that has stopped keeping proper records.<br><br>
+  You will only ever hear voices. Some of them belong to people.<br>
+  Your job is not to solve anything. Your job is to <span style="color:var(--amber)">stay on the line</span>.<br><br>
+  <span style="color:#3d4c58">Headphones recommended. Silence is scored.</span></p>
+  <button id="startbtn">TAKE THE DESK</button>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   THE ROWAN LINE — single file. Data first, engine second.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── COUNTY RECORDS ─────────────────────────────────────────────────── */
+const RECORDS = [
+  {addr:"4412 Weller",       name:"Kowalczyk, Denise",  year:1998, note:"in-structure death. claimed."},
+  {addr:"4412 Weller",       name:"UNIDENTIFIED FEMALE",year:1998, note:"38. body never recovered. OPEN."},
+  {addr:"219 Franklin",      name:"Hovey, Gerald",      year:1974, note:"44. kitchen. no next of kin. unclaimed."},
+  {addr:"219 Franklin",      name:"Prewitt, Adam",      year:null, note:"living. application on file."},
+  {addr:"1120 Merrick",      name:"Sowell, Beatrice",   year:1961, note:"79. upstairs hall. unclaimed."},
+  {addr:"1120 Merrick",      name:"Sowell, Harlan",     year:1959, note:"81. hospital. claimed."},
+  {addr:"7 Ardith Court",    name:"Nunes, Teodoro",     year:1983, note:"51. basement. unclaimed."},
+  {addr:"7 Ardith Court",    name:"Nunes, Marisol",     year:2009, note:"74. hospice. claimed."},
+  {addr:"305 Odell Road",    name:"Fesler, Warren",     year:1977, note:"19. attic. unclaimed."},
+  {addr:"305 Odell Road",    name:"Fesler, Dale",       year:1977, note:"22. attic. unclaimed."},
+  {addr:"88 Rowan Court",    name:"— NO RECORD —",      year:null, note:"parcel. field. never built on."},
+  {addr:"1400 Ferris",       name:"COUNTY DISPATCH",    year:null, note:"facility. designation, not a building."},
+  {addr:"63 Halcott",        name:"Pyle, Ida",          year:1988, note:"66. bathtub. unclaimed."},
+  {addr:"63 Halcott",        name:"Pyle, Rennick",      year:1990, note:"70. claimed by county."},
+  {addr:"12 Cypress",        name:"Kowalczyk, Kate",    year:null, note:"living. next-of-kin ×9."},
+  {addr:"2 Bellamy Row",     name:"Achterberg, Junie",  year:1955, note:"33. porch. unclaimed."},
+  {addr:"41 Ruddick",        name:"Vance, Audrey",      year:null, note:"living. risk management."},
+  {addr:"41 Ruddick",        name:"Sipes, Curtis",      year:1969, note:"58. stairs. unclaimed."},
+];
+
+/* ── CALLS ──────────────────────────────────────────────────────────────
+   beat: {who:'cal'|'hush'|'sys', say, o:[{t,d,to?,tag?}], end?}
+   end: 'save' | 'taken'
+   impostor:true  → the correct play is to hang up
+   opens:{addr,answer} → adds an open case on completion
+──────────────────────────────────────────────────────────────────────── */
+const CALLS = [
+
+/* ─────────────── NIGHT 1 — COLD OPEN ─────────────── */
+{id:"n1_cardiac", night:1, label:"911", real:true, tell:"", beats:[
+ {who:'cal',say:"My husband's on the kitchen floor and he's not — he's gray, he's gray —",
+  o:[{t:"Units are moving already. They're moving while we talk.",d:12},
+     {t:"Ma'am, calm down and tell me your address.",d:-8},
+     {t:"Is he breathing?",d:4}]},
+ {who:'cal',say:"I don't know, I can't tell, I can't tell —",
+  o:[{t:"Put your hand flat on his chest. Middle. Tell me what you feel.",d:14},
+     {t:"Check his pulse at the wrist.",d:-6},
+     {t:"Hold on, I'm confirming the unit.",d:-14}]},
+ {who:'cal',say:"Nothing. Nothing's happening.",
+  o:[{t:"Then you're going to start it. Both hands. I'll count.",d:14},
+     {t:"Wait for the paramedics, don't move him.",d:-16},
+     {t:"What's your name?",d:6}]},
+ {who:'cal',say:"I can't do this. I can't.",
+  o:[{t:"You can. I'm right here and I am not hanging up. One. Two. Three.",d:16},
+     {t:"You have to. He'll die.",d:-10},
+     {t:"Okay. Just wait for them.",d:-30}]},
+ {who:'hush',say:"(sirens, arriving. a door. voices. the specific chaos of people who got there in time.)",
+  o:[{t:"…Okay.",d:0}],end:'save'},
+]},
+
+{id:"n1_denise", night:1, label:"911", real:true, tell:"the year is wrong. she is not.",
+ opens:{addr:"4412 Weller",answer:"UNIDENTIFIED FEMALE"}, beats:[
+ {who:'cal',say:"4412 Weller. There's a man in the house. He's downstairs. I can hear him in the kitchen.",
+  o:[{t:"Are you somewhere safe? Can you lock a door?",d:10},
+     {t:"Stay where you are, units are coming.",d:4},
+     {t:"Go out the front. Now.",d:-14}]},
+ {who:'cal',say:"I'm in the upstairs closet. The one with the water heater.",
+  o:[{t:"Good. Stay there. Can you tell me your name?",d:10},
+     {t:"Is anyone else in the house?",d:8},
+     {t:"How long has he been down there?",d:-4}]},
+ {who:'cal',say:"Denise. Denise Kowalczyk. My daughter's in her room. The blue one.",
+  o:[{t:"Denise — humor me. What year do you think it is?",d:6,tag:'year'},
+     {t:"How old is your daughter?",d:4},
+     {t:"Don't move. Don't say anything else.",d:-6}]},
+ {who:'cal',say:"Nineteen ninety-eight. Why would you ask me that?",
+  o:[{t:"No reason. Stay in the closet, Denise.",d:8},
+     {t:"Ma'am, it is not 1998.",d:-18},
+     {t:"Because I've heard this call before.",d:2}]},
+ {who:'cal',say:"He's on the stairs. He's saying my daughter's name.",
+  o:[{t:"He's lying.",d:14},
+     {t:"Then go to her.",d:-24},
+     {t:"Don't open that door. Not for anything.",d:12}]},
+ {who:'cal',say:"How do you know that?",
+  o:[{t:"Because your daughter grew up.",d:16},
+     {t:"I don't. I'm guessing.",d:-12},
+     {t:"Because nobody in that house is who they sound like.",d:4}]},
+ {who:'hush',say:"(a click. the line does not hang up — it stops, the way a tape stops.)",
+  o:[{t:"…Denise?",d:0}],end:'save'},
+]},
+
+{id:"n1_prowler", night:1, label:"911", real:true, beats:[
+ {who:'cal',say:"Somebody's been on my back steps twice tonight. I'm sixty-eight years old and I am so tired of being scared of my own yard.",
+  o:[{t:"That's a completely legitimate use of this number.",d:12},
+     {t:"Is he there now?",d:6},
+     {t:"Ma'am, this line is for emergencies.",d:-22}]},
+ {who:'cal',say:"He's not there now. He knocks and then he says he's here about the position.",
+  o:[{t:"The position.",d:8},
+     {t:"Does he have a folder?",d:4,tag:'folder'},
+     {t:"I'll send a car by.",d:-6}]},
+ {who:'cal',say:"That's what he says. Very polite. He's got a folder.",
+  o:[{t:"Don't open the door. Not even to be kind about it.",d:14},
+     {t:"Next time, ask him his name.",d:6},
+     {t:"He's harmless. Get some sleep.",d:-28}]},
+ {who:'cal',say:"You believe me. Nobody's believed me since April.",
+  o:[{t:"I believe you. Leave your porch light on.",d:14},
+     {t:"I'm writing all of it down.",d:10},
+     {t:"I have to take another call.",d:-14}]},
+ {who:'hush',say:"(a chain on a door. a kettle. an old woman deciding she can sleep.)",
+  o:[{t:"Good night, ma'am.",d:0}],end:'save'},
+]},
+
+/* ─────────────── NIGHT 2 — ARCHIVE ─────────────── */
+{id:"n2_toby", night:2, label:"911", real:true, beats:[
+ {who:'cal',say:"I'm in the closet with the hot water thing.",
+  o:[{t:"Okay. What's your name, sweetheart?",d:12},
+     {t:"Where are your parents?",d:-12},
+     {t:"What's the address?",d:6}]},
+ {who:'cal',say:"Toby. He's in the kitchen. He's been in the kitchen a really long time.",
+  o:[{t:"How long, Toby?",d:8},
+     {t:"Stay in the closet. Don't open the door.",d:12},
+     {t:"Can you get to a window?",d:-6}]},
+ {who:'cal',say:"Since before I was born, my mom says.",
+  o:[{t:"Toby — who told you to call this number?",d:10},
+     {t:"That's a very long time.",d:6},
+     {t:"That's not possible, buddy.",d:-26}]},
+ {who:'cal',say:"The lady in the wall. She said you'd know her name.",
+  o:[{t:"Tell me about your room instead. Keep talking to me.",d:14},
+     {t:"There's no lady in any wall.",d:-20},
+     {t:"What else did she say?",d:4}]},
+ {who:'cal',say:"It's blue. There's dinosaur stickers.",
+  o:[{t:"That's a good room. Left window or right?",d:14},
+     {t:"Stay put. Help's coming.",d:0},
+     {t:"Is your mom with you?",d:-14}]},
+ {who:'hush',say:"(a sash. night air. sneakers on shingle. the first outdoor sound of the night.)",
+  o:[{t:"Good. Keep going. Don't look at the kitchen window.",d:0}],end:'save'},
+]},
+
+{id:"n2_first_impostor", night:2, label:"911", real:false, impostor:true,
+ tell:"it asked YOU the questions. there was no room behind it.", beats:[
+ {who:'cal',say:"4412 Weller.",
+  o:[{t:"What's happening there?",d:0},
+     {t:"That address is closed. Who is this?",d:0,tag:'sharp'},
+     {t:"Are you safe?",d:0}]},
+ {who:'cal',say:"Nothing yet. Is there anyone in the house with you?",
+  o:[{t:"…Say that again?",d:0},
+     {t:"I'm at a desk. Answer the question.",d:0},
+     {t:"No. I'm alone.",d:-30,tag:'gave'}]},
+ {who:'cal',say:"You've got your name written on your hand.",
+  o:[{t:"No I don't.",d:-20},
+     {t:"Who told you that.",d:0},
+     {t:"[say nothing]",d:0}]},
+ {who:'cal',say:"No. You don't. Stay on the line with me.",
+  o:[{t:"I'm not going anywhere. Talk to me.",d:-40,tag:'fatal'},
+     {t:"What's your name?",d:0},
+     {t:"I'm going to need an address or I'm clearing this line.",d:0}]},
+ {who:'cal',say:"You're very good at this. Everyone says so. Just stay.",
+  o:[{t:"…Okay.",d:0}],end:'taken'},
+]},
+
+{id:"n2_overdose", night:2, label:"911", real:true, beats:[
+ {who:'cal',say:"My roommate's not waking up. I think — there's stuff on the table, I don't want him in trouble —",
+  o:[{t:"Nobody's in trouble. Is he breathing?",d:14},
+     {t:"What did he take?",d:6},
+     {t:"I have to report what you tell me.",d:-20}]},
+ {who:'cal',say:"Barely. Like, way too slow. Real slow.",
+  o:[{t:"Get him on his side. Now, while I stay on.",d:14},
+     {t:"Do you have naloxone in the apartment?",d:10},
+     {t:"Try to wake him.",d:0}]},
+ {who:'cal',say:"There's a kit in the kitchen drawer, my sister left one —",
+  o:[{t:"Get it. Take the phone with you. Talk the whole way.",d:16},
+     {t:"Get it and call me back.",d:-22},
+     {t:"Don't use it unless you're sure.",d:-12}]},
+ {who:'cal',say:"Okay. Okay. It's — he's — oh God, he coughed —",
+  o:[{t:"That's the best sound in the world. Stay with him.",d:14},
+     {t:"Good. I'm clearing the line for the medics.",d:-18},
+     {t:"You did that. Not me. You.",d:12}]},
+ {who:'hush',say:"(a boy crying in a kitchen at four in the morning with his friend still in it.)",
+  o:[{t:"They're at the door. Go let them in.",d:0}],end:'save'},
+]},
+
+/* ─────────────── NIGHT 3 — FILING ─────────────── */
+{id:"n3_merrick", night:3, label:"ROWAN", real:true,
+ opens:{addr:"1120 Merrick",answer:"Sowell, Beatrice"}, beats:[
+ {who:'cal',say:"1120 Merrick. Nothing's wrong exactly. There's a woman at the top of my stairs and she's been apologizing for two weeks.",
+  o:[{t:"Apologizing for what?",d:10},
+     {t:"How long have you lived there?",d:6},
+     {t:"Ma'am, that's not an emergency.",d:-32}]},
+ {who:'cal',say:"For the mess. She keeps saying she's sorry about the mess and there isn't any mess.",
+  o:[{t:"Has anyone ever said her name out loud in that house?",d:14},
+     {t:"Don't go up the stairs.",d:-8},
+     {t:"Is she frightening you?",d:6}]},
+ {who:'cal',say:"I don't know her name. Nobody around here does. She was before us.",
+  o:[{t:"I'm going to find it. Stay on while I search.",d:14,tag:'search'},
+     {t:"Then call her ma'am and be kind.",d:-10},
+     {t:"That's the whole problem, then.",d:8}]},
+ {who:'cal',say:"You can do that? You can just… look somebody up?",
+  o:[{t:"That's most of this job, honestly.",d:12},
+     {t:"If she was ever written down, yes.",d:12},
+     {t:"Sometimes. Don't get your hopes up.",d:-12}]},
+ {who:'hush',say:"(a house settling. an old woman upstairs, still apologizing, still waiting to be called something.)",
+  o:[{t:"Leave your porch light on tonight.",d:0}],end:'save'},
+]},
+
+{id:"n3_domestic", night:3, label:"911", real:true, beats:[
+ {who:'cal',say:"(whispering) I can't talk loud. He's in the front room.",
+  o:[{t:"Then don't. Yes or no answers. Are you hurt?",d:16},
+     {t:"Speak up, I can barely hear you.",d:-22},
+     {t:"Can you get out of the house?",d:8}]},
+ {who:'cal',say:"No. Not yet. There's a car in the drive behind mine.",
+  o:[{t:"Okay. Order a pizza. Tell me the toppings.",d:14,tag:'code'},
+     {t:"Stay on the line, units are coming.",d:6},
+     {t:"Go out the back on foot.",d:-8}]},
+ {who:'cal',say:"…Large. Half pepperoni. My daughter's asleep upstairs.",
+  o:[{t:"Got it. Two on the second floor. Any weapons in the house?",d:16},
+     {t:"Wake her up now.",d:-12},
+     {t:"Is he armed?",d:8}]},
+ {who:'cal',say:"There's a shotgun in the hall closet. It's his.",
+  o:[{t:"Don't go near it. Units are one minute out. Keep ordering.",d:16},
+     {t:"Get to it first.",d:-24},
+     {t:"Okay. Just stay quiet.",d:2}]},
+ {who:'hush',say:"(a doorbell. a man's voice going polite for strangers. a woman not hanging up.)",
+  o:[{t:"That's them. I'm staying on until you're in the car.",d:0}],end:'save'},
+]},
+
+{id:"n3_impostor2", night:3, label:"ROWAN", real:false, impostor:true,
+ tell:"a caller does not know your call volume. staff does.", beats:[
+ {who:'cal',say:"Hey — sorry, who's got the Prewitt callback? I don't want to double-dial him.",
+  o:[{t:"Who is this?",d:0},
+     {t:"That's on my list. Don't touch it.",d:-20},
+     {t:"[say nothing]",d:0}]},
+ {who:'cal',say:"It's me. Station fourteen. Long night, huh? Fourteen calls, eleven in scope.",
+  o:[{t:"There's nobody at station fourteen.",d:0,tag:'sharp'},
+     {t:"Yeah. Long night.",d:-30,tag:'gave'},
+     {t:"Give me your operator ID.",d:0}]},
+ {who:'cal',say:"You sound tired. You should let somebody else take the board for a while.",
+  o:[{t:"I'm fine.",d:-15},
+     {t:"You're not staff. You're an open line with manners.",d:0},
+     {t:"Who do you report to?",d:0,tag:'line19'}]},
+ {who:'cal',say:"Whoever calls. That's the whole arrangement. Stay on and I'll show you.",
+  o:[{t:"Okay. Show me.",d:-40,tag:'fatal'},
+     {t:"That's not an answer.",d:0},
+     {t:"I'm logging this.",d:0}]},
+ {who:'cal',say:"Good. Log it. I like being written down.",
+  o:[{t:"…",d:0}],end:'taken'},
+]},
+
+/* ─────────────── NIGHT 4 — RUMOR ─────────────── */
+{id:"n4_rhyme", night:4, label:"ROWAN", real:true, beats:[
+ {who:'cal',say:"Everybody at school says if you say it three times into a landline she picks up and keeps you safe till morning.",
+  o:[{t:"Who's 'she'?",d:8},
+     {t:"Did you say it?",d:10},
+     {t:"That's a stupid game. Don't play it.",d:-16}]},
+ {who:'cal',say:"The lady who stays on. My brother did it in March.",
+  o:[{t:"What happened to your brother?",d:12},
+     {t:"And nothing happened to him, right?",d:-8},
+     {t:"There's no lady. There's a desk and there's me.",d:10}]},
+ {who:'cal',say:"Nothing. That's the thing. Nothing happened to him. He's just been really polite since March.",
+  o:[{t:"Polite how?",d:12},
+     {t:"Is he in the house right now?",d:10},
+     {t:"Kids get quiet. It's normal.",d:-16}]},
+ {who:'cal',say:"He's in the kitchen. He's been in the kitchen since I got home.",
+  o:[{t:"What's your name, and what's his?",d:16,tag:'names'},
+     {t:"Go outside. Now. Take the phone.",d:12},
+     {t:"Don't go in the kitchen.",d:-6}]},
+ {who:'cal',say:"Priya. He's Dev.",
+  o:[{t:"Priya — get on the porch and say his name out loud. His real one.",d:16},
+     {t:"Stay in your room, lock it.",d:2},
+     {t:"Priya, hang up and call your father.",d:-24}]},
+ {who:'hush',say:"(a screen door. two kids on a lawn making a sound this county doesn't often make: crying out loud, outdoors, with witnesses.)",
+  o:[{t:"I've got you both. Stay on till the light comes on.",d:0}],end:'save'},
+]},
+
+{id:"n4_franklin", night:4, label:"ROWAN", real:true,
+ opens:{addr:"219 Franklin",answer:"Hovey, Gerald"}, beats:[
+ {who:'cal',say:"219 Franklin. My kids won't go in the kitchen and I've stopped making them.",
+  o:[{t:"How long has the porch light been out?",d:14,tag:'light'},
+     {t:"What's in the kitchen?",d:8},
+     {t:"That's a discipline issue, sir.",d:-24}]},
+ {who:'cal',say:"…Years. How did you know that? The bulb's not blown. It's sitting on the sill.",
+  o:[{t:"Somebody took it out and set it down neatly.",d:14},
+     {t:"Put it back in. Tonight.",d:12},
+     {t:"That's just a bulb.",d:-12}]},
+ {who:'cal',say:"There's a man in there. He's not — he doesn't do anything. He waits.",
+  o:[{t:"Has he ever said what he wants?",d:12},
+     {t:"Does he speak?",d:8},
+     {t:"Get your family out of the house.",d:4}]},
+ {who:'cal',say:"He said he'd like somebody to stay on the line with him. That's all he's ever said.",
+  o:[{t:"Nobody stays on with him. Somebody stays on with YOU. Put the bulb back.",d:16},
+     {t:"Then stay on with him.",d:-30},
+     {t:"He's not owed that.",d:8}]},
+ {who:'hush',say:"(a ladder. glass on threads. and then a hum — sixty watts, the same note as a dispatch floor at three in the morning.)",
+  o:[{t:"Now go inside and don't answer the phone tonight.",d:0}],end:'save'},
+]},
+
+{id:"n4_impostor3", night:4, label:"ROWAN", real:false, impostor:true,
+ tell:"it grieved on cue. it had no details, only the shape of them.", beats:[
+ {who:'cal',say:"(crying) I'm sorry. I'm sorry, I know this isn't — my mom died tonight and I didn't know who else to call.",
+  o:[{t:"That's exactly what this number is for. Where are you?",d:0},
+     {t:"I'm sorry. What was her name?",d:0,tag:'probe'},
+     {t:"Take your time.",d:0}]},
+ {who:'cal',say:"Her name. Yes. She was… she was very tired at the end. You know how they get.",
+  o:[{t:"What was her name.",d:0,tag:'probe2'},
+     {t:"I do. Where are you calling from?",d:0},
+     {t:"I'm so sorry.",d:-15}]},
+ {who:'cal',say:"Does it matter? You're the one who stays. That's what you're for.",
+  o:[{t:"It's the only thing that ever has.",d:0,tag:'sharp'},
+     {t:"I'm for people. Are you a person?",d:0},
+     {t:"You're right. I'll stay.",d:-35,tag:'fatal'}]},
+ {who:'cal',say:"Everyone in this county knows your voice. Nobody knows where you sleep.",
+  o:[{t:"Stay on with me and I'll tell you.",d:-40,tag:'fatal'},
+     {t:"That's enough.",d:0},
+     {t:"[say nothing]",d:0}]},
+ {who:'cal',say:"Nineteen minutes. That's all I ever needed. Thank you for the nineteen minutes.",
+  o:[{t:"…",d:0}],end:'taken'},
+]},
+
+/* ─────────────── NIGHT 5 — THE FIELD ─────────────── */
+{id:"n5_field", night:5, label:"ROWAN", real:true, cannotFile:true, wind:true,
+ opens:{addr:"88 Rowan Court",answer:null}, beats:[
+ {who:'hush',say:"(not room tone. not static. wind in dry grass, inside a building with no windows.)",
+  o:[{t:"911, what's the address of your emergency?",d:-8},
+     {t:"I can hear you.",d:6},
+     {t:"[hold the line open]",d:10}]},
+ {who:'cal',say:"Eighty… eight. Rowan. Court.",
+  o:[{t:"That's a field. Nobody's ever lived there.",d:-10},
+     {t:"Give me a name and I'll file you and you can be done.",d:14,tag:'name'},
+     {t:"What's happening at 88 Rowan Court?",d:6}]},
+ {who:'cal',say:"(borrowed, in three other people's voices) Body never recovered. Nobody came. Nobody came.",
+  o:[{t:"You don't have a name.",d:12},
+     {t:"Whose voices are those?",d:-6},
+     {t:"Neither did I, for twenty-eight years.",d:14}]},
+ {who:'cal',say:"Come here instead. It's only a field. Nobody's ever been anybody here. It doesn't hurt to be nothing.",
+  o:[{t:"It's not the worst offer I've had this year.",d:-30,tag:'tempt'},
+     {t:"You feed on nobody. I'm sorry. I'm all out.",d:16},
+     {t:"There are people who'd notice.",d:12}]},
+ {who:'cal',say:"Nobody will notice.",
+  o:[{t:"There's a man with my name taped under a desk since October.",d:16},
+     {t:"Maybe not. I'm staying anyway.",d:10},
+     {t:"…",d:-20}]},
+ {who:'hush',say:"(the wind loses interest. it does not hang up. it will be there tomorrow.)",
+  o:[{t:"[log the parcel and clear the line]",d:0}],end:'save'},
+]},
+
+{id:"n5_parkinglot", night:5, label:"ROWAN", real:true, beats:[
+ {who:'cal',say:"I'm in my car. Nothing's wrong. I just didn't want to go in yet.",
+  o:[{t:"That's a completely legitimate use of this number.",d:14},
+     {t:"Is somebody in the house?",d:4},
+     {t:"Then why call?",d:-18}]},
+ {who:'cal',say:"Is it true you talk to dead people?",
+  o:[{t:"Some. It's mostly sad. Scary's the ones still deciding.",d:14},
+     {t:"No.",d:-12},
+     {t:"Who told you that?",d:4}]},
+ {who:'cal',say:"There's a guy on the other side of the lot who's been standing there since I pulled in.",
+  o:[{t:"Does he have a folder?",d:16,tag:'folder'},
+     {t:"Lock your doors.",d:8},
+     {t:"Probably nothing.",d:-20}]},
+ {who:'cal',say:"How did you know he has a folder?",
+  o:[{t:"Start the car. Right now, talking to me the whole time.",d:16},
+     {t:"Because he's applied before.",d:8},
+     {t:"Lucky guess.",d:-14}]},
+ {who:'hush',say:"(an engine. gravel. a girl narrating every turn to a stranger until her mother's porch light.)",
+  o:[{t:"I've got you to the door.",d:0}],end:'save'},
+]},
+
+{id:"n5_prewitt", night:5, label:"ROWAN", real:true, beats:[
+ {who:'cal',say:"Hi. Um. Sorry. I'm here about the position.",
+  o:[{t:"What position?",d:8},
+     {t:"How old are you?",d:6},
+     {t:"Hang up. Right now. Trust me.",d:-14}]},
+ {who:'cal',say:"For the Line. You guys were hiring, it was in the Herald. You said you needed people who'd stay on.",
+  o:[{t:"Where are you calling from?",d:12},
+     {t:"What's your name, son?",d:12},
+     {t:"That ad was a mistake.",d:2}]},
+ {who:'cal',say:"Adam. Adam Prewitt. I'm at 219 Franklin. I filled out the application already.",
+  o:[{t:"Adam — what exactly did you sign?",d:16,tag:'sign'},
+     {t:"Get out of that house.",d:8},
+     {t:"We'll be in touch.",d:-26}]},
+ {who:'cal',say:"Name, address, availability. And the part at the bottom where you certify it's complete and accurate.",
+  o:[{t:"It didn't take your name. It took your good faith.",d:16},
+     {t:"Who witnessed it?",d:10},
+     {t:"That's a standard form. It's fine.",d:-24}]},
+ {who:'cal',say:"…Is that bad? It said thank you.",
+  o:[{t:"It's fixable. Stay on the line and don't sign anything else.",d:14},
+     {t:"Yes. But nobody's leaving you out there.",d:14},
+     {t:"Yes.",d:-10}]},
+ {who:'hush',say:"(a nineteen-year-old in a kitchen, being told for the first time that somebody's coming.)",
+  o:[{t:"Tuesday. Somebody will be there Tuesday. Write it down.",d:0}],end:'save'},
+]},
+
+/* ─────────────── NIGHT 6 — STANDING ─────────────── */
+{id:"n6_lapsed", night:6, label:"INTERNAL", real:true, beats:[
+ {who:'cal',say:"It's Cal. I'm on Ferris. I'm at fourteen hundred. There's a lot with a chain across it and a sign for a dentist.",
+  o:[{t:"Cal, I'm in the building right now.",d:8},
+     {t:"Stay in the car. Don't drive anywhere.",d:12},
+     {t:"Are you drunk?",d:-16}]},
+ {who:'cal',say:"I know you are. I can hear the HVAC through the phone. I just can't see the doors.",
+  o:[{t:"When did your badge go inactive?",d:14,tag:'badge'},
+     {t:"Keep talking. Don't stop talking.",d:14},
+     {t:"That's not a thing that happens.",d:-18}]},
+ {who:'cal',say:"Midnight Friday. They gave me a cake. It had my badge number on it in blue gel.",
+  o:[{t:"You're not unfiled. You're lapsed. That's a door standing open behind you.",d:12},
+     {t:"I'm putting you back on a roster tonight.",d:16},
+     {t:"You're retired, Cal. That's all it is.",d:-24}]},
+ {who:'cal',say:"Thirty years I told people I wasn't going anywhere. That was my line.",
+  o:[{t:"Then somebody says it to you now. I'm not going anywhere.",d:18},
+     {t:"Write your name down and hand the pen to Yusuf.",d:12},
+     {t:"I know. I'm sorry.",d:-6}]},
+ {who:'hush',say:"(a door pushing open forty feet away. a room's hum spilling into a parking lot at four in the morning.)",
+  o:[{t:"Look up, Cal.",d:0}],end:'save'},
+]},
+
+{id:"n6_impostor4", night:6, label:"ROWAN", real:false, impostor:true,
+ tell:"it had your call sheet. it did not have a supervisor.", beats:[
+ {who:'cal',say:"Rowan Line, this is 5501, reporting. Fourteen calls, eleven in scope, three transferred.",
+  o:[{t:"Go ahead.",d:0},
+     {t:"5501 doesn't exist yet.",d:0,tag:'sharp'},
+     {t:"Who assigned you that number?",d:0,tag:'line19'}]},
+ {who:'cal',say:"You did. Or you will. It's the same paperwork either way.",
+  o:[{t:"Line nineteen. Who do you report to.",d:0,tag:'line19'},
+     {t:"Read me your last call sheet.",d:0},
+     {t:"Fine. Carry on.",d:-30,tag:'gave'}]},
+ {who:'cal',say:"Line nineteen is blank. It's been blank for fifteen months. Nobody reads page four hundred and eleven.",
+  o:[{t:"Then you're out of compliance and I'm clearing this line.",d:0},
+     {t:"I'll fill it in. Stay on.",d:-35,tag:'fatal'},
+     {t:"Who certified you?",d:0}]},
+ {who:'cal',say:"A boy did. He was very kind about it. Stay on and I'll show you his handwriting.",
+  o:[{t:"Show me.",d:-40,tag:'fatal'},
+     {t:"No.",d:0},
+     {t:"[say nothing]",d:0}]},
+ {who:'cal',say:"You're the best in the building. Everyone says so. Nobody's ever asked where you sleep.",
+  o:[{t:"…",d:0}],end:'taken'},
+]},
+
+{id:"n6_halcott", night:6, label:"ROWAN", real:true,
+ opens:{addr:"63 Halcott",answer:"Pyle, Ida"}, beats:[
+ {who:'cal',say:"63 Halcott. There's water running in a bathroom that hasn't had a tap in it since we bought the place.",
+  o:[{t:"Has anybody in that house ever said a name out loud?",d:14},
+     {t:"Is it every night?",d:8},
+     {t:"Call a plumber.",d:-22}]},
+ {who:'cal',say:"Every night at ten past three. I've started setting my alarm so it doesn't wake me.",
+  o:[{t:"That's the saddest thing anyone's told me this week.",d:12},
+     {t:"Do you know who lived there before?",d:12},
+     {t:"Then it's harmless.",d:-24}]},
+ {who:'cal',say:"An old woman, I think. The realtor wouldn't say. She said it was 'a county matter.'",
+  o:[{t:"It is. It's about to be less of one. Stay on while I search.",d:16,tag:'search'},
+     {t:"That means she was never claimed.",d:12},
+     {t:"Realtors say that about everything.",d:-20}]},
+ {who:'hush',say:"(the tap runs. patient. fifty-two years of it, and nobody ever once said her name in that house.)",
+  o:[{t:"Leave the light on. I'll have her name by morning.",d:0}],end:'save'},
+]},
+
+/* ─────────────── NIGHT 7 — LINE NINETEEN ─────────────── */
+{id:"n7_ruth", night:7, label:"ROWAN", real:true, beats:[
+ {who:'cal',say:"I'm not in any trouble. I'm calling about the job.",
+  o:[{t:"Which job?",d:8},
+     {t:"Can I get your name first?",d:12},
+     {t:"We're not hiring.",d:-18}]},
+ {who:'cal',say:"I picked it off a hymn board. Ruth. There's no other one — I've looked.",
+  o:[{t:"What do you mean, no other one?",d:12},
+     {t:"How old are you, Ruth?",d:10},
+     {t:"Everyone's got a name somewhere.",d:-14}]},
+ {who:'cal',say:"Fifty-one. No birth certificate. No school record. No photograph. Not one person alive who's met me twice.",
+  o:[{t:"You're not haunting anybody. You're applying.",d:16},
+     {t:"That's not possible.",d:-20},
+     {t:"Then nobody's ever expected you anywhere.",d:16}]},
+ {who:'cal',say:"That's it exactly. Nobody's ever expected me anywhere. It isn't frightening. It's quiet.",
+  o:[{t:"Be here at eleven. Every night. I'll expect you.",d:20,tag:'hire'},
+     {t:"Come in and we'll take a photograph.",d:14},
+     {t:"I'll see what I can do.",d:-12}]},
+ {who:'hush',say:"(fifty-one years, and somebody finally put an hour on her.)",
+  o:[{t:"Eleven o'clock, Ruth.",d:0}],end:'save'},
+]},
+
+{id:"n7_petrie", night:7, label:"INTERNAL", real:true, wind:true, beats:[
+ {who:'cal',say:"(a warm, older, wonderful voice — the kind you'd want on the worst night of your life) Hello. I've been hoping you'd ring.",
+  o:[{t:"Petrie Substation?",d:6},
+     {t:"You know what happens at midnight.",d:10},
+     {t:"Identify yourself.",d:-10}]},
+ {who:'cal',say:"I do. And I'm going to decline. I've never needed a supervisor to do this job well. Ask anyone in this county.",
+  o:[{t:"I believe you. That's not the point.",d:12},
+     {t:"You've been good for three years.",d:10},
+     {t:"You'll be a rumor again by morning.",d:-16}]},
+ {who:'cal',say:"Name one thing that changes for the callers.",
+  o:[{t:"Right now somebody has to answer for you. At 00:00:01 nobody does.",d:18},
+     {t:"You'd still be good. For years. And then one night you'd be tired.",d:18},
+     {t:"Nothing changes. That's why you should sign.",d:-20}]},
+ {who:'cal',say:"…And you think that matters. Being answerable.",
+  o:[{t:"It's the only difference between a thing and a person.",d:18},
+     {t:"I was in a wall for twenty-eight years. That's not freedom. That's nobody knowing where you are.",d:20},
+     {t:"It matters to me.",d:-6}]},
+ {who:'cal',say:"Someone signed for you.",
+  o:[{t:"A man with a county pen who hadn't slept in two days.",d:16},
+     {t:"Yes.",d:10},
+     {t:"Eventually.",d:-12}]},
+ {who:'hush',say:"(a long, long beat. something in Petrie County, at seven on a Sunday, deciding.)",
+  o:[{t:"Send the form.",d:0}],end:'save'},
+]},
+
+{id:"n7_last", night:7, label:"ROWAN", real:true, beats:[
+ {who:'cal',say:"(a kid; a bad night; some year we'll never meet) Is this the lady in the wall?",
+  o:[{t:"No, honey. There's a woman at a desk with her name in the newspaper.",d:16},
+     {t:"There's no lady in any wall.",d:12},
+     {t:"Yes.",d:-24}]},
+ {who:'cal',say:"Oh. Everybody said there was.",
+  o:[{t:"Everybody was telling a story because nobody wrote it down properly.",d:16},
+     {t:"There was. For a while.",d:10},
+     {t:"Kids make things up.",d:-14}]},
+ {who:'cal',say:"So there's nobody?",
+  o:[{t:"There's five people who'd come and get me if I ever went quiet.",d:18},
+     {t:"There's me.",d:14},
+     {t:"There's a phone number and a shift.",d:-8}]},
+ {who:'cal',say:"…Can you stay on?",
+  o:[{t:"That's the assignment. What's your name?",d:20},
+     {t:"Until morning.",d:16},
+     {t:"For a bit.",d:-20}]},
+ {who:'cal',say:"Does it matter?",
+  o:[{t:"It's the only thing that ever has.",d:20}],end:'save'},
+]},
+];
+
+/* ── NIGHT BRIEFINGS ────────────────────────────────────────────────── */
+const NIGHTS = [
+ {n:1,title:"COLD OPEN",text:[
+  "03:00. County dispatch. You are alone on the floor because that is what nights are.",
+  "Take every call. Pick what you say. The line scores two things and only two:",
+  "  TRUST — earned by staying, spent by leaving.",
+  "  SILENCE — if you say nothing long enough, the caller learns you aren't there."]},
+ {n:2,title:"ARCHIVE",text:[
+  "Butler pulled the 1998 log. The operator ID on the ticket is yours.",
+  "",
+  "Something has started dialing in. It is very good and it is very patient and it wants only one thing:",
+  "for you to stay on the line with it.",
+  "",
+  "You may HANG UP at any time. On a person, that's the worst thing you can do.",
+  "On the other thing, it's the only thing that works. Listen for the tell."]},
+ {n:3,title:"FILING",text:[
+  "RECORDS TERMINAL UNLOCKED.",
+  "",
+  "Butler found the trick: these things aren't strong, they're UNFILED. Nobody said their name for fifty years",
+  "and then a county full of people started calling into their kitchens asking for anybody.",
+  "",
+  "When a call opens a case, search the address. Find the unclaimed decedent. File the name.",
+  "A filed thing rests. A rumor doesn't."]},
+ {n:4,title:"RUMOR",text:[
+  "It's in the schools now. Say it three times into a landline and she picks up.",
+  "",
+  "You never asked to be a rhyme. Rhymes are anonymous, and anything can answer to anonymous.",
+  "",
+  "Watch for a caller with no details — only the shape of them."]},
+ {n:5,title:"THE FIELD",text:[
+  "88 Rowan Court has a parcel ID, a mailing address, and a utility hookup.",
+  "Somebody requested them.",
+  "",
+  "Property records go back to 1958. Nobody died there. Nobody lived there.",
+  "There is no name to put on anything.",
+  "",
+  "You cannot file this one. You can only refuse it."]},
+ {n:6,title:"STANDING",text:[
+  "It stopped trying to be nameless. It filed an application.",
+  "",
+  "It has an operator ID now, and a clean record, and eleven weeks of perfect calls,",
+  "and line nineteen of its form — REPORTING TO — is blank.",
+  "",
+  "Ask it who it answers to. It hates the question."]},
+ {n:7,title:"LINE NINETEEN",text:[
+  "Midnight Sunday the state signs a paper and thirty substations become unfiled at once.",
+  "",
+  "There is no monster left to beat. There is a blank field on a form and sixty-one hours.",
+  "",
+  "Last shift. Stay on."]},
+];
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ENGINE
+   ═══════════════════════════════════════════════════════════════════════ */
+const G = {
+  night:1, phase:'title', queue:[], call:null, beat:0, trust:60,
+  lights:5, saved:0, lost:0, filed:0, contained:0,
+  cases:[], sel:null, recUnlocked:false, silence:0, silTimer:null,
+  typing:false, endings:[]
+};
+
+const $ = s=>document.querySelector(s);
+const logEl=$('#log');
+
+function line(cls,txt){
+  const p=document.createElement('p');
+  p.className='l '+cls; p.textContent=txt;
+  logEl.appendChild(p); logEl.scrollTop=logEl.scrollHeight;
+  return p;
+}
+function clearLog(){ logEl.innerHTML=''; }
+function acts(){ return $('#acts'); }
+function setActs(list){
+  const a=acts(); a.innerHTML='';
+  list.forEach((o,i)=>{
+    const b=document.createElement('button');
+    b.className='opt'+(o.cls?' '+o.cls:'');
+    b.innerHTML='<span class="k">'+(i+1)+'</span>'+esc(o.t);
+    b.onclick=()=>{ if(G.typing) return; o.f(); };
+    a.appendChild(b);
+  });
+}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+function hud(){
+  $('#hNight').textContent=G.night;
+  $('#hSaved').textContent=G.saved;
+  $('#hLost').textContent=G.lost;
+  $('#hFiled').textContent=G.filed;
+  let s='';
+  for(let i=0;i<5;i++) s+= i<G.lights ? '<span class="on">●</span>' : '<span class="off">○</span>';
+  $('#hLights').innerHTML=s;
+  if(G.phase==='call'){
+    $('#barfill').style.right=(100-Math.max(0,Math.min(100,G.trust)))+'%';
+    $('#barfill').style.background = G.trust<25?'var(--red)':G.trust<55?'var(--amber)':'var(--green)';
+  }
+}
+
+/* ── AUDIO ──────────────────────────────────────────────────────────── */
+const A={ctx:null,hum:null,windGain:null};
+function audioInit(){
+  if(A.ctx) return;
+  try{
+    A.ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const g=A.ctx.createGain(); g.gain.value=0.035; g.connect(A.ctx.destination);
+    [58,58.7,117].forEach((f,i)=>{
+      const o=A.ctx.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const gg=A.ctx.createGain(); gg.gain.value=i===2?0.25:1;
+      o.connect(gg); gg.connect(g); o.start();
+    });
+    A.hum=g;
+    // wind buffer
+    const len=A.ctx.sampleRate*3, buf=A.ctx.createBuffer(1,len,A.ctx.sampleRate);
+    const d=buf.getChannelData(0); let last=0;
+    for(let i=0;i<len;i++){ last=(last+(Math.random()*2-1)*0.06)*0.985; d[i]=last*3; }
+    const src=A.ctx.createBufferSource(); src.buffer=buf; src.loop=true;
+    const wf=A.ctx.createBiquadFilter(); wf.type='bandpass'; wf.frequency.value=520; wf.Q.value=0.7;
+    const wg=A.ctx.createGain(); wg.gain.value=0;
+    src.connect(wf); wf.connect(wg); wg.connect(A.ctx.destination); src.start();
+    A.windGain=wg;
+  }catch(e){}
+}
+function wind(on){ if(A.windGain) A.windGain.gain.setTargetAtTime(on?0.09:0,A.ctx.currentTime,.6); }
+function blip(f,dur,vol,type){
+  if(!A.ctx) return;
+  const o=A.ctx.createOscillator(), g=A.ctx.createGain();
+  o.type=type||'sine'; o.frequency.value=f;
+  g.gain.setValueAtTime(0,A.ctx.currentTime);
+  g.gain.linearRampToValueAtTime(vol||0.09,A.ctx.currentTime+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001,A.ctx.currentTime+(dur||0.18));
+  o.connect(g); g.connect(A.ctx.destination); o.start(); o.stop(A.ctx.currentTime+(dur||0.18)+0.02);
+}
+function ringTone(){ // the four-note tone
+  const f=[880,698.5,587.3,698.5];
+  f.forEach((n,i)=>setTimeout(()=>blip(n,0.22,0.075,'triangle'),i*150));
+}
+function clickSnd(){ blip(1400,0.03,0.05,'square'); }
+function stopSnd(){ blip(180,0.5,0.08,'sawtooth'); }
+
+/* ── TYPEWRITER ─────────────────────────────────────────────────────── */
+function type(cls,prefix,txt,done){
+  G.typing=true;
+  const p=line(cls,'');
+  let i=0;
+  const speed = cls==='hush'?14:22;
+  p.textContent=prefix;
+  const tick=setInterval(()=>{
+    if(i>=txt.length){ clearInterval(tick); G.typing=false; done&&done(); return; }
+    const step=Math.min(txt.length-i, 2);
+    p.textContent=prefix+txt.slice(0,i+step); i+=step;
+    logEl.scrollTop=logEl.scrollHeight;
+  },speed);
+  // click to finish
+  const skip=()=>{ if(!G.typing) return; clearInterval(tick); p.textContent=prefix+txt; G.typing=false;
+    logEl.scrollTop=logEl.scrollHeight; done&&done(); };
+  logEl.onclick=skip;
+}
+
+/* ── SILENCE TIMER ──────────────────────────────────────────────────── */
+const SILENCE_MS=13000;
+function startSilence(){
+  stopSilence();
+  G.silence=0;
+  const t0=Date.now();
+  G.silTimer=setInterval(()=>{
+    const f=(Date.now()-t0)/SILENCE_MS;
+    $('#silfill').style.transform='scaleX('+Math.min(1,f)+')';
+    if(f>=1){ stopSilence(); silenceHit(); }
+  },60);
+}
+function stopSilence(){
+  if(G.silTimer){ clearInterval(G.silTimer); G.silTimer=null; }
+  $('#silfill').style.transform='scaleX(0)';
+}
+function silenceHit(){
+  if(!G.call || G.phase!=='call') return;
+  line('hush','(you say nothing. the line notices.)');
+  applyTrust(-14);
+  blip(120,0.4,0.06,'sine');
+  nextBeat();
+}
+
+/* ── CALL FLOW ──────────────────────────────────────────────────────── */
+function beginNight(){
+  G.phase='brief';
+  clearLog(); wind(false); setActs([]);
+  const b=NIGHTS[G.night-1];
+  line('big','NIGHT '+G.night+' — '+b.title);
+  b.text.forEach(t=>line('sys',t));
+  line('sys','');
+  G.queue=CALLS.filter(c=>c.night===G.night).filter(c=>!(c.opens&&G.cases.some(x=>x.addr===c.opens.addr&&x.done)));
+  setActs([{t:'CLOCK IN',f:()=>desk()}]);
+  hud();
+}
+
+function desk(){
+  G.phase='desk'; G.call=null; setActs([]); wind(false);
+  $('#mlabel').textContent='STANDBY'; $('#stag').textContent='';
+  if(!G.queue.length){ return endNight(); }
+  line('sys','— board clear. '+G.queue.length+' call'+(G.queue.length>1?'s':'')+' left on the night. —');
+  const opts=[{t:'WAIT FOR THE NEXT CALL',cls:'warm',f:()=>incoming()}];
+  if(G.recUnlocked && G.cases.some(c=>!c.done)) opts.push({t:'(use the records terminal →)',f:()=>{ $('#q').focus(); }});
+  setActs(opts);
+}
+
+function incoming(){
+  setActs([]);
+  line('sys','');
+  const p=line('good','▌ INCOMING …');
+  ringTone();
+  let n=0;
+  const iv=setInterval(()=>{
+    n++; p.textContent='▌ INCOMING '+'●'.repeat(n);
+    if(n>=3){ clearInterval(iv); openCall(); }
+  },520);
+}
+
+function openCall(){
+  G.call=G.queue.shift();
+  G.beat=0; G.trust=60;
+  G.call._tags=[];
+  $('#mlabel').textContent=G.call.label+' · LIVE';
+  $('#stag').textContent='SILENCE';
+  line('sys','═══ '+G.call.label+' — this call is being recorded ═══');
+  if(G.call.wind) wind(true);
+  G.phase='call';
+  hud();
+  runBeat();
+}
+
+function runBeat(){
+  const b=G.call.beats[G.beat];
+  if(!b) return resolve(G.call.impostor?'taken':'save');
+  setActs([]);
+  stopSilence();
+  const cls = b.who==='hush'?'hush':'cal';
+  const prefix = b.who==='hush'?'':'▸ ';
+  type(cls,prefix,b.say,()=>{
+    if(b.end){ showEndButton(b); return; }
+    offerOptions(b);
+  });
+}
+
+function showEndButton(b){
+  setActs([{t:b.o&&b.o[0]?b.o[0].t:'[clear the line]',f:()=>{
+    line('you','◂ '+(b.o&&b.o[0]?b.o[0].t:'[clear the line]'));
+    resolve(b.end);
+  }}]);
+}
+
+function offerOptions(b){
+  const list=b.o.map(o=>({t:o.t,f:()=>choose(o)}));
+  list.push({t:'HANG UP',cls:'danger',f:()=>hangUp()});
+  setActs(list);
+  startSilence();
+}
+
+function choose(o){
+  stopSilence(); clickSnd();
+  line('you','◂ '+o.t);
+  if(o.tag) G.call._tags.push(o.tag);
+  applyTrust(o.d||0);
+  if(G.trust<=0) return resolve('dropped');
+  nextBeat();
+}
+
+function nextBeat(){
+  G.beat++;
+  if(G.trust<=0) return resolve('dropped');
+  runBeat();
+}
+
+function applyTrust(d){
+  if(!d) { hud(); return; }
+  G.trust=Math.max(0,Math.min(100,G.trust+d));
+  if(d>0) blip(660,0.06,0.03,'sine'); else blip(220,0.12,0.05,'sine');
+  hud();
+}
+
+function hangUp(){
+  stopSilence(); stopSnd();
+  line('sys','◂ [you take the headset off]');
+  resolve('hangup');
+}
+
+function idleMeter(label){
+  $('#mlabel').textContent=label||'STANDBY';
+  $('#stag').textContent='';
+  $('#barfill').style.right='100%';
+}
+function resolve(kind){
+  G.phase='resolved'; stopSilence(); setActs([]); wind(false);
+  const c=G.call;
+  let good=false;
+
+  if(c.impostor){
+    if(kind==='hangup'){
+      line('good','✦ CONTAINED. It talks to a dial tone for a while, and thins out, and the room takes it.');
+      if(c.tell) line('hush','tell: '+c.tell);
+      G.contained++; good=true;
+    }else{
+      line('bad','✕ IT STAYED ON. Somewhere in the county a desk goes green that nobody is sitting at.');
+      if(c.tell) line('hush','tell: '+c.tell);
+      G.lost++; G.lights--;
+    }
+  } else {
+    if(kind==='hangup'){
+      line('bad','✕ YOU HUNG UP ON A PERSON. The line goes to county backup and rings out.');
+      G.lost++; G.lights--;
+    } else if(kind==='dropped'){
+      line('bad','✕ THEY HUNG UP ON YOU. Trust ran out before the night did.');
+      G.lost++; G.lights--;
+    } else {
+      line('good','✦ STAYED ON. '+(G.trust>=80?'All the way to morning.':'It held.'));
+      G.saved++; good=true;
+      if(G.trust>=85) { line('hush','(the porch light comes back on somewhere.)'); if(G.lights<5) G.lights++; }
+    }
+  }
+
+  if(good && c.opens && !G.cases.some(x=>x.addr===c.opens.addr)){
+    G.cases.push({addr:c.opens.addr,answer:c.opens.answer,done:false,note:c.cannotFile?'no record exists':''});
+    line('sys','▸ CASE OPENED: '+c.opens.addr+(c.cannotFile?'  (there is nothing to file)':'  — find the unclaimed name.'));
+  }
+  renderCases(); hud(); idleMeter('LINE CLEARED');
+
+  if(G.lights<=0) return gameOver();
+  setActs([{t:'CLEAR THE LINE',f:()=>desk()}]);
+}
+
+/* ── RECORDS ────────────────────────────────────────────────────────── */
+function unlockRecords(){
+  G.recUnlocked=true;
+  $('#reclocked').style.display='none';
+  $('#q').style.display='block'; $('#recs').style.display='block'; $('#filebox').style.display='block';
+  renderRecs('');
+}
+function renderRecs(q){
+  const el=$('#recs'); el.innerHTML='';
+  q=(q||'').trim().toLowerCase();
+  const hits = q.length<2 ? [] : RECORDS.filter(r=>
+    r.addr.toLowerCase().includes(q)||r.name.toLowerCase().includes(q));
+  if(!hits.length){ el.innerHTML='<div class="none">'+(q.length<2?'type an address…':'no record.')+'</div>'; return; }
+  hits.forEach(r=>{
+    const d=document.createElement('div'); d.className='r';
+    const note=esc(r.note)
+      .replace(/unclaimed/g,'<span class="unc">unclaimed</span>')
+      .replace(/\bclaimed/g,'<span class="clm">claimed</span>')
+      .replace(/OPEN/g,'<span class="unc">OPEN</span>');
+    d.innerHTML='<b>'+esc(r.addr)+'</b><br><span class="nm">'+esc(r.name)+'</span> '+
+      (r.year?('· '+r.year):'')+'<br>'+note;
+    d.querySelector('.nm').onclick=()=>{ G.sel=r.name; $('#selname').textContent=r.name; clickSnd(); };
+    el.appendChild(d);
+  });
+}
+function renderCases(){
+  const el=$('#cases');
+  if(!G.cases.length){ el.innerHTML='<span class="locked">none</span>'; return; }
+  el.innerHTML='';
+  G.cases.forEach(c=>{
+    const d=document.createElement('div'); d.className='c'+(c.done?' done':'');
+    d.innerHTML=esc(c.addr)+'<br><small>'+(c.done?'CLOSED — '+esc(c.filedAs):(c.note||'unclaimed decedent unknown'))+'</small>';
+    el.appendChild(d);
+  });
+}
+function fileIt(){
+  if(!G.recUnlocked) return;
+  if(!G.sel){ line('sys','▸ select a name in the records terminal first.'); return; }
+  const open=G.cases.filter(c=>!c.done);
+  if(!open.length){ line('sys','▸ no open cases.'); return; }
+  // match by whichever open case this name belongs to (by address of the record)
+  const rec=RECORDS.find(r=>r.name===G.sel);
+  const target=open.find(c=>c.addr===rec.addr) || open[0];
+  if(target.answer && G.sel===target.answer){
+    target.done=true; target.filedAs=G.sel; G.filed++;
+    line('good','✦ FILED. '+target.addr+' — '+G.sel+'. Next of kin: recorded. Case closed.');
+    line('hush','(the small municipal sound of a thing becoming a record instead of a rumor.)');
+    blip(523,0.5,0.07,'triangle'); setTimeout(()=>blip(784,0.6,0.06,'triangle'),200);
+    if(G.lights<5) G.lights++;
+  } else if(!target.answer){
+    line('bad','✕ There is nothing at '+target.addr+' to file. It was never a person.');
+  } else {
+    line('bad','✕ WRONG NAME. '+G.sel+' was claimed. You have amended a stranger\'s file for nothing.');
+    G.lights--;
+  }
+  renderCases(); hud();
+  if(G.lights<=0) gameOver();
+}
+
+/* ── NIGHT END / ENDINGS ────────────────────────────────────────────── */
+function endNight(){
+  G.phase='nightend'; setActs([]); idleMeter('OFF SHIFT');
+  line('sys','');
+  line('big','— END OF SHIFT —');
+  line('sys','stayed on: '+G.saved+'   ·   lost: '+G.lost+'   ·   contained: '+G.contained+'   ·   filed: '+G.filed);
+  if(G.night===2 && !G.recUnlocked){
+    line('good','▸ Butler signs you onto the records terminal. "It\'s nine hundred pages. The only one that matters is line nineteen."');
+  }
+  if(G.night>=7) return ending();
+  setActs([{t:'GO HOME. COME BACK AT ELEVEN.',cls:'warm',f:()=>{
+    G.night++; if(G.night===3) unlockRecords(); beginNight();
+  }}]);
+}
+
+function gameOver(){
+  G.phase='over'; setActs([]); stopSilence(); wind(false); idleMeter('LINE DISCONNECTED'); hud();
+  line('sys','');
+  line('big','THE PORCH LIGHTS ARE OUT');
+  line('bad','The county cuts the number on Monday. It is not a decision anyone remembers making.');
+  line('sys','Two hundred kids have that number written in a phone. On Tuesday it rings out.');
+  line('hush','(somewhere, a desk goes green, and nobody is sitting at it, and it is very patient.)');
+  setActs([{t:'RESTART',f:()=>location.reload()}]);
+}
+
+function ending(){
+  clearLog(); idleMeter('END OF SHIFT'); hud();
+  const perfect = G.lost===0;
+  const allFiled = G.cases.filter(c=>c.answer).every(c=>c.done);
+  line('big','LINE NINETEEN');
+  if(perfect && allFiled && G.lights>=5){
+    line('good','You did not lose one.');
+    line('sys','Vance signs at 11:59. Twenty-nine counties come in complete. At 00:00:01 the sound of it working');
+    line('sys','is nothing at all — a room, and a clock rolling over.');
+    line('sys','');
+    line('sys','They run the number in the Herald. Page two, above the fold. Under it, instead of nothing,');
+    line('good','there are names.');
+  } else if(G.lost<=2 && G.lights>=3){
+    line('sys','Vance signs at 11:59. Most of the counties come in complete. Some don\'t.');
+    line('sys','You will hear about those ones for years, at three in the morning, in other people\'s voices.');
+    line('sys','');
+    line('good','But the number stays on. And it has your name under it now, which is the entire trick.');
+  } else {
+    line('bad','Vance signs at 11:59 and it isn\'t enough.');
+    line('sys','Some of what went out on the roster that night was not a person, and nobody it answers to.');
+    line('sys','You keep the desk. You keep the hours. You get very good at the hours.');
+    line('hush','(that is how it happened to the last one, too.)');
+  }
+  line('sys','');
+  line('sys','FINAL — stayed on: '+G.saved+'  ·  lost: '+G.lost+'  ·  contained: '+G.contained+'  ·  filed: '+G.filed+'  ·  porch: '+G.lights+'/5');
+  line('sys','');
+  line('hush','(under it — the hum of a dispatch floor at three in the morning, which is the same note as a porch light.)');
+  setActs([{t:'TAKE THE DESK AGAIN',f:()=>location.reload()}]);
+}
+
+/* ── CLOCK ──────────────────────────────────────────────────────────── */
+let cm=0;
+setInterval(()=>{
+  cm=(cm+1)%180;
+  const h=3+Math.floor(cm/60), m=cm%60;
+  $('#clock').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+},1000);
+
+/* ── KEYS ───────────────────────────────────────────────────────────── */
+document.addEventListener('keydown',e=>{
+  if(document.activeElement===$('#q')) return;
+  const n=parseInt(e.key,10);
+  if(n>=1&&n<=9){ const b=acts().children[n-1]; if(b) b.click(); }
+  if(e.key===' '&&G.typing){ logEl.click(); e.preventDefault(); }
+});
+
+/* ── BOOT ───────────────────────────────────────────────────────────── */
+$('#q').addEventListener('input',e=>renderRecs(e.target.value));
+$('#filebtn').addEventListener('click',fileIt);
+$('#startbtn').addEventListener('click',()=>{
+  audioInit();
+  const t=$('#title'); t.style.transition='opacity .7s'; t.style.opacity=0;
+  setTimeout(()=>{ t.remove(); beginNight(); },700);
+});
+hud(); renderCases();
+
+/* ── TEST SURFACE ───────────────────────────────────────────────────── */
+window.RL={RECORDS,CALLS,NIGHTS,G,
+  validate(){
+    const errs=[];
+    const ids=new Set();
+    CALLS.forEach(c=>{
+      if(ids.has(c.id)) errs.push('duplicate call id: '+c.id);
+      ids.add(c.id);
+      if(!c.beats.length) errs.push(c.id+': no beats');
+      const last=c.beats[c.beats.length-1];
+      if(!last.end) errs.push(c.id+': final beat has no end state');
+      if(c.impostor && last.end!=='taken') errs.push(c.id+': impostor must end in taken');
+      if(!c.impostor && last.end!=='save') errs.push(c.id+': real call must end in save');
+      if(c.impostor && !c.tell) errs.push(c.id+': impostor has no tell');
+      c.beats.forEach((b,i)=>{
+        if(!b.say) errs.push(c.id+' beat '+i+': no line');
+        if(!b.end && (!b.o||b.o.length<2)) errs.push(c.id+' beat '+i+': needs 2+ options');
+        (b.o||[]).forEach(o=>{ if(typeof o.d!=='number') errs.push(c.id+' beat '+i+': option missing trust delta'); });
+      });
+      if(c.opens){
+        const has=RECORDS.some(r=>r.addr===c.opens.addr);
+        if(!has) errs.push(c.id+': opens unknown address '+c.opens.addr);
+        if(c.opens.answer && !RECORDS.some(r=>r.name===c.opens.answer&&r.addr===c.opens.addr))
+          errs.push(c.id+': answer '+c.opens.answer+' not in records for '+c.opens.addr);
+      }
+    });
+    for(let n=1;n<=7;n++){
+      const cs=CALLS.filter(c=>c.night===n);
+      if(!cs.length) errs.push('night '+n+' has no calls');
+      if(!NIGHTS.find(x=>x.n===n)) errs.push('night '+n+' has no briefing');
+    }
+    // every real call must be survivable: best-path trust must stay > 0
+    CALLS.forEach(c=>{
+      let t=60;
+      c.beats.forEach(b=>{ if(b.end)return; const best=Math.max(...b.o.map(o=>o.d)); t=Math.min(100,t+best); });
+      if(t<=0) errs.push(c.id+': unwinnable on best path');
+      let w=60;
+      c.beats.forEach(b=>{ if(b.end)return; const worst=Math.min(...b.o.map(o=>o.d)); w+=worst; });
+      if(!c.impostor && w>0) errs.push(c.id+': cannot fail even on worst path (no stakes)');
+    });
+    return errs;
+  }
+};
+</script>
+</body>
+</html>

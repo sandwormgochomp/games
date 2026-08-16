@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MAKER</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background:#0d0f14; color:#d8dee9;
+    font-family:"Consolas","DejaVu Sans Mono",monospace; font-size:12px;
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+  #top {
+    display:flex; align-items:center; gap:14px; padding:7px 12px;
+    border-bottom:1px solid #232838; background:#141822; flex:0 0 auto;
+  }
+  #top h1 { font-size:16px; letter-spacing:5px; color:#ffd479; font-weight:normal; }
+  #main { flex:1 1 auto; display:flex; min-height:0; }
+  .pane { padding:8px; overflow-y:auto; }
+  #left  { flex:0 0 152px; border-right:1px solid #232838; background:#111520; }
+  #right { flex:0 0 322px; border-left:1px solid #232838; background:#111520; }
+  #mid   { flex:1 1 auto; display:flex; align-items:center; justify-content:center;
+           background:#0a0c11; position:relative; overflow:auto; }
+  canvas { background:#11141b; display:block; cursor:crosshair; }
+  h3 { font-size:10px; letter-spacing:2px; color:#6d7789; font-weight:normal;
+       margin:10px 0 5px; border-bottom:1px solid #1e2330; padding-bottom:3px; }
+  h3:first-child { margin-top:0; }
+  .tool {
+    display:flex; align-items:center; gap:7px; padding:4px 6px; margin-bottom:2px;
+    border:1px solid #262c3c; background:#181d28; cursor:pointer; color:#b6c0d0;
+  }
+  .tool:hover { border-color:#4a86a8; color:#fff; }
+  .tool.sel { border-color:#ffd479; background:#2a2517; color:#ffd479; }
+  .sw { width:15px; height:15px; flex:0 0 15px; border:1px solid #0d0f14; }
+  button {
+    font-family:inherit; font-size:11px; letter-spacing:1px; background:#1d2536;
+    color:#8fd6ff; border:1px solid #3a4a63; padding:5px 11px; cursor:pointer;
+  }
+  button:hover { background:#2a3548; color:#fff; }
+  button.hot { background:#2a2517; border-color:#ffd479; color:#ffd479; }
+  button.play { background:#1b2c1b; border-color:#7fbf7f; color:#7fbf7f; padding:5px 18px; }
+  input, select {
+    font-family:inherit; font-size:11px; background:#141822; color:#d8dee9;
+    border:1px solid #3a4a63; padding:3px 5px;
+  }
+  input[type=number] { width:52px; }
+  #name { width:150px; color:#ffd479; letter-spacing:2px; }
+  .rule {
+    border:1px solid #262c3c; background:#181d28; padding:5px; margin-bottom:5px; position:relative;
+  }
+  .rule select { width:100%; margin-bottom:3px; }
+  .rule .lbl { color:#6d7789; font-size:9px; letter-spacing:2px; }
+  .rule .when { color:#8fd6ff; }
+  .rule .then { color:#ffd479; }
+  /* a real, obvious hit target — the old 13px glyph was almost impossible to click */
+  .rule .x {
+    position:absolute; top:3px; right:3px; width:22px; height:22px; line-height:20px;
+    text-align:center; font-size:15px; cursor:pointer;
+    color:#9aa6b8; background:#241a1e; border:1px solid #4a3640;
+  }
+  .rule .x:hover { color:#fff; background:#8a3a32; border-color:#e07a6a; }
+  .rule .x:active { background:#e07a6a; }
+  .rule.mon { border-left:3px solid #e07a6a; }
+  .rule .who { color:#e07a6a; }
+  .row { display:flex; gap:5px; align-items:center; margin-bottom:4px; }
+  .note { color:#6d7789; font-size:10px; line-height:1.5; }
+  .warn { color:#e0a86a; }
+  #status { margin-left:auto; color:#6d7789; font-size:11px; }
+  #overlay {
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    flex-direction:column; background:rgba(13,15,20,0.86); text-align:center;
+  }
+  #overlay.on { display:flex; }
+  #overlay .big { font-size:30px; letter-spacing:4px; margin-bottom:8px; }
+  #modal {
+    position:fixed; inset:0; background:rgba(10,12,17,0.9); display:none;
+    align-items:center; justify-content:center; z-index:20;
+  }
+  #modal.on { display:flex; }
+  #modalBox { background:#141822; border:1px solid #3a4a63; padding:16px; width:520px; max-height:80vh; overflow:auto; }
+  #modalBox textarea {
+    width:100%; height:110px; background:#0d0f14; color:#8fd6ff; border:1px solid #262c3c;
+    font-family:inherit; font-size:10px; padding:6px; resize:vertical;
+  }
+  .item {
+    display:flex; justify-content:space-between; align-items:center; padding:5px 7px;
+    border:1px solid #262c3c; background:#181d28; margin-bottom:3px; cursor:pointer;
+  }
+  .item:hover { border-color:#4a86a8; }
+  .item small { color:#6d7789; }
+</style>
+</head>
+<body>
+
+<div id="top">
+  <h1>MAKER</h1>
+  <input id="name" maxlength="26" value="MY GAME">
+  <button id="bEdit" class="hot">EDIT</button>
+  <button id="bPlay" class="play">▶ PLAY</button>
+  <button id="bNew">NEW</button>
+  <button id="bSave">SAVE</button>
+  <button id="bLoad">MY GAMES</button>
+  <button id="bEx">EXAMPLES</button>
+  <button id="bShare">SHARE CODE</button>
+  <span id="status"></span>
+</div>
+
+<div id="main">
+  <div id="left" class="pane">
+    <h3>PAINT</h3>
+    <div id="palette"></div>
+    <h3>TOOL</h3>
+    <div id="tools"></div>
+    <h3>WORLD</h3>
+    <div class="row"><label class="note" style="flex:1">Gravity</label>
+      <input type="checkbox" id="sGrav" checked></div>
+    <div class="row"><label class="note" style="flex:1">Speed</label>
+      <input type="number" id="sSpeed" min="1" max="9" step="0.5" value="3"></div>
+    <div class="row"><label class="note" style="flex:1">Lives</label>
+      <input type="number" id="sLives" min="1" max="9" value="3"></div>
+    <div class="row"><label class="note" style="flex:1">Time limit</label>
+      <input type="number" id="sTime" min="0" max="999" value="0"></div>
+    <div class="note">0 = no limit</div>
+  </div>
+
+  <div id="mid">
+    <canvas id="cv"></canvas>
+    <div id="overlay"><div class="big" id="ovBig"></div><div class="note" id="ovSub"></div></div>
+  </div>
+
+  <div id="right" class="pane">
+    <h3>RULES — THIS IS THE GAME</h3>
+    <div class="note" style="margin-bottom:7px">
+      Your level is just scenery until a rule gives it meaning. Change these and you
+      change what game this is.
+    </div>
+    <div id="rules"></div>
+    <div style="display:flex;gap:5px;margin-top:5px">
+      <button id="bAdd" style="flex:1">+ ADD RULE</button>
+      <button id="bClear" title="delete every rule">CLEAR ALL</button>
+    </div>
+
+    <h3 style="margin-top:14px">MONSTER RULES — WHAT THEY DO</h3>
+    <div class="note" style="margin-bottom:7px">
+      Asked of every monster, every frame. Delete a line and that behaviour is simply
+      gone — a walker with no rules just stands there.
+    </div>
+    <div id="mrules"></div>
+    <button id="bAddM" style="width:100%;margin-top:5px">+ ADD MONSTER RULE</button>
+
+    <div id="ruleWarn" class="note warn" style="margin-top:7px"></div>
+  </div>
+</div>
+
+<div id="modal"><div id="modalBox"></div></div>
+
+<script>
+"use strict";
+(function(){
+
+/* ===================== WORLD CONSTANTS ===================== */
+const T = 28, COLS = 30, ROWS = 18;
+const W = COLS*T, H = ROWS*T;
+
+/* ===================== TILES ===================== */
+/* ch is the character used in the shareable text format */
+const TILES = [
+  { id:0,  ch:'.', name:'ERASE',  color:'#11141b', solid:false },
+  { id:1,  ch:'#', name:'WALL',   color:'#39415c', solid:true  },
+  { id:2,  ch:'^', name:'SPIKE',  color:'#e07a6a', solid:false },
+  { id:3,  ch:'o', name:'COIN',   color:'#ffd479', solid:false },
+  { id:4,  ch:'w', name:'WALKER', color:'#e07a6a', solid:false, spawn:'walker' },
+  { id:5,  ch:'f', name:'FLYER',  color:'#c88fe0', solid:false, spawn:'flyer'  },
+  { id:6,  ch:'S', name:'START',  color:'#8fd6ff', solid:false, unique:true },
+  { id:7,  ch:'E', name:'EXIT',   color:'#7fbf7f', solid:false },
+  { id:8,  ch:'k', name:'KEY',    color:'#ffe9a8', solid:false },
+  { id:9,  ch:'D', name:'DOOR',   color:'#a98f5f', solid:true  },
+  { id:10, ch:'b', name:'BOUNCE', color:'#7fe0d0', solid:false },
+  { id:11, ch:'g', name:'GOO',    color:'#5f7f5f', solid:false },
+  { id:12, ch:'c', name:'CHASER', color:'#ff9a5a', solid:false, spawn:'chaser' },
+  { id:13, ch:'t', name:'TURRET', color:'#8f9ec8', solid:false, spawn:'turret' },
+  { id:14, ch:'x', name:'CRATE',  color:'#b08a5a', solid:false, spawn:'crate'  },
+  { id:15, ch:'i', name:'ICE',    color:'#9fd8f0', solid:'gravity' },
+  { id:16, ch:'>', name:'BELT →', color:'#7f8fa8', solid:'gravity' },
+  { id:17, ch:'<', name:'BELT ←', color:'#7f8fa8', solid:'gravity' },
+  { id:18, ch:'~', name:'CRUMBLE',color:'#8a7f6a', solid:true  },
+  { id:19, ch:'P', name:'CHECKPOINT', color:'#7fd0ff', solid:false, unique:false },
+  { id:20, ch:'O', name:'PORTAL', color:'#d08fff', solid:false },
+  { id:21, ch:'h', name:'HEART',  color:'#ff8fa8', solid:false },
+  { id:22, ch:'H', name:'LADDER', color:'#c8a86a', solid:false },
+  { id:23, ch:'W', name:'WATER',  color:'#4a7fc8', solid:false },
+  { id:24, ch:'=', name:'ONE-WAY',color:'#6a8fa8', solid:'oneway' },
+  { id:25, ch:'M', name:'MOVER',  color:'#8fa8c8', solid:false, spawn:'mover' },
+  { id:26, ch:'%', name:'BREAKABLE', color:'#7a6a5a', solid:true },
+  { id:27, ch:'A', name:'UPDRAFT',color:'#a8d8e0', solid:false },
+];
+const TILE = {}; for(const t of TILES) TILE[t.id] = t;
+const BY_CH = {}; for(const t of TILES) BY_CH[t.ch] = t.id;
+
+/* ===================== RULE VOCABULARY ===================== */
+/* Every trigger reads only from the play state; every action only writes to it.
+   That keeps the rule list a complete description of the game's behaviour. */
+const TRIGGERS = [
+  { id:'press_space', label:'SPACE is pressed',        check:P => P.edge.space },
+  { id:'hold_space',  label:'SPACE is held',           check:P => P.key.space },
+  { id:'press_up',    label:'UP is pressed',           check:P => P.edge.up },
+  { id:'touch_spike', label:'you touch a spike',       check:P => P.touch.spike },
+  { id:'touch_enemy', label:'you touch an enemy',      check:P => !!P.touch.enemy },
+  { id:'touch_coin',  label:'you touch a coin',        check:P => P.touch.coin },
+  { id:'touch_key',   label:'you touch a key',         check:P => P.touch.key },
+  { id:'touch_exit',  label:'you touch the exit',      check:P => P.touch.exit },
+  { id:'touch_bounce',label:'you touch a bouncer',     check:P => P.touch.bounce },
+  { id:'touch_goo',   label:'you touch goo',           check:P => P.touch.goo },
+  { id:'land',        label:'you land on the ground',  check:P => P.justLanded },
+  { id:'coins_reach', label:'coins reach',  num:5,     check:(P,n) => P.coins >= n, once:true },
+  { id:'kills_reach', label:'enemies destroyed reach', num:5, check:(P,n) => P.killed >= n, once:true },
+  { id:'enemies_gone',label:'every enemy is destroyed', once:true,
+    check:P => P.enemies.length > 0 && P.enemies.every(e=>e.dead) },
+  { id:'keys_reach',  label:'keys reach',   num:1,     check:(P,n) => P.keys  >= n, once:true },
+  { id:'time_reach',  label:'the clock reaches (sec)', num:20, check:(P,n) => P.time >= n, once:true },
+  { id:'every_sec',   label:'every N seconds', num:3,  check:(P,n) => n>0 && Math.floor(P.time/n) > Math.floor(P.prevTime/n) },
+  { id:'fall_out',    label:'you fall out of the world', check:P => P.y > H + 60 },
+  { id:'lives_zero',  label:'lives run out',           check:P => P.lives <= 0, once:true },
+
+  { id:'game_start',  label:'the game begins',         check:P => P.frames === 1, once:true },
+  { id:'press_down',  label:'DOWN is pressed',         check:P => P.edge.down },
+  { id:'touch_checkpoint', label:'you touch a checkpoint', check:P => P.touch.checkpoint },
+  { id:'touch_portal',label:'you touch a portal',      check:P => P.touch.portal },
+  { id:'touch_heart', label:'you touch a heart',       check:P => P.touch.heart },
+  { id:'touch_crate', label:'you touch a crate',       check:P => P.touch.crate },
+  { id:'touch_ice',   label:'you touch ice',           check:P => P.touch.ice },
+  { id:'touch_belt',  label:'you touch a belt',        check:P => P.touch.belt },
+  { id:'touch_crumble',label:'you stand on crumbling ground', check:P => P.touch.crumble },
+  { id:'touch_shot',  label:'an enemy shot hits you',  check:P => P.touch.shot },
+  { id:'falling',     label:'you are falling',         check:P => !P.onGround && P.vy > 1 },
+  { id:'standing_still', label:'you are standing still', check:P => Math.abs(P.vx) < 0.2 && P.onGround },
+  { id:'enemy_near',  label:'an enemy comes within (tiles)', num:3,
+    check:(P,n) => P.enemies.some(e=>!e.dead && Math.abs(e.x-P.x) < n*T && Math.abs(e.y-P.y) < n*T) },
+  { id:'coins_gone',  label:'every coin is collected', once:true,
+    check:P => P.totalCoins > 0 && P.coins >= P.totalCoins },
+  { id:'lives_below', label:'lives drop below', num:2, check:(P,n) => P.lives < n, once:true },
+
+  { id:'touch_ladder',    label:'you touch a ladder',      check:P => P.touch.ladder },
+  { id:'touch_water',     label:'you are in water',        check:P => P.touch.water },
+  { id:'touch_updraft',   label:'you are in an updraft',   check:P => P.touch.updraft },
+  { id:'touch_mover',     label:'you ride a moving platform', check:P => P.touch.mover },
+  { id:'touch_breakable', label:'you touch a cracked wall',check:P => P.touch.breakable },
+  { id:'shot_hits',       label:'your shot hits an enemy', check:P => P.shotHit },
+  { id:'you_get_hurt',    label:'you take damage',         check:P => P.justHurt },
+  { id:'idle_for',        label:'you do nothing for (sec)', num:3,
+    check:(P,n) => P.idle >= n*60, once:true },
+];
+const ACTIONS = [
+  /* jumps push against gravity, so they still work after a flip */
+  { id:'jump',       label:'jump (from ground)', num:11, run:(P,n)=>{ if(P.onGround){ P.vy = -n*P.gravSign; P.onGround=false; P.jumpsLeft = P.extraJumps; sfx(430,.05);} } },
+  { id:'jump_air',   label:'flap (anywhere)',    num:8,  run:(P,n)=>{ P.vy = -n*P.gravSign; sfx(500,.05); puff(P); } },
+  { id:'double_jump',label:'jump again in mid-air', num:10, run:(P,n)=>{ if(!P.onGround && P.jumpsLeft>0){ P.vy=-n*P.gravSign; P.jumpsLeft--; sfx(560,.05); puff(P);} } },
+  { id:'dash',       label:'dash forward',       num:11, run:(P,n)=>{ P.dashV = n; P.dash = 12; P.invuln=Math.max(P.invuln,12); sfx(300,.06); } },
+  { id:'shoot',      label:'fire a shot',        run:P=>{ if(P.shootCd>0) return; P.shootCd=10;
+                       P.bullets.push({x:P.x+P.w/2, y:P.y+P.h/2, vx:P.face*7, vy:0, life:90}); sfx(760,.04); } },
+  { id:'bounce',     label:'launch upward',      num:17, run:(P,n)=>{ P.vy=-n*P.gravSign; P.onGround=false; sfx(620,.07); puff(P); } },
+  { id:'lose_life',  label:'lose a life',        run:P=>{ if(P.invuln>0) return;
+                       P.lives--; P.invuln=80; P.justHurt = true;
+                       shakeIt(8); sfx(150,.14); boom(P.x+P.w/2,P.y+P.h/2,'#e07a6a',16); respawn(P); } },
+  { id:'gain_life',  label:'gain a life',        run:P=>{ P.lives++; sfx(880,.08); } },
+  { id:'kill_enemy', label:'destroy that enemy', run:P=>{ const e=P.touch.enemy; if(e){ e.dead=true; P.killed++;
+                       boom(e.x+e.w/2, e.y+e.h/2, '#e07a6a', 12); shakeIt(4); sfx(210,.07);} } },
+  { id:'collect',    label:'score a point',      run:P=>{ P.coins++; sfx(900,.05); } },
+  { id:'open_doors', label:'open all doors',     run:P=>{ P.doorsOpen = true; sfx(330,.12); } },
+  { id:'teleport',   label:'go back to the start', run:P=>{ respawn(P); } },
+  { id:'speed_up',   label:'move faster (x1.5)', run:P=>{ P.speedMul = 1.5; } },
+  { id:'add_time',   label:'add seconds',  num:10, run:(P,n)=>{ P.time = Math.max(0, P.time - n); } },
+  { id:'win',        label:'WIN the game',       run:P=>{ if(!P.over){ P.over='win'; sfx(720,.2);} } },
+  { id:'lose',       label:'LOSE the game',      run:P=>{ if(!P.over){ P.over='lose'; sfx(120,.25);} } },
+
+  { id:'set_checkpoint', label:'set the respawn point here', run:P=>{
+      P.spawn = {x:P.x, y:P.y}; sfx(680,.07); boom(P.x+P.w/2,P.y,'#7fd0ff',6); } },
+  { id:'freeze',     label:'freeze enemies (sec)', num:3, run:(P,n)=>{ P.freeze = Math.max(P.freeze, n*60); sfx(340,.1); } },
+  { id:'slow_time',  label:'slow enemies down (sec)', num:3, run:(P,n)=>{ P.slowmo = Math.max(P.slowmo, n*60); sfx(200,.12); } },
+  { id:'clear_enemies', label:'destroy every enemy', run:P=>{
+      for(const e of P.enemies){ if(!e.dead){ e.dead=true; P.killed++; boom(e.x+e.w/2,e.y+e.h/2,'#e07a6a',8); } }
+      shakeIt(9); sfx(180,.2); } },
+  { id:'spawn_enemy', label:'spawn a walker at the start', run:P=>{
+      const s = P.spawn || {x:0,y:0};
+      P.enemies.push(makeEnemy('walker', s.x, s.y));
+      sfx(260,.06); } },
+  { id:'flip_gravity', label:'flip gravity upside down', run:P=>{ P.gravSign *= -1; P.vy = 0; sfx(400,.1); puff(P); } },
+  { id:'shield',     label:'become invulnerable (sec)', num:3, run:(P,n)=>{ P.invuln = Math.max(P.invuln, n*60); sfx(640,.09); } },
+  { id:'burst',      label:'fire a three-way burst', run:P=>{ if(P.shootCd>0) return; P.shootCd = 14;
+      for(const dy of [-2.2, 0, 2.2])
+        P.bullets.push({ x:P.x+P.w/2, y:P.y+P.h/2, vx:P.face*7, vy:dy, life:90 });
+      sfx(700,.06); } },
+  { id:'knockback',  label:'get knocked backwards', run:P=>{ P.vx = -P.face*8; P.vy = -5; P.onGround=false; sfx(240,.07); } },
+  { id:'halt',       label:'stop dead',          run:P=>{ P.vx = 0; P.vy = 0; P.dash = 0; } },
+  { id:'shrink',     label:'shrink',             run:P=>{ resize(P, 12, 14); } },
+  { id:'grow',       label:'grow',               run:P=>{ resize(P, 24, 28); } },
+  { id:'add_points', label:'add points',   num:5, run:(P,n)=>{ P.coins += n; sfx(880,.05); } },
+  { id:'spend_points', label:'spend points', num:5, run:(P,n)=>{ P.coins = Math.max(0, P.coins-n); sfx(300,.06); } },
+  { id:'close_doors',label:'close all doors',    run:P=>{ P.doorsOpen = false; sfx(200,.1); } },
+  { id:'speed_down', label:'move slower (x0.6)', run:P=>{ P.speedMul = 0.6; } },
+
+  { id:'explode',    label:'explode (clears walls and enemies)', num:3, run:(P,n)=>{
+      const cx = P.x+P.w/2, cy = P.y+P.h/2, rad = n*T;
+      for(const e of P.enemies)
+        if(!e.dead && Math.hypot((e.x+e.w/2)-cx, (e.y+e.h/2)-cy) < rad){ e.dead=true; P.killed++; }
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++)
+        if(game.tiles[r*COLS+c]===26 && Math.hypot(c*T+T/2-cx, r*T+T/2-cy) < rad) P.smashed.add(c+','+r);
+      boom(cx,cy,'#ffb45a',26); shakeIt(12); sfx(90,.25); } },
+  { id:'break_walls',label:'smash cracked walls you touch', run:P=>{
+      // reaches the tiles around the player, since a solid wall can never be overlapped
+      const c0=Math.floor((P.x-3)/T), c1=Math.floor((P.x+P.w+2)/T);
+      const r0=Math.floor((P.y-3)/T), r1=Math.floor((P.y+P.h+2)/T);
+      for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+        if(c<0||c>=COLS||r<0||r>=ROWS) continue;
+        if(game.tiles[r*COLS+c]===26 && !P.smashed.has(c+','+r)){
+          P.smashed.add(c+','+r); boom(c*T+T/2,r*T+T/2,'#7a6a5a',10); shakeIt(4); sfx(160,.09); } } } },
+  { id:'magnet',     label:'pull nearby coins to you', num:4, run:(P,n)=>{
+      const cx = P.x+P.w/2, cy = P.y+P.h/2;
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+        const k = c+','+r;
+        if(game.tiles[r*COLS+c]!==3 || P.collected.has(k)) continue;
+        if(Math.hypot(c*T+T/2-cx, r*T+T/2-cy) < n*T){
+          P.collected.add(k); P.coins++; boom(c*T+T/2, r*T+T/2, '#ffd479', 6); sfx(900,.04); } } } },
+  { id:'push_back',  label:'shove every enemy away', num:6, run:(P,n)=>{
+      const cx = P.x+P.w/2, cy = P.y+P.h/2;
+      for(const e of P.enemies){
+        if(e.dead) continue;
+        const dx=(e.x+e.w/2)-cx, dy=(e.y+e.h/2)-cy, d=Math.hypot(dx,dy)||1;
+        e.x += dx/d*n*4; e.y += dy/d*n*4;
+        if(e.dir !== undefined) e.dir = dx >= 0 ? 1 : -1;
+      }
+      shakeIt(5); sfx(280,.09); } },
+  { id:'reverse',    label:'reverse the controls', run:P=>{ P.reversed = !P.reversed; sfx(220,.1); } },
+  { id:'wrap',       label:'wrap around the edges', run:P=>{ P.wrap = true; } },
+  { id:'set_gravity',label:'set gravity strength (%)', num:100, run:(P,n)=>{ P.gravMul = Math.max(0, n)/100; } },
+  { id:'heal_full',  label:'refill your lives',   run:P=>{ P.lives = Math.max(P.lives, game.lives); sfx(840,.1); } },
+  { id:'double_points', label:'double your points', run:P=>{ P.coins *= 2; sfx(920,.08); } },
+  { id:'to_exit',    label:'teleport to the exit', run:P=>{
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(game.tiles[r*COLS+c]===7){
+        P.x = c*T + (T-P.w)/2; P.y = r*T + (T-P.h)/2; boom(P.x,P.y,'#7fbf7f',12); sfx(600,.1); return; } } },
+];
+const TRIG = {}; for(const t of TRIGGERS) TRIG[t.id]=t;
+const ACT  = {}; for(const a of ACTIONS)  ACT[a.id]=a;
+
+/* ===================== MONSTER RULES =====================
+   The same WHEN/THEN idea, asked once per monster per frame. E is the monster being
+   asked, P is the player. Movement actions only set INTENT (a heading, a mode, a
+   flag); the engine integrates once afterwards. That is what stops two rules on the
+   same monster from fighting over its velocity and cancelling each other out. */
+const MONSTERS = [
+  { id:'walker', name:'WALKER', color:'#e07a6a' },
+  { id:'flyer',  name:'FLYER',  color:'#c88fe0' },
+  { id:'chaser', name:'CHASER', color:'#ff9a5a' },
+  { id:'turret', name:'TURRET', color:'#8f9ec8' },
+  { id:'any',    name:'ANY MONSTER', color:'#9aa6b8' },
+];
+const MON = {}; for(const m of MONSTERS) MON[m.id]=m;
+
+function mdist(E,P){ return Math.hypot((P.x+P.w/2)-(E.x+E.w/2), (P.y+P.h/2)-(E.y+E.h/2)); }
+function mSees(E,P,n){
+  if(mdist(E,P) > n*T) return false;
+  // march the centre line — one solid tile in the way and it cannot see you
+  const x0=E.x+E.w/2, y0=E.y+E.h/2, x1=P.x+P.w/2, y1=P.y+P.h/2;
+  const steps = Math.max(2, Math.ceil(Math.hypot(x1-x0,y1-y0)/(T/2)));
+  for(let i=1;i<steps;i++){
+    const x = x0+(x1-x0)*i/steps, y = y0+(y1-y0)*i/steps;
+    if(solidAt(Math.floor(x/T), Math.floor(y/T))) return false;
+  }
+  return true;
+}
+function ledgeAhead(E){
+  const ahead = Math.floor((E.x + ((E.dir||1)>0 ? E.w+2 : -2))/T);
+  const below = Math.floor((E.y + E.h + 2)/T);
+  return !solidAt(ahead, below);
+}
+
+const MTRIGGERS = [
+  { id:'m_always', label:'always',                          check:()=>true },
+  { id:'m_wall',   label:'it hits a wall',                  check:E => !!E.blockedX },
+  { id:'m_ledge',  label:'it reaches the edge of a ledge',  check:E => E.onGround && ledgeAhead(E) },
+  { id:'m_land',   label:'it lands on the ground',          check:E => !!E.justLanded },
+  { id:'m_sees',   label:'it can see you (tiles)',  num:10, check:(E,P,n)=> mSees(E,P,n) },
+  { id:'m_near',   label:'you are nearer than (tiles)', num:4, check:(E,P,n)=> mdist(E,P) <= n*T },
+  { id:'m_far',    label:'you are further than (tiles)', num:8, check:(E,P,n)=> mdist(E,P) > n*T },
+  { id:'m_above',  label:'you are above it',               check:(E,P)=> (P.y+P.h) < E.y+2 },
+  { id:'m_below',  label:'you are below it',               check:(E,P)=> P.y > E.y+E.h-2 },
+  { id:'m_ahead',  label:'you are in front of it',         check:(E,P)=> Math.sign((P.x-E.x)||1) === (E.dir||1) },
+  { id:'m_touch',  label:'it touches you',                 check:(E,P)=> overlaps(P,E) },
+  { id:'m_shot',   label:'it is shot',                     check:E => !!E.hitByShot },
+  { id:'m_stuck',  label:'it has been stuck a second',     check:E => E.stuck > 60 },
+  { id:'m_every',  label:'every N seconds',        num:2,  check:(E,P,n)=> n>0 && Math.floor(P.time/n) > Math.floor(P.prevTime/n) },
+  { id:'m_alone',  label:'it is the last one alive',       check:(E,P)=> P.enemies.filter(o=>!o.dead).length <= 1 },
+];
+
+const MACTIONS = [
+  { id:'m_walk',   label:'keep walking',            run:E=>{ E.move='walk'; } },
+  { id:'m_turn',   label:'turn around',             run:E=>{ E.dir = -(E.dir||1); } },
+  { id:'m_chase',  label:'chase you',               run:E=>{ E.move='chase'; } },
+  { id:'m_flee',   label:'run away from you',       run:E=>{ E.move='flee'; } },
+  { id:'m_fly',    label:'fly straight at you',     run:E=>{ E.move='fly'; } },
+  { id:'m_stop',   label:'stand still',             run:E=>{ E.move='stop'; } },
+  { id:'m_speed',  label:'set its speed (x10)', num:12, run:(E,P,n)=>{ E.speed = Math.max(0,n)/10; } },
+  { id:'m_grav',   label:'obey gravity',            run:E=>{ E.grav=true; } },
+  { id:'m_bob',    label:'float up and down',       run:E=>{ E.bob=true; } },
+  { id:'m_hop',    label:'hop (from the ground)', num:8, run:(E,P,n)=>{
+      if(E.onGround){ E.vy = -n; E.onGround=false; sfx(300,.04); } } },
+  { id:'m_leap',   label:'leap (even in mid-air)', num:8, run:(E,P,n)=>{ E.vy = -n; } },
+  { id:'m_shoot',  label:'shoot at you',            run:(E,P)=>{
+      if(E.cd>0) return; E.cd = E.rate||60;
+      const dx=(P.x+P.w/2)-(E.x+E.w/2), dy=(P.y+P.h/2)-(E.y+E.h/2), d=Math.hypot(dx,dy)||1;
+      P.ebullets.push({ x:E.x+E.w/2-2, y:E.y+E.h/2-2, vx:dx/d*3, vy:dy/d*3, life:220 }); sfx(180,.03); } },
+  { id:'m_shoot_ahead', label:'shoot the way it faces', run:(E,P)=>{
+      if(E.cd>0) return; E.cd = E.rate||60;
+      P.ebullets.push({ x:E.x+E.w/2-2, y:E.y+E.h/2-2, vx:(E.dir||1)*3.4, vy:0, life:220 }); sfx(180,.03); } },
+  { id:'m_rate',   label:'set its fire rate (frames)', num:60, run:(E,P,n)=>{ E.rate = Math.max(6,n); } },
+  { id:'m_die',    label:'be destroyed',            run:(E,P)=>{ if(E.dead) return;
+      E.dead=true; P.killed++; boom(E.x+E.w/2,E.y+E.h/2,'#e07a6a',12); shakeIt(3); sfx(210,.07); } },
+  { id:'m_vanish', label:'disappear quietly',       run:E=>{ if(E.dead) return;
+      E.dead=true; boom(E.x+E.w/2,E.y+E.h/2,'#6d7789',6); } },
+  { id:'m_split',  label:'split in two',            run:(E,P,n,pending)=>{
+      if(E.dead) return;
+      E.dead=true; P.killed++; boom(E.x+E.w/2,E.y+E.h/2,'#ffd479',10); sfx(260,.06);
+      // two generations deep, or one shot quietly fills the screen with confetti
+      if((E.gen||0) >= 2 || !pending) return;
+      for(const d of [-1,1]) pending.push(makeEnemy(E.kind, E.x, E.y, {
+        w:Math.max(9, Math.round(E.w*0.62)), h:Math.max(9, Math.round(E.h*0.62)),
+        dir:d, speed:(E.speed===undefined?1.2:E.speed)*1.35, vy:-3.4, gen:(E.gen||0)+1 })); } },
+  { id:'m_spawn',  label:'spawn a walker here',     run:(E,P,n,pending)=>{
+      if(!pending || pending.length > 40) return;
+      pending.push(makeEnemy('walker', E.x, E.y, { gen:(E.gen||0)+1 })); sfx(260,.05); } },
+  { id:'m_home',   label:'go back where it started', run:E=>{ E.x=E.hx; E.y=E.hy; E.vy=0; } },
+  { id:'m_explode',label:'explode (tiles)',  num:2,  run:(E,P,n)=>{
+      if(E.dead) return;
+      E.dead = true; const R = Math.max(1,n)*T;
+      boom(E.x+E.w/2, E.y+E.h/2, '#ff9a4a', 22); shakeIt(9); sfx(90,.16);
+      for(const o of P.enemies){ if(o===E || o.dead) continue;
+        if(Math.hypot(o.x-E.x, o.y-E.y) <= R){ o.dead=true; P.killed++; boom(o.x+o.w/2,o.y+o.h/2,'#ff9a4a',8); } }
+      if(mdist(E,P) <= R) ACT['lose_life'].run(P); } },
+  { id:'m_hurt',   label:'hurt you',                run:(E,P)=>{ ACT['lose_life'].run(P); } },
+];
+const MTRIG = {}; for(const t of MTRIGGERS) MTRIG[t.id]=t;
+const MACT  = {}; for(const a of MACTIONS)  MACT[a.id]=a;
+
+/* Every monster in the game comes through here, so a monster spawned by a rule is
+   exactly as real as one painted on the map. */
+function makeEnemy(kind, x, y, o){
+  o = o || {};
+  const base = kind==='flyer' ? 1.6 : kind==='chaser' ? 1.15 : 1.2;
+  return { kind, x, y, w:o.w||T-8, h:o.h||T-8,
+    // heading defaults to +1, never random: a monster that starts in a coin-flip
+    // direction makes the same level play differently every single run
+    vx:0, vy:o.vy||0, dir:o.dir||1,
+    speed:o.speed===undefined?base:o.speed,
+    // same reasoning as `dir` above: seed the wing-phase and the first shot off the
+    // spawn position, so replaying a level reproduces it exactly
+    t:((((x*73856093) ^ (y*19349663)) >>> 0) % 628)/100,
+    cd:kind==='turret' ? 40 + ((((x*83492791) ^ (y*29349663)) >>> 0) % 50) : 0,
+    rate:kind==='turret'?80:60, dead:false, onGround:false, justLanded:false,
+    blockedX:false, blockedY:0, stuck:0, lastX:x, hitByShot:false,
+    gen:o.gen||0, hx:x, hy:y };
+}
+
+/* The behaviour every monster ships with. Read top to bottom, these say exactly what
+   walkers, flyers, chasers and turrets did back when their behaviour was hardcoded —
+   the difference is that now you can delete any line of it. */
+function defaultMonsterRules(){
+  return [
+    { who:'walker', when:{id:'m_always'}, then:{id:'m_walk'} },
+    { who:'walker', when:{id:'m_always'}, then:{id:'m_grav'} },
+    { who:'walker', when:{id:'m_wall'},   then:{id:'m_turn'} },
+    { who:'walker', when:{id:'m_ledge'},  then:{id:'m_turn'} },
+    { who:'flyer',  when:{id:'m_always'}, then:{id:'m_walk'} },
+    { who:'flyer',  when:{id:'m_always'}, then:{id:'m_bob'} },
+    { who:'flyer',  when:{id:'m_wall'},   then:{id:'m_turn'} },
+    { who:'chaser', when:{id:'m_always'}, then:{id:'m_grav'} },
+    { who:'chaser', when:{id:'m_always'}, then:{id:'m_chase'} },
+    { who:'chaser', when:{id:'m_wall'},   then:{id:'m_hop', n:8} },
+    { who:'turret', when:{id:'m_sees', n:12}, then:{id:'m_shoot'} },
+    { who:'any',    when:{id:'m_shot'},   then:{id:'m_die'} },
+  ];
+}
+
+/* ===================== GAME DOCUMENT ===================== */
+function blankTiles(){ return new Uint8Array(COLS*ROWS); }
+
+function defaultRules(){
+  return [
+    { when:{id:'press_up'},     then:{id:'jump', n:11} },
+    { when:{id:'press_space'},  then:{id:'jump', n:11} },
+    { when:{id:'touch_coin'},   then:{id:'collect'} },
+    { when:{id:'touch_spike'},  then:{id:'lose_life'} },
+    { when:{id:'touch_enemy'},  then:{id:'lose_life'} },
+    { when:{id:'touch_bounce'}, then:{id:'bounce', n:17} },
+    { when:{id:'touch_key'},    then:{id:'open_doors'} },
+    { when:{id:'fall_out'},     then:{id:'lose_life'} },
+    { when:{id:'touch_exit'},   then:{id:'win'} },
+    { when:{id:'lives_zero'},   then:{id:'lose'} },
+  ];
+}
+
+let game = newGame();
+function newGame(){
+  const g = { name:'MY GAME', gravity:true, speed:3, lives:3, timeLimit:0,
+              tiles:blankTiles(), rules:defaultRules(), mrules:defaultMonsterRules() };
+  // a floor and a start, so a brand new document is immediately playable
+  for(let c=0;c<COLS;c++) g.tiles[(ROWS-1)*COLS+c] = 1;
+  g.tiles[(ROWS-2)*COLS+2] = 6;
+  return g;
+}
+
+const at = (c,r) => (c<0||c>=COLS||r<0||r>=ROWS) ? 1 : game.tiles[r*COLS+c];
+const setAt = (c,r,v) => { if(c>=0&&c<COLS&&r>=0&&r<ROWS) game.tiles[r*COLS+c]=v; };
+
+/* ===================== SERIALISATION ===================== */
+function encode(g){
+  const rows = [];
+  for(let r=0;r<ROWS;r++){
+    let s='';
+    for(let c=0;c<COLS;c++) s += TILE[g.tiles[r*COLS+c]].ch;
+    rows.push(s);
+  }
+  return JSON.stringify({ v:2, name:g.name, gravity:g.gravity, speed:g.speed,
+    lives:g.lives, timeLimit:g.timeLimit, map:rows,
+    rules:g.rules.map(r=>[r.when.id, r.when.n===undefined?null:r.when.n,
+                          r.then.id, r.then.n===undefined?null:r.then.n]),
+    mrules:(g.mrules||[]).map(r=>[r.who, r.when.id, r.when.n===undefined?null:r.when.n,
+                                  r.then.id, r.then.n===undefined?null:r.then.n]) });
+}
+function decode(str){
+  const o = JSON.parse(str);
+  const g = { name:o.name||'UNTITLED', gravity:!!o.gravity, speed:+o.speed||3,
+              lives:+o.lives||3, timeLimit:+o.timeLimit||0,
+              tiles:blankTiles(), rules:[] };
+  for(let r=0;r<ROWS && r<o.map.length;r++)
+    for(let c=0;c<COLS && c<o.map[r].length;c++){
+      const id = BY_CH[o.map[r][c]];
+      g.tiles[r*COLS+c] = id===undefined ? 0 : id;
+    }
+  for(const [wi,wn,ai,an] of (o.rules||[])){
+    if(!TRIG[wi] || !ACT[ai]) continue;             // drop rules we no longer understand
+    const rule = { when:{id:wi}, then:{id:ai} };
+    if(wn !== null && wn !== undefined) rule.when.n = wn;
+    if(an !== null && an !== undefined) rule.then.n = an;
+    g.rules.push(rule);
+  }
+  // a v1 save predates monster rules entirely — give it the stock behaviour back,
+  // which is exactly what it was played with
+  if(!o.mrules) g.mrules = defaultMonsterRules();
+  else {
+    g.mrules = [];
+    for(const [who,wi,wn,ai,an] of o.mrules){
+      if(!MTRIG[wi] || !MACT[ai] || !MON[who]) continue;
+      const rule = { who, when:{id:wi}, then:{id:ai} };
+      if(wn !== null && wn !== undefined) rule.when.n = wn;
+      if(an !== null && an !== undefined) rule.then.n = an;
+      g.mrules.push(rule);
+    }
+  }
+  return g;
+}
+
+/* ===================== PLAY STATE ===================== */
+let mode = 'edit';
+let P = null;
+let shakeAmt = 0;
+const parts = [];
+
+function findStart(){
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(game.tiles[r*COLS+c]===6) return {c,r};
+  return null;
+}
+/* Grow/shrink keeps the player's feet planted, so resizing never buries them in a wall. */
+function resize(p, w, h){
+  const cx = p.x + p.w/2, base = p.y + p.h;
+  const nx = cx - w/2, ny = base - h;
+  if(boxHitsSolid(nx, ny, w, h)) return;      // no room to change size — leave it alone
+  p.x = nx; p.y = ny; p.w = w; p.h = h;
+}
+function respawn(p){
+  if(p.spawn){ p.x = p.spawn.x; p.y = p.spawn.y; }
+  else {
+    const s = findStart() || {c:1,r:ROWS-2};
+    p.x = s.c*T + (T-p.w)/2; p.y = s.r*T + (T-p.h);
+  }
+  p.vx = 0; p.vy = 0; p.dash = 0;
+}
+function startPlay(){
+  const enemies = [], crates = [];
+  const movers = [];
+  let totalCoins = 0;
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const id = game.tiles[r*COLS+c], t = TILE[id];
+    if(id===3) totalCoins++;
+    if(!t.spawn) continue;
+    if(t.spawn==='crate'){
+      crates.push({ x:c*T+2, y:r*T+2, w:T-4, h:T-4, vy:0 });
+    } else if(t.spawn==='mover'){
+      // a moving platform patrols its row until it meets a wall, then turns
+      movers.push({ x:c*T, y:r*T+T-8, w:T, h:8, vx:1.1, hx:c*T, hy:r*T+T-8 });
+    } else {
+      enemies.push(makeEnemy(t.spawn, c*T+4, r*T+4));
+    }
+  }
+  P = {
+    x:0, y:0, w:18, h:22, vx:0, vy:0, face:1, onGround:false,
+    coins:0, keys:0, killed:0, lives:game.lives, time:0, prevTime:0, totalCoins,
+    invuln:0, dash:0, dashV:0, shootCd:0, jumpsLeft:0, extraJumps:1, speedMul:1,
+    doorsOpen:false, over:null, enemies, crates, movers, bullets:[], ebullets:[],
+    collected:new Set(), broken:new Map(), smashed:new Set(), spawn:null,
+    freeze:0, slowmo:0, gravSign:1, portalCd:0, inGoo:false, onIce:false,
+    gravMul:1, reversed:false, wrap:false, idle:0, shotHit:false, justHurt:false,
+    onLadder:false, inWater:false,
+    key:{left:false,right:false,up:false,down:false,space:false},
+    edge:{}, touch:{}, justLanded:false, frames:0,
+  };
+  respawn(P);
+  for(const r of game.rules) r._done = false;
+  parts.length = 0;
+  mode = 'play';
+  syncButtons();
+}
+function stopPlay(){ mode='edit'; P=null; syncButtons(); overlay(false); draw(); }
+
+/* ===================== PHYSICS ===================== */
+function solidAt(c,r){
+  const id = at(c,r);
+  if(id===9) return !(P && P.doorsOpen);                       // door
+  if(id===18) return !(P && P.broken.get(c+','+r) === 'gone');  // crumbled away
+  if(id===26) return !(P && P.smashed.has(c+','+r));            // breakable wall
+  const s = TILE[id] ? TILE[id].solid : false;
+  // one-way platforms are solid only from above, so you can jump up through them
+  if(s === 'oneway'){
+    if(!P || !game.gravity) return false;
+    return P.gravSign > 0 ? (P.vy >= 0 && P.y + P.h <= r*T + 8)
+                          : (P.vy <= 0 && P.y >= (r+1)*T - 8);
+  }
+  // ice and belts are floor surfaces in a gravity game, and walkable ground in a
+  // top-down one — otherwise they would be unusable in half of all games
+  if(s === 'gravity') return game.gravity;
+  return s;
+}
+function boxHitsSolid(x,y,w,h){
+  const c0=Math.floor(x/T), c1=Math.floor((x+w-1)/T);
+  const r0=Math.floor(y/T), r1=Math.floor((y+h-1)/T);
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+    if(c<0||c>=COLS) return true;
+    if(r<0) continue;                       // open sky
+    if(r>=ROWS) continue;                   // open pit, so fall_out can fire
+    if(solidAt(c,r)) return true;
+  }
+  return false;
+}
+function moveAxis(o, dx, dy){
+  let landed = false;
+  o.blockedY = 0;
+  const sx = Math.sign(dx);
+  for(let i=0;i<Math.abs(dx);i++){
+    if(boxHitsSolid(o.x+sx, o.y, o.w, o.h)){ o.vx = 0; o.blockedX = true; break; }
+    o.x += sx;
+  }
+  const sy = Math.sign(dy);
+  for(let i=0;i<Math.abs(dy);i++){
+    if(boxHitsSolid(o.x, o.y+sy, o.w, o.h)){
+      if(sy>0) landed = true;
+      o.blockedY = sy; o.vy = 0; break;
+    }
+    o.y += sy;
+  }
+  return landed;
+}
+/* which non-solid tiles is the player overlapping right now */
+function overlapTiles(o){
+  const out = [];
+  const c0=Math.floor(o.x/T), c1=Math.floor((o.x+o.w-1)/T);
+  const r0=Math.floor(o.y/T), r1=Math.floor((o.y+o.h-1)/T);
+  for(let r=r0;r<=r1;r++) for(let c=c0;c<=c1;c++){
+    if(c<0||c>=COLS||r<0||r>=ROWS) continue;
+    out.push({c, r, id:game.tiles[r*COLS+c]});
+  }
+  return out;
+}
+const overlaps = (a,b) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+
+/* Crates are solid to the player but shovable. If a crate cannot move — wall, or
+   another crate behind it — the player is pushed back out instead. */
+function crateBlocked(cr, dx, crates){
+  if(boxHitsSolid(cr.x+dx, cr.y, cr.w, cr.h)) return true;
+  for(const o of crates){
+    if(o === cr) continue;
+    if(overlaps({x:cr.x+dx, y:cr.y, w:cr.w, h:cr.h}, o)) return true;
+  }
+  return false;
+}
+function pushCrates(p){
+  if(!P.crates.length) return;
+  for(const cr of P.crates){
+    if(!overlaps(p, cr)) continue;
+    P._crateHit = true;
+    // resolve along whichever axis is least overlapped, so you can also stand on one
+    const dxL = (cr.x + cr.w) - p.x, dxR = (p.x + p.w) - cr.x;
+    const dyT = (cr.y + cr.h) - p.y, dyB = (p.y + p.h) - cr.y;
+    const minX = Math.min(dxL, dxR), minY = Math.min(dyT, dyB);
+    if(minX <= minY){
+      const dir = dxR < dxL ? 1 : -1;               // player is pushing this way
+      // Move the crate by the FULL depth we penetrated this frame, a pixel at a time.
+      // Nudging it only 1px per frame lets a faster player walk straight through it.
+      let moved = 0;
+      const pen = Math.ceil(minX);
+      for(let i=0;i<pen;i++){
+        if(crateBlocked(cr, dir, P.crates)) break;
+        cr.x += dir; moved++;
+      }
+      const remain = minX - moved;
+      if(remain > 0){ p.x -= dir * remain; p.vx = 0; }   // crate is stuck: shove the player back
+    } else {
+      if(dyB < dyT){ p.y = cr.y - p.h; p.vy = 0; p.blockedY = 1; }   // standing on it
+      else { p.y = cr.y + cr.h; p.vy = 0; p.blockedY = -1; }
+    }
+  }
+}
+
+/* ===================== SIMULATION ===================== */
+function step(){
+  if(!P || P.over) return;
+  P.frames++;
+  P.prevTime = P.time;
+  P.time += 1/60;
+  P._crateHit = false;
+  P.shotHit = false; P.justHurt = false;
+
+  // crates fall under gravity, so you can drop them into pits and stand on them
+  if(game.gravity) for(const cr of P.crates){
+    cr.vy = Math.min(cr.vy + 0.62, 13);
+    const before = cr.y;
+    moveAxis(cr, 0, cr.vy);
+    if(cr.y === before) cr.vy = 0;
+  }
+
+  const K = P.key, prev = P.prevKey || {};
+  P.edge = { space: K.space && !prev.space, up: K.up && !prev.up, down: K.down && !prev.down };
+  P.prevKey = Object.assign({}, K);
+
+  const spd = game.speed * P.speedMul * (P.inGoo ? 0.45 : 1) * (P.inWater ? 0.7 : 1);
+  const drag = P.onIce ? 0.985 : (game.gravity ? 0.6 : 0.4);   // ice keeps your momentum
+  // "reverse the controls" swaps left and right at the point of reading them,
+  // so everything downstream — facing, dashing, shooting — follows along
+  const KL = P.reversed ? K.right : K.left, KR = P.reversed ? K.left : K.right;
+  if(KL)  { P.vx = P.onIce ? Math.max(-spd, P.vx - 0.35) : -spd; P.face = -1; }
+  else if(KR){ P.vx = P.onIce ? Math.min(spd, P.vx + 0.35) : spd; P.face = 1; }
+  else P.vx *= drag;
+
+  if(game.gravity){
+    if(P.onLadder){
+      // on a ladder gravity stops and up/down climb instead
+      P.vy = K.up ? -spd : K.down ? spd : 0;
+    } else {
+      const g = 0.62 * P.gravSign * P.gravMul * (P.inWater ? 0.35 : 1);
+      const cap = P.inWater ? 4 : 13;
+      P.vy = P.gravSign > 0 ? Math.min(P.vy + g, cap) : Math.max(P.vy + g, -cap);
+      if(P.inWater && K.up) P.vy -= 0.55;          // swim upward
+    }
+  } else {
+    if(K.up) P.vy = -spd; else if(K.down) P.vy = spd; else P.vy *= 0.4;
+  }
+  if(P.updraft) P.vy -= 0.95 * P.gravSign;         // blown along the gravity axis
+  if(P.dash>0){ P.dash--; P.vx = P.face * P.dashV; if(game.gravity) P.vy = Math.min(P.vy, 0.5); }
+  P.vx += P.beltPush || 0;
+
+  moveAxis(P, P.vx, P.vy);
+  pushCrates(P);
+
+  /* moving platforms: they carry you, and they never grind you into a wall */
+  for(const m of P.movers){
+    if(boxHitsSolid(m.x + m.vx, m.y, m.w, m.h)) m.vx *= -1;
+    const riding = P.movers && P.vy >= 0 &&
+      P.x < m.x + m.w && P.x + P.w > m.x &&
+      Math.abs((P.y + P.h) - m.y) <= 3;
+    m.x += m.vx;
+    if(riding){
+      P.touch.moverHit = true;
+      if(!boxHitsSolid(P.x + m.vx, P.y, P.w, P.h)) P.x += m.vx;
+      P.y = m.y - P.h; P.vy = 0; P.blockedY = 1;
+    }
+  }
+
+  /* Wrapping sends you out one side and back in the other. It has to fire AT the
+     edge, not past it — the world border is solid, so you never actually get past it. */
+  if(P.wrap){
+    if(P.x <= 1 && P.vx < 0) P.x = W - P.w - 2;
+    else if(P.x + P.w >= W - 1 && P.vx > 0) P.x = 2;
+  }
+  const landed = game.gravity ? (P.blockedY === P.gravSign) : (P.blockedY !== 0);
+  P.justLanded = landed && !P.onGround;
+  P.onGround = landed || (game.gravity && boxHitsSolid(P.x, P.y + P.gravSign, P.w, P.h));
+  if(P.onGround) P.jumpsLeft = P.extraJumps;
+
+  /* ---- gather what the player is touching, for the triggers to read ---- */
+  const tc = { spike:false, coin:false, key:false, exit:false, bounce:false, goo:false,
+               checkpoint:false, portal:false, heart:false, ice:false, belt:false,
+               crumble:false, shot:false, crate:!!P._crateHit, enemy:null,
+               ladder:false, water:false, updraft:false, breakable:false,
+               mover:!!P.touch.moverHit };
+  let belt = 0, onIce = false, portalCell = null;
+  // the tile you are standing ON matters as much as the ones you overlap
+  const cells = overlapTiles(P);
+  if(game.gravity){
+    const fr = Math.floor((P.y + P.h + 1)/T);
+    for(let c=Math.floor(P.x/T); c<=Math.floor((P.x+P.w-1)/T); c++)
+      if(c>=0 && c<COLS && fr>=0 && fr<ROWS) cells.push({c, r:fr, id:game.tiles[fr*COLS+c], under:true});
+  }
+  for(const t of cells){
+    const k = t.c+','+t.r;
+    if(t.id===2 && !t.under) tc.spike = true;
+    else if(t.id===3 && !t.under && !P.collected.has(k)){ tc.coin = true; P.collected.add(k); }
+    else if(t.id===8 && !t.under && !P.collected.has(k)){ tc.key = true; P.collected.add(k); P.keys++; }
+    else if(t.id===21 && !t.under && !P.collected.has(k)){ tc.heart = true; P.collected.add(k); }
+    else if(t.id===7 && !t.under) tc.exit = true;
+    else if(t.id===10 && !t.under) tc.bounce = true;
+    else if(t.id===11 && !t.under) tc.goo = true;
+    else if(t.id===19 && !t.under) tc.checkpoint = true;
+    else if(t.id===20 && !t.under){ tc.portal = true; portalCell = t; }
+    else if(t.id===22 && !t.under) tc.ladder = true;
+    else if(t.id===23 && !t.under) tc.water = true;
+    else if(t.id===27 && !t.under) tc.updraft = true;
+    // (a solid cracked wall can never be overlapped — handled by proximity below)
+    else if(t.id===15){ tc.ice = true; if(t.under || !game.gravity) onIce = true; }
+    else if(t.id===16){ tc.belt = true; if(t.under || !game.gravity) belt =  0.9; }
+    else if(t.id===17){ tc.belt = true; if(t.under || !game.gravity) belt = -0.9; }
+    else if(t.id===18 && t.under){
+      tc.crumble = true;
+      const st = P.broken.get(k);
+      if(st === undefined) P.broken.set(k, 45);
+      else if(st !== 'gone'){
+        if(st <= 0){ P.broken.set(k, 'gone'); boom(t.c*T+T/2, t.r*T+T/2, '#8a7f6a', 10); shakeIt(3); }
+        else P.broken.set(k, st-1);
+      }
+    }
+  }
+  // A cracked wall is solid, so you can never stand inside one. "Touching" it means
+  // being right up against it — check the tiles all around the player instead.
+  {
+    const c0 = Math.floor((P.x - 3)/T), c1 = Math.floor((P.x + P.w + 2)/T);
+    const r0 = Math.floor((P.y - 3)/T), r1 = Math.floor((P.y + P.h + 2)/T);
+    for(let r=r0;r<=r1 && !tc.breakable;r++) for(let c=c0;c<=c1;c++)
+      if(at(c,r)===26 && !P.smashed.has(c+','+r)){ tc.breakable = true; break; }
+  }
+
+  P.inGoo = tc.goo; P.onIce = onIce; P.beltPush = belt;
+  P.onLadder = tc.ladder; P.inWater = tc.water; P.updraft = tc.updraft;
+
+  // "you do nothing for N seconds" — any input at all resets the clock
+  P.idle = (K.left||K.right||K.up||K.down||K.space) ? 0 : P.idle + 1;
+
+  /* portals move you to the next portal on the map */
+  if(P.portalCd > 0) P.portalCd--;
+  if(portalCell && P.portalCd === 0){
+    const others = [];
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++)
+      if(game.tiles[r*COLS+c]===20 && !(c===portalCell.c && r===portalCell.r)) others.push({c,r});
+    if(others.length){
+      const d = others[0];
+      P.x = d.c*T + (T-P.w)/2; P.y = d.r*T + (T-P.h)/2;
+      P.portalCd = 30; boom(P.x+P.w/2, P.y+P.h/2, '#d08fff', 12); sfx(560,.09);
+    }
+  }
+  if(tc.checkpoint) P.spawn = { x:P.x, y:P.y };   // checkpoints always move the respawn
+
+  /* ---- enemies ---- */
+  if(P.freeze > 0) P.freeze--;
+  if(P.slowmo > 0) P.slowmo--;
+  const frozen = P.freeze > 0;
+  const halfSpeed = P.slowmo > 0 && (P.frames % 2 === 0);   // slow-mo skips every other tick
+  const enemiesMove = !frozen && !halfSpeed;
+
+  /* THE MONSTER RULES ARE THE MONSTERS. Nothing below decides how a walker behaves —
+     it asks the rule list, and the rule list is the maker's to rewrite. */
+  const spawned = [];
+  for(const e of P.enemies){
+    if(e.dead) continue;
+    if(enemiesMove){
+      runMonsterRules(e, spawned);
+      if(!e.dead) integrateMonster(e);
+      if(e.cd > 0) e.cd--;
+      e.hitByShot = false;         // cleared AFTER the rules read it, set again by bullets below
+    }
+    if(!e.dead && overlaps(P,e)) tc.enemy = e;
+  }
+  for(const e of spawned) P.enemies.push(e);
+
+  /* ---- enemy shots ---- */
+  for(const b of P.ebullets){
+    if(b.life<=0) continue;
+    if(halfSpeed) continue;
+    b.life--; b.x += b.vx; b.y += b.vy;
+    if(boxHitsSolid(b.x, b.y, 4, 4)){ b.life = 0; boom(b.x,b.y,'#6d7789',3); continue; }
+    if(overlaps({x:b.x,y:b.y,w:4,h:4}, P)){ b.life = 0; tc.shot = true; boom(b.x,b.y,'#ff8f6a',6); }
+  }
+  P.ebullets = P.ebullets.filter(b=>b.life>0);
+  P.touch = tc;
+
+  /* ---- bullets ---- */
+  for(const b of P.bullets){
+    if(b.life<=0) continue;
+    b.life--; b.x += b.vx; b.y += b.vy;
+    if(boxHitsSolid(b.x, b.y, 4, 4)){ b.life = 0; boom(b.x,b.y,'#6d7789',3); continue; }
+    for(const e of P.enemies){
+      if(e.dead) continue;
+      if(overlaps({x:b.x,y:b.y,w:4,h:4}, e)){
+        // a shot no longer kills on its own — it flags the monster, and a monster
+        // rule ("WHEN it is shot THEN ...") decides what being shot means
+        e.hitByShot = true; b.life = 0; P.shotHit = true;
+        boom(e.x+e.w/2, e.y+e.h/2, '#ffd479', 8);
+        break;
+      }
+    }
+  }
+  P.bullets = P.bullets.filter(b=>b.life>0);
+
+  /* ---- THE RULES ARE THE ENGINE ---- */
+  for(const rule of game.rules){
+    const trig = TRIG[rule.when.id], act = ACT[rule.then.id];
+    if(!trig || !act) continue;
+    const n = rule.when.n === undefined ? (trig.num||0) : rule.when.n;
+    let fired = false;
+    try { fired = !!trig.check(P, n); } catch(e){ fired = false; }
+    if(!fired){ if(trig.once) rule._done = false; continue; }
+    if(trig.once){ if(rule._done) continue; rule._done = true; }
+    const an = rule.then.n === undefined ? (act.num||0) : rule.then.n;
+    try { act.run(P, an); } catch(e){}
+    if(P.over) break;
+  }
+
+  if(P.invuln>0) P.invuln--;
+  if(P.shootCd>0) P.shootCd--;
+  if(game.timeLimit>0 && P.time>=game.timeLimit && !P.over) P.over='lose';
+
+  for(const p of parts){ p.x+=p.vx; p.y+=p.vy; p.vy+=0.14; p.life--; }
+  while(parts.length && parts[0].life<=0) parts.shift();
+  if(shakeAmt>0) shakeAmt *= 0.85;
+
+  if(P.over) showResult();
+}
+
+/* ---- the monster rule engine ---- */
+function runMonsterRules(E, spawned){
+  E.move = null; E.grav = false; E.bob = false;
+  // blockedX is NOT cleared here — it is set during last frame's move, and clearing it
+  // before the triggers run is exactly what stops "it hits a wall" from ever firing
+  for(const rule of (game.mrules||[])){
+    if(rule.who !== 'any' && rule.who !== E.kind) continue;
+    const trig = MTRIG[rule.when.id], act = MACT[rule.then.id];
+    if(!trig || !act) continue;
+    const wn = rule.when.n === undefined ? (trig.num||0) : rule.when.n;
+    let fired = false;
+    try { fired = !!trig.check(E, P, wn); } catch(err){ fired = false; }
+    if(!fired) continue;
+    const an = rule.then.n === undefined ? (act.num||0) : rule.then.n;
+    try { act.run(E, P, an, spawned); } catch(err){}
+    if(E.dead) return;             // a dead monster stops listening
+  }
+}
+
+function integrateMonster(E){
+  const sp = E.speed === undefined ? 1.2 : E.speed;
+  const cx = P.x+P.w/2 - (E.x+E.w/2), cy = P.y+P.h/2 - (E.y+E.h/2);
+  const d = Math.hypot(cx,cy) || 1;
+  if(E.move === 'chase' || E.move === 'flee' || E.move === 'fly'){
+    const s = E.move === 'flee' ? -1 : 1;
+    E.dir = Math.sign(cx*s) || E.dir || 1;
+    E.vx = cx/d * sp * s;
+    // in a top-down game, and for anything flying, the vertical is chased too
+    if(E.move === 'fly' || !game.gravity) E.vy = cy/d * sp * s;
+  } else if(E.move === 'walk'){
+    E.vx = (E.dir||1) * sp;
+  } else {
+    E.vx = 0;      // no rule asked it to move, so it does not move. That is the point.
+  }
+  if(E.grav && game.gravity) E.vy = Math.min(E.vy + 0.62, 13);
+  else if(E.move !== 'fly' && !(E.move && !game.gravity)) E.vy *= 0.86;  // bleed off a hop
+
+  const before = E.x;
+  E.blockedX = false;                          // cleared here, then set by the move below
+  const landed = moveAxis(E, E.vx, E.vy);
+  E.justLanded = landed && !E.onGround;
+  E.onGround = landed || E.blockedY === 1;
+  if(E.bob){
+    E.t += 0.05;
+    const ny = E.hy + Math.sin(E.t)*T*1.6;
+    if(!boxHitsSolid(E.x, ny, E.w, E.h)) E.y = ny;
+  }
+  E.stuck = Math.abs(E.x - before) < 0.25 ? E.stuck+1 : 0;
+}
+
+function boom(x,y,color,n){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, s=0.5+Math.random()*2.6;
+    parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:16+Math.random()*16,color});
+  }
+  while(parts.length>400) parts.shift();
+}
+function puff(p){ boom(p.x+p.w/2, p.y+p.h, '#8fd6ff', 5); }
+function shakeIt(n){ shakeAmt = Math.max(shakeAmt, n); }
+
+let actx=null;
+function sfx(f,d){
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type='square'; o.frequency.value=f; g.gain.value=0.025;
+    o.connect(g); g.connect(actx.destination); o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+d);
+    o.stop(actx.currentTime+d+0.02);
+  }catch(e){}
+}
+
+/* ===================== VALIDATION ===================== */
+/* Tells the maker what their game is missing, without ever refusing to run it. */
+function problems(){
+  const out = [];
+  if(!findStart()) out.push('No START placed — the player has nowhere to spawn.');
+  const acts = new Set(game.rules.map(r=>r.then.id));
+  const trigs = new Set(game.rules.map(r=>r.when.id));
+  if(!acts.has('win')) out.push('No rule can WIN — this game cannot be finished.');
+  if(game.gravity && !acts.has('jump') && !acts.has('jump_air') && !acts.has('double_jump') && !acts.has('bounce'))
+    out.push('Gravity is on but nothing makes you jump.');
+  let coins=0, exits=0, spikes=0, enemies=0, portals=0;
+  for(const v of game.tiles){
+    if(v===3)coins++; else if(v===7)exits++; else if(v===2)spikes++;
+    else if(v===4||v===5||v===12||v===13)enemies++;
+    else if(v===20)portals++;
+  }
+  if(portals === 1) out.push('A lone PORTAL has nowhere to send you — portals work in pairs.');
+  if(trigs.has('touch_exit') && exits===0) out.push('A rule waits on the EXIT, but you have not placed one.');
+  if(trigs.has('enemies_gone') && enemies===0) out.push('A rule waits for every enemy to die, but there are none to kill.');
+  for(const r of game.rules){
+    if(r.when.id==='coins_reach' && (r.when.n||0) > coins)
+      out.push(`A rule needs ${r.when.n} coins but only ${coins} ${coins===1?'is':'are'} on the map.`);
+    if(r.when.id==='kills_reach' && (r.when.n||0) > enemies)
+      out.push(`A rule needs ${r.when.n} kills but only ${enemies} ${enemies===1?'enemy is':'enemies are'} on the map.`);
+    if(r.when.id==='keys_reach'){
+      let k=0; for(const v of game.tiles) if(v===8) k++;
+      if((r.when.n||0) > k) out.push(`A rule needs ${r.when.n} keys but only ${k} ${k===1?'is':'are'} on the map.`);
+    }
+  }
+  // monster rules: a monster with no rules is furniture, and a gun with nothing
+  // listening for "it is shot" fires blanks
+  const mr = game.mrules || [];
+  const KIND_TILE = { walker:4, flyer:5, chaser:12, turret:13 };
+  const placed = new Set();
+  for(const v of game.tiles) for(const k in KIND_TILE) if(KIND_TILE[k]===v) placed.add(k);
+  for(const k of placed){
+    if(!mr.some(r => r.who===k || r.who==='any'))
+      out.push(`${k.toUpperCase()}S are on the map but no monster rule tells them what to do.`);
+  }
+  if((acts.has('shoot') || acts.has('burst')) && !mr.some(r=>r.when.id==='m_shot') && placed.size)
+    out.push('You can shoot, but no monster rule answers "it is shot" — your shots do nothing.');
+  return out;
+}
+
+/* ===================== RENDER ===================== */
+const cv = document.getElementById('cv');
+cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+
+function drawTile(id, x, y){
+  const t = TILE[id];
+  if(!t || id===0) return;
+  if(id===1){ ctx.fillStyle=t.color; ctx.fillRect(x,y,T,T);
+              ctx.fillStyle='#4a5470'; ctx.fillRect(x,y,T,3); return; }
+  if(id===9){ const open = P && P.doorsOpen;
+    ctx.globalAlpha = open?0.22:1; ctx.fillStyle=t.color; ctx.fillRect(x+1,y,T-2,T);
+    ctx.fillStyle='#0d0f14'; ctx.fillRect(x+T-9,y+T/2-2,4,4); ctx.globalAlpha=1; return; }
+  if(id===2){ ctx.fillStyle=t.color; ctx.beginPath();
+    ctx.moveTo(x,y+T); ctx.lineTo(x+T/2,y+5); ctx.lineTo(x+T,y+T); ctx.closePath(); ctx.fill(); return; }
+  if(id===3){ const b = P ? Math.sin(P.time*5+x)*2 : 0;
+    ctx.fillStyle=t.color; ctx.beginPath(); ctx.arc(x+T/2,y+T/2+b,6,0,7); ctx.fill();
+    ctx.fillStyle='#fff6d8'; ctx.fillRect(x+T/2-2,y+T/2-4+b,2,4); return; }
+  if(id===8){ ctx.fillStyle=t.color; ctx.beginPath(); ctx.arc(x+T/2-3,y+T/2,5,0,7); ctx.fill();
+    ctx.fillRect(x+T/2+1,y+T/2-2,9,4); ctx.fillRect(x+T/2+7,y+T/2,3,5); return; }
+  if(id===7){ ctx.fillStyle=t.color; ctx.fillRect(x+2,y+2,T-4,T-4);
+    ctx.fillStyle='#0d0f14'; ctx.fillRect(x+7,y+7,T-14,T-14);
+    ctx.fillStyle=t.color; ctx.fillRect(x+11,y+11,T-22,T-22); return; }
+  if(id===6){ ctx.strokeStyle=t.color; ctx.lineWidth=2; ctx.strokeRect(x+3,y+3,T-6,T-6);
+    ctx.fillStyle=t.color; ctx.font='11px Consolas'; ctx.textAlign='center';
+    ctx.fillText('S', x+T/2, y+T/2+4); ctx.textAlign='left'; return; }
+  if(id===10){ ctx.fillStyle=t.color; ctx.fillRect(x+2,y+T-9,T-4,7);
+    ctx.fillStyle='#a8fff0'; ctx.fillRect(x+2,y+T-9,T-4,2); return; }
+  if(id===11){ ctx.fillStyle=t.color; ctx.globalAlpha=.55; ctx.fillRect(x,y+4,T,T-4);
+    ctx.globalAlpha=1; ctx.fillStyle='#7fa87f'; ctx.fillRect(x,y+4,T,2); return; }
+  if(id===15){                              // ice
+    ctx.fillStyle=t.color; ctx.globalAlpha=.75; ctx.fillRect(x,y,T,T); ctx.globalAlpha=1;
+    ctx.fillStyle='#e8f8ff'; ctx.fillRect(x,y,T,3);
+    ctx.globalAlpha=.5; ctx.fillRect(x+4,y+7,T-14,2); ctx.globalAlpha=1; return;
+  }
+  if(id===16||id===17){                     // belts
+    ctx.fillStyle='#2e3550'; ctx.fillRect(x,y,T,T);
+    ctx.fillStyle=t.color; ctx.fillRect(x,y,T,5);
+    ctx.fillStyle='#0d0f14';
+    const dir = id===16 ? 1 : -1;
+    for(let i=0;i<3;i++){
+      const bx = x + 4 + i*8;
+      ctx.beginPath();
+      ctx.moveTo(bx + (dir>0?0:5), y+1); ctx.lineTo(bx + (dir>0?5:0), y+2.5);
+      ctx.lineTo(bx + (dir>0?0:5), y+4); ctx.fill();
+    }
+    return;
+  }
+  if(id===18){                              // crumbling ground
+    const st = P && P.broken.get((x/T)+','+(y/T));
+    if(st === 'gone') return;
+    ctx.globalAlpha = (typeof st === 'number') ? 0.45 + 0.55*(st/45) : 1;
+    ctx.fillStyle=t.color; ctx.fillRect(x,y,T,T);
+    ctx.fillStyle='#0d0f14';
+    ctx.fillRect(x+5,y+6,2,T-12); ctx.fillRect(x+15,y+3,2,T-8); ctx.fillRect(x+21,y+9,2,T-14);
+    ctx.globalAlpha=1; return;
+  }
+  if(id===19){                              // checkpoint flag
+    ctx.fillStyle='#4a5266'; ctx.fillRect(x+6,y+4,2,T-8);
+    ctx.fillStyle=t.color; ctx.beginPath();
+    ctx.moveTo(x+8,y+5); ctx.lineTo(x+T-5,y+9); ctx.lineTo(x+8,y+13); ctx.fill(); return;
+  }
+  if(id===20){                              // portal
+    const ph = P ? Math.sin(P.time*4)*2 : 0;
+    ctx.strokeStyle=t.color; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.ellipse(x+T/2, y+T/2, 6.5+ph*0.4, 10, 0, 0, 7); ctx.stroke();
+    ctx.globalAlpha=.35; ctx.fillStyle=t.color;
+    ctx.beginPath(); ctx.ellipse(x+T/2, y+T/2, 5, 8.5, 0, 0, 7); ctx.fill();
+    ctx.globalAlpha=1; return;
+  }
+  if(id===21){                              // heart
+    const b = P ? Math.sin(P.time*5)*1.5 : 0;
+    ctx.fillStyle=t.color;
+    ctx.beginPath(); ctx.arc(x+T/2-3.5, y+T/2-2+b, 4, 0, 7);
+    ctx.arc(x+T/2+3.5, y+T/2-2+b, 4, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x+T/2-7.5, y+T/2-1+b);
+    ctx.lineTo(x+T/2, y+T/2+8+b); ctx.lineTo(x+T/2+7.5, y+T/2-1+b); ctx.fill(); return;
+  }
+  if(id===14){                              // crate (editor marker)
+    ctx.fillStyle=t.color; ctx.fillRect(x+2,y+2,T-4,T-4);
+    ctx.strokeStyle='#6b5334'; ctx.lineWidth=2;
+    ctx.strokeRect(x+3,y+3,T-6,T-6);
+    ctx.beginPath(); ctx.moveTo(x+3,y+3); ctx.lineTo(x+T-3,y+T-3);
+    ctx.moveTo(x+T-3,y+3); ctx.lineTo(x+3,y+T-3); ctx.stroke(); return;
+  }
+  if(id===13){                              // turret
+    ctx.fillStyle=t.color; ctx.fillRect(x+4,y+7,T-8,T-11);
+    ctx.fillStyle='#5f6a8a'; ctx.fillRect(x+T/2-3,y+2,6,8);
+    ctx.fillStyle='#ffd479'; ctx.fillRect(x+T/2-2,y+13,4,4); return;
+  }
+  if(id===22){                              // ladder
+    ctx.fillStyle=t.color;
+    ctx.fillRect(x+4,y,3,T); ctx.fillRect(x+T-7,y,3,T);
+    for(let i=0;i<3;i++) ctx.fillRect(x+4,y+4+i*9,T-8,2); return;
+  }
+  if(id===23){                              // water
+    ctx.globalAlpha=.45; ctx.fillStyle=t.color; ctx.fillRect(x,y,T,T); ctx.globalAlpha=1;
+    const wv = P ? Math.sin(P.time*3 + x*0.1)*1.5 : 0;
+    ctx.fillStyle='#7fb0e8'; ctx.globalAlpha=.7;
+    ctx.fillRect(x, y+2+wv, T, 2); ctx.globalAlpha=1; return;
+  }
+  if(id===24){                              // one-way platform
+    ctx.fillStyle=t.color; ctx.fillRect(x,y,T,5);
+    ctx.globalAlpha=.3; ctx.fillRect(x,y+5,T,2); ctx.globalAlpha=1; return;
+  }
+  if(id===25){                              // mover (editor marker)
+    ctx.fillStyle=t.color; ctx.fillRect(x,y+T-8,T,8);
+    ctx.fillStyle='#0d0f14'; ctx.fillRect(x+3,y+T-6,4,4); ctx.fillRect(x+T-7,y+T-6,4,4); return;
+  }
+  if(id===26){                              // breakable wall
+    if(P && P.smashed.has((x/T)+','+(y/T))) return;
+    ctx.fillStyle=t.color; ctx.fillRect(x,y,T,T);
+    ctx.strokeStyle='#5a4c3e'; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(x+6,y); ctx.lineTo(x+11,y+11); ctx.lineTo(x+5,y+T);
+    ctx.moveTo(x+11,y+11); ctx.lineTo(x+T,y+15); ctx.stroke(); return;
+  }
+  if(id===27){                              // updraft
+    ctx.globalAlpha=.25; ctx.fillStyle=t.color; ctx.fillRect(x,y,T,T); ctx.globalAlpha=.8;
+    const ph = P ? (P.time*40) % T : 0;
+    ctx.fillStyle=t.color;
+    for(let i=0;i<2;i++){
+      const ay = (y + T - ph - i*14 + T) % T + y;
+      ctx.fillRect(x+7+i*10, ay, 2, 7);
+    }
+    ctx.globalAlpha=1; return;
+  }
+  if(id===4||id===5||id===12){              // editor shows the spawn marker
+    ctx.fillStyle=t.color; ctx.fillRect(x+5,y+5,T-10,T-10);
+    ctx.fillStyle='#0d0f14'; ctx.fillRect(x+9,y+11,3,3); ctx.fillRect(x+T-12,y+11,3,3);
+    if(id===5){ ctx.fillStyle=t.color; ctx.fillRect(x+1,y+9,4,3); ctx.fillRect(x+T-5,y+9,4,3); }
+    if(id===12){ ctx.fillStyle=t.color; ctx.fillRect(x+7,y+2,T-14,3); }
+    return;
+  }
+}
+
+function draw(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle='#11141b'; ctx.fillRect(0,0,W,H);
+  ctx.save();
+  if(shakeAmt>0.3) ctx.translate((Math.random()-.5)*shakeAmt, (Math.random()-.5)*shakeAmt);
+
+  // grid, edit mode only
+  if(mode==='edit'){
+    ctx.strokeStyle='#181d28'; ctx.lineWidth=1;
+    ctx.beginPath();
+    for(let c=1;c<COLS;c++){ ctx.moveTo(c*T+.5,0); ctx.lineTo(c*T+.5,H); }
+    for(let r=1;r<ROWS;r++){ ctx.moveTo(0,r*T+.5); ctx.lineTo(W,r*T+.5); }
+    ctx.stroke();
+  }
+
+  for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+    const id = game.tiles[r*COLS+c];
+    if(id===0) continue;
+    // in play, enemy spawn markers and taken pickups are hidden
+    if(mode==='play'){
+      if(id===4||id===5||id===12||id===13||id===14||id===25) continue;   // these become live entities
+      if((id===3||id===8||id===21) && P.collected.has(c+','+r)) continue;
+    }
+    drawTile(id, c*T, r*T);
+  }
+
+  if(mode==='play' && P){
+    for(const cr of P.crates){
+      ctx.fillStyle='#b08a5a'; ctx.fillRect(cr.x,cr.y,cr.w,cr.h);
+      ctx.strokeStyle='#6b5334'; ctx.lineWidth=2; ctx.strokeRect(cr.x+1,cr.y+1,cr.w-2,cr.h-2);
+      ctx.beginPath(); ctx.moveTo(cr.x+1,cr.y+1); ctx.lineTo(cr.x+cr.w-1,cr.y+cr.h-1);
+      ctx.moveTo(cr.x+cr.w-1,cr.y+1); ctx.lineTo(cr.x+1,cr.y+cr.h-1); ctx.stroke();
+    }
+    const COL = { walker:'#e07a6a', flyer:'#c88fe0', chaser:'#ff9a5a', turret:'#8f9ec8' };
+    for(const e of P.enemies){
+      if(e.dead) continue;
+      ctx.fillStyle = COL[e.kind] || '#e07a6a';
+      if(P.freeze>0){ ctx.globalAlpha = 0.55; }
+      if(e.kind==='turret'){
+        ctx.fillRect(e.x+1,e.y+4,e.w-2,e.h-5);
+        ctx.fillStyle='#5f6a8a'; ctx.fillRect(e.x+e.w/2-3,e.y,6,7);
+        ctx.fillStyle='#ffd479'; ctx.fillRect(e.x+e.w/2-2,e.y+9,4,4);
+      } else {
+        ctx.fillRect(e.x,e.y,e.w,e.h);
+        ctx.fillStyle='#0d0f14';
+        ctx.fillRect(e.x+4,e.y+6,3,3); ctx.fillRect(e.x+e.w-7,e.y+6,3,3);
+        if(e.kind==='flyer'){ const f=Math.sin(e.t*4)*3;
+          ctx.fillStyle='#c88fe0'; ctx.fillRect(e.x-4,e.y+5+f,4,3); ctx.fillRect(e.x+e.w,e.y+5-f,4,3); }
+        if(e.kind==='chaser'){ ctx.fillStyle='#ff9a5a'; ctx.fillRect(e.x+5,e.y-3,e.w-10,3); }
+      }
+      ctx.globalAlpha = 1;
+    }
+    for(const m of P.movers){
+      ctx.fillStyle='#8fa8c8'; ctx.fillRect(m.x,m.y,m.w,m.h);
+      ctx.fillStyle='#0d0f14'; ctx.fillRect(m.x+3,m.y+2,4,4); ctx.fillRect(m.x+m.w-7,m.y+2,4,4);
+    }
+    for(const b of P.bullets){ ctx.fillStyle='#ffd479'; ctx.fillRect(b.x,b.y,4,4); }
+    for(const b of P.ebullets){ ctx.fillStyle='#ff8f6a'; ctx.fillRect(b.x,b.y,4,4); }
+    for(const p of parts){ ctx.globalAlpha=Math.max(0,Math.min(1,p.life/16));
+      ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,2,2); }
+    ctx.globalAlpha=1;
+    if(!(P.invuln>0 && Math.floor(P.invuln/4)%2)){
+      ctx.fillStyle = P.dash>0 ? '#ffffff' : '#8fd6ff';
+      ctx.fillRect(P.x,P.y,P.w,P.h);
+      ctx.fillStyle='#0d0f14';
+      ctx.fillRect(P.face>0?P.x+10:P.x+5, P.y+6, 3, 4);
+    }
+  }
+  ctx.restore();
+
+  if(mode==='play' && P){
+    ctx.fillStyle='rgba(13,15,20,0.8)'; ctx.fillRect(0,0,W,26);
+    ctx.font='12px Consolas, monospace'; ctx.textAlign='left';
+    ctx.fillStyle='#e07a6a';
+    let s=''; for(let i=0;i<Math.max(0,P.lives);i++) s+='♥ ';
+    ctx.fillText(s, 10, 18);
+    ctx.fillStyle='#ffd479'; ctx.fillText('◆ '+P.coins, 120, 18);
+    if(P.keys) { ctx.fillStyle='#ffe9a8'; ctx.fillText('⚷ '+P.keys, 180, 18); }
+    ctx.fillStyle='#6d7789';
+    ctx.fillText(game.timeLimit>0 ? 'T-'+Math.max(0,game.timeLimit-P.time).toFixed(1)
+                                  : P.time.toFixed(1)+'s', 240, 18);
+    ctx.textAlign='right'; ctx.fillStyle='#4a5266';
+    ctx.fillText('ESC to go back to editing', W-10, 18);
+    ctx.textAlign='left';
+  }
+}
+
+/* ===================== EDITOR INTERACTION ===================== */
+let paint = 1, tool = 'brush', painting = false, lastCell = null;
+
+function syncButtons(){
+  document.getElementById('bEdit').className = mode==='edit' ? 'hot' : '';
+  document.getElementById('bPlay').className = mode==='play' ? 'hot' : 'play';
+  document.getElementById('bPlay').textContent = mode==='play' ? '▶ PLAYING' : '▶ PLAY';
+  cv.style.cursor = mode==='edit' ? 'crosshair' : 'default';
+}
+function cellFromEvent(ev){
+  const b = cv.getBoundingClientRect();
+  const c = Math.floor((ev.clientX-b.left) / (b.width/COLS));
+  const r = Math.floor((ev.clientY-b.top)  / (b.height/ROWS));
+  return (c<0||c>=COLS||r<0||r>=ROWS) ? null : {c,r};
+}
+function applyPaint(cell, erase){
+  const v = erase ? 0 : paint;
+  if(tool==='brush'){
+    if(v===6){ for(let i=0;i<game.tiles.length;i++) if(game.tiles[i]===6) game.tiles[i]=0; }
+    setAt(cell.c, cell.r, v);
+  } else if(tool==='fill'){
+    floodFill(cell.c, cell.r, v);
+  } else if(tool==='pick'){
+    paint = at(cell.c, cell.r) || 0; buildPalette();
+  }
+}
+function floodFill(c,r,v){
+  const from = at(c,r);
+  if(from===v) return;
+  const stack=[[c,r]], seen=new Set();
+  while(stack.length){
+    const [x,y]=stack.pop(), k=y*COLS+x;
+    if(x<0||x>=COLS||y<0||y>=ROWS||seen.has(k)) continue;
+    if(game.tiles[k]!==from) continue;
+    seen.add(k); game.tiles[k]=v;
+    stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+  }
+}
+cv.addEventListener('mousedown', ev=>{
+  if(mode!=='edit') return;
+  const cell = cellFromEvent(ev); if(!cell) return;
+  painting = true; lastCell = cell;
+  applyPaint(cell, ev.button===2 || ev.shiftKey);
+  refreshWarnings(); draw();
+  ev.preventDefault();
+});
+cv.addEventListener('mousemove', ev=>{
+  if(!painting || mode!=='edit' || tool!=='brush') return;
+  const cell = cellFromEvent(ev); if(!cell) return;
+  if(lastCell && cell.c===lastCell.c && cell.r===lastCell.r) return;
+  lastCell = cell;
+  applyPaint(cell, ev.buttons===2 || ev.shiftKey);
+  refreshWarnings(); draw();
+});
+addEventListener('mouseup', ()=>{ painting=false; lastCell=null; });
+cv.addEventListener('contextmenu', e=>e.preventDefault());
+
+/* ===================== PANELS ===================== */
+function buildPalette(){
+  const el = document.getElementById('palette');
+  el.innerHTML = TILES.map(t=>{
+    const sw = t.id===0
+      ? `<span class="sw" style="background:#11141b;border-color:#4a5266"></span>`
+      : `<span class="sw" style="background:${t.color}"></span>`;
+    return `<div class="tool ${paint===t.id?'sel':''}" data-tile="${t.id}">${sw}${t.name}</div>`;
+  }).join('');
+  el.querySelectorAll('[data-tile]').forEach(d=>{
+    d.onclick = ()=>{ paint = +d.dataset.tile; buildPalette(); };
+  });
+}
+function buildTools(){
+  const el = document.getElementById('tools');
+  const list = [['brush','BRUSH'],['fill','FILL'],['pick','PICK']];
+  el.innerHTML = list.map(([id,n])=>`<div class="tool ${tool===id?'sel':''}" data-tool="${id}">${n}</div>`).join('')
+    + `<div class="note" style="margin-top:5px">Right-click or hold SHIFT to erase.</div>`;
+  el.querySelectorAll('[data-tool]').forEach(d=>{
+    d.onclick = ()=>{ tool = d.dataset.tool; buildTools(); };
+  });
+}
+function buildRules(){
+  const el = document.getElementById('rules');
+  el.innerHTML = game.rules.map((r,i)=>{
+    const trig = TRIG[r.when.id] || TRIGGERS[0], act = ACT[r.then.id] || ACTIONS[0];
+    const wn = r.when.n===undefined ? (trig.num||0) : r.when.n;
+    const an = r.then.n===undefined ? (act.num||0) : r.then.n;
+    return `<div class="rule">
+      <span class="x" data-del="${i}" title="delete this rule">×</span>
+      <div class="lbl when">RULE ${i+1} — WHEN</div>
+      <select data-w="${i}">${TRIGGERS.map(t=>`<option value="${t.id}" ${t.id===trig.id?'selected':''}>${t.label}</option>`).join('')}</select>
+      ${trig.num!==undefined ? `<input type="number" data-wn="${i}" value="${wn}">` : ''}
+      <div class="lbl then">THEN</div>
+      <select data-a="${i}">${ACTIONS.map(a=>`<option value="${a.id}" ${a.id===act.id?'selected':''}>${a.label}</option>`).join('')}</select>
+      ${act.num!==undefined ? `<input type="number" data-an="${i}" value="${an}">` : ''}
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('[data-w]').forEach(s=>s.onchange=()=>{
+    const i=+s.dataset.w; game.rules[i].when = {id:s.value};
+    const t = TRIG[s.value]; if(t.num!==undefined) game.rules[i].when.n = t.num;
+    buildRules(); refreshWarnings();
+  });
+  el.querySelectorAll('[data-a]').forEach(s=>s.onchange=()=>{
+    const i=+s.dataset.a; game.rules[i].then = {id:s.value};
+    const a = ACT[s.value]; if(a.num!==undefined) game.rules[i].then.n = a.num;
+    buildRules(); refreshWarnings();
+  });
+  el.querySelectorAll('[data-wn]').forEach(s=>s.onchange=()=>{ game.rules[+s.dataset.wn].when.n = +s.value; refreshWarnings(); });
+  el.querySelectorAll('[data-an]').forEach(s=>s.onchange=()=>{ game.rules[+s.dataset.an].then.n = +s.value; });
+  el.querySelectorAll('[data-del]').forEach(s=>s.onclick=()=>{
+    game.rules.splice(+s.dataset.del,1); buildRules(); refreshWarnings();
+  });
+}
+function buildMonsterRules(){
+  const el = document.getElementById('mrules');
+  const list = game.mrules || (game.mrules = []);
+  el.innerHTML = list.map((r,i)=>{
+    const trig = MTRIG[r.when.id] || MTRIGGERS[0], act = MACT[r.then.id] || MACTIONS[0];
+    const who = MON[r.who] ? r.who : 'any';
+    const wn = r.when.n===undefined ? (trig.num||0) : r.when.n;
+    const an = r.then.n===undefined ? (act.num||0) : r.then.n;
+    return `<div class="rule mon">
+      <span class="x" data-mdel="${i}">×</span>
+      <div class="lbl who">MONSTER</div>
+      <select data-mo="${i}">${MONSTERS.map(m=>`<option value="${m.id}" ${m.id===who?'selected':''}>${m.name}</option>`).join('')}</select>
+      <div class="lbl when">WHEN</div>
+      <select data-mw="${i}">${MTRIGGERS.map(t=>`<option value="${t.id}" ${t.id===trig.id?'selected':''}>${t.label}</option>`).join('')}</select>
+      ${trig.num!==undefined ? `<input type="number" data-mwn="${i}" value="${wn}">` : ''}
+      <div class="lbl then">THEN</div>
+      <select data-ma="${i}">${MACTIONS.map(a=>`<option value="${a.id}" ${a.id===act.id?'selected':''}>${a.label}</option>`).join('')}</select>
+      ${act.num!==undefined ? `<input type="number" data-man="${i}" value="${an}">` : ''}
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('[data-mo]').forEach(s=>s.onchange=()=>{
+    list[+s.dataset.mo].who = s.value; refreshWarnings();
+  });
+  el.querySelectorAll('[data-mw]').forEach(s=>s.onchange=()=>{
+    const i=+s.dataset.mw; list[i].when = {id:s.value};
+    const t = MTRIG[s.value]; if(t.num!==undefined) list[i].when.n = t.num;
+    buildMonsterRules(); refreshWarnings();
+  });
+  el.querySelectorAll('[data-ma]').forEach(s=>s.onchange=()=>{
+    const i=+s.dataset.ma; list[i].then = {id:s.value};
+    const a = MACT[s.value]; if(a.num!==undefined) list[i].then.n = a.num;
+    buildMonsterRules(); refreshWarnings();
+  });
+  el.querySelectorAll('[data-mwn]').forEach(s=>s.onchange=()=>{ list[+s.dataset.mwn].when.n = +s.value; });
+  el.querySelectorAll('[data-man]').forEach(s=>s.onchange=()=>{ list[+s.dataset.man].then.n = +s.value; });
+  el.querySelectorAll('[data-mdel]').forEach(s=>s.onclick=()=>{
+    list.splice(+s.dataset.mdel,1); buildMonsterRules(); refreshWarnings();
+  });
+}
+function refreshWarnings(){
+  const p = problems();
+  document.getElementById('ruleWarn').innerHTML =
+    p.length ? p.map(x=>'⚠ '+x).join('<br>') : '<span style="color:#7fbf7f">✓ This game is playable and winnable.</span>';
+}
+function syncSettings(){
+  document.getElementById('name').value = game.name;
+  document.getElementById('sGrav').checked = game.gravity;
+  document.getElementById('sSpeed').value = game.speed;
+  document.getElementById('sLives').value = game.lives;
+  document.getElementById('sTime').value = game.timeLimit;
+}
+function refreshAll(){ buildPalette(); buildTools(); buildRules(); buildMonsterRules(); refreshWarnings(); syncSettings(); draw(); }
+
+document.getElementById('name').oninput  = e => { game.name = e.target.value; };
+document.getElementById('sGrav').onchange = e => { game.gravity = e.target.checked; refreshWarnings(); };
+document.getElementById('sSpeed').onchange= e => { game.speed = +e.target.value||3; };
+document.getElementById('sLives').onchange= e => { game.lives = +e.target.value||3; };
+document.getElementById('sTime').onchange = e => { game.timeLimit = +e.target.value||0; };
+document.getElementById('bAdd').onclick = ()=>{
+  game.rules.push({ when:{id:'press_space'}, then:{id:'jump', n:11} });
+  buildRules(); refreshWarnings();
+};
+document.getElementById('bClear').onclick = ()=>{
+  if(!game.rules.length) return;
+  if(!confirm(`Delete all ${game.rules.length} rules? The level itself is kept.`)) return;
+  game.rules = []; buildRules(); refreshWarnings();
+};
+document.getElementById('bAddM').onclick = ()=>{
+  (game.mrules = game.mrules || []).push({ who:'walker', when:{id:'m_sees', n:10}, then:{id:'m_chase'} });
+  buildMonsterRules(); refreshWarnings();
+};
+
+/* ===================== OVERLAY & RESULT ===================== */
+function overlay(on, big, sub){
+  const o = document.getElementById('overlay');
+  o.className = on ? 'on' : '';
+  if(on){
+    document.getElementById('ovBig').textContent = big;
+    document.getElementById('ovBig').style.color = big==='YOU WIN' ? '#7fbf7f' : '#e07a6a';
+    document.getElementById('ovSub').textContent = sub;
+  }
+}
+function showResult(){
+  overlay(true, P.over==='win' ? 'YOU WIN' : 'GAME OVER',
+    `${P.coins} collected · ${P.killed} destroyed · ${P.time.toFixed(1)}s   —   ENTER to play again, ESC to edit`);
+}
+
+/* ===================== TOP BAR ===================== */
+document.getElementById('bEdit').onclick = stopPlay;
+document.getElementById('bPlay').onclick = ()=>{ overlay(false); startPlay(); };
+document.getElementById('bNew').onclick = ()=>{
+  if(!confirm('Start a new, empty game? Anything unsaved is lost.')) return;
+  game = newGame(); mode='edit'; P=null; syncButtons(); refreshAll();
+};
+
+/* ---- storage ---- */
+const KEY = 'maker.games.v1';
+function allSaved(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
+function status(msg){ const s=document.getElementById('status'); s.textContent=msg;
+  clearTimeout(status._t); status._t = setTimeout(()=>{ s.textContent=''; }, 2600); }
+
+document.getElementById('bSave').onclick = ()=>{
+  const all = allSaved();
+  all[game.name] = encode(game);
+  try { localStorage.setItem(KEY, JSON.stringify(all)); status('saved “'+game.name+'”'); }
+  catch(e){ status('could not save (storage full?)'); }
+};
+function modal(html){
+  document.getElementById('modalBox').innerHTML = html;
+  document.getElementById('modal').className = 'on';
+}
+function closeModal(){ document.getElementById('modal').className = ''; }
+document.getElementById('modal').onclick = e => { if(e.target.id==='modal') closeModal(); };
+
+document.getElementById('bLoad').onclick = ()=>{
+  const all = allSaved(), names = Object.keys(all);
+  modal(`<h3 style="margin-top:0">MY GAMES</h3>` +
+    (names.length ? names.map(n=>{
+      let count = 0; try { count = JSON.parse(all[n]).rules.length; } catch(e){}
+      return `<div class="item"><span data-load="${n}" style="flex:1;cursor:pointer">${n}
+        <small style="margin-left:8px">${count} rules</small></span>
+        <button data-del="${n}" style="padding:3px 9px">DELETE</button></div>`;
+    }).join('') : '<div class="note">Nothing saved yet. Build something and press SAVE.</div>') +
+    `<button id="mClose" style="margin-top:10px">CLOSE</button>`);
+  document.getElementById('mClose').onclick = closeModal;
+  // a real DELETE button — the old version guessed from click position and mostly missed
+  document.querySelectorAll('#modalBox [data-del]').forEach(b=>{
+    b.onclick = ev=>{
+      ev.stopPropagation();
+      const n = b.dataset.del;
+      if(!confirm('Delete the saved game “'+n+'”? This cannot be undone.')) return;
+      const all2 = allSaved(); delete all2[n];
+      localStorage.setItem(KEY, JSON.stringify(all2));
+      status('deleted “'+n+'”');
+      document.getElementById('bLoad').onclick();   // reopen so the list refreshes
+    };
+  });
+  document.querySelectorAll('#modalBox [data-load]').forEach(d=>{
+    d.onclick = ()=>{
+      const n = d.dataset.load;
+      try { game = decode(all[n]); mode='edit'; P=null; syncButtons(); refreshAll(); closeModal(); status('loaded “'+n+'”'); }
+      catch(e){ status('that save is corrupt'); }
+    };
+  });
+};
+
+document.getElementById('bShare').onclick = ()=>{
+  modal(`<h3 style="margin-top:0">SHARE CODE</h3>
+    <div class="note" style="margin-bottom:6px">Copy this out to keep or send your game. Paste one in and press LOAD CODE.</div>
+    <textarea id="mCode">${encode(game).replace(/</g,'&lt;')}</textarea>
+    <div style="margin-top:9px"><button id="mLoad">LOAD CODE</button>
+      <button id="mClose2" style="margin-left:6px">CLOSE</button></div>`);
+  document.getElementById('mClose2').onclick = closeModal;
+  document.getElementById('mLoad').onclick = ()=>{
+    try {
+      game = decode(document.getElementById('mCode').value);
+      mode='edit'; P=null; syncButtons(); refreshAll(); closeModal(); status('loaded from code');
+    } catch(e){ status('that code is not valid'); }
+  };
+  document.getElementById('mCode').select();
+};
+
+/* ===================== EXAMPLES ===================== */
+/* Three games built from the same parts, to show how far the rules move things. */
+function mk(name, opts, rows, rules, mrules){
+  const g = { name, gravity:opts.gravity!==false, speed:opts.speed||3,
+              lives:opts.lives||3, timeLimit:opts.timeLimit||0,
+              tiles:blankTiles(), rules, mrules: mrules || defaultMonsterRules() };
+  for(let r=0;r<ROWS && r<rows.length;r++){
+    const line = rows[r];
+    for(let c=0;c<COLS && c<line.length;c++){
+      const id = BY_CH[line[c]];
+      if(id !== undefined) g.tiles[r*COLS+c] = id;
+    }
+  }
+  return g;
+}
+const EXAMPLES = [
+  mk('CLASSIC JUMP', {}, [
+    '..............................',
+    '..............................',
+    '.........................ooo..',
+    '......................######..',
+    '..............................',
+    '...............oo.............',
+    '............######............',
+    '......o.......................',
+    '....####..........w...........',
+    '.................####.........',
+    '..........^^^.................',
+    '..S....................o......',
+    '####################...####..E',
+    '..................#...........',
+    '..................#...........',
+    '..................#....^^^....',
+    '..................############',
+    '##############################',
+  ], [
+    { when:{id:'press_up'},    then:{id:'jump', n:12} },
+    { when:{id:'press_space'}, then:{id:'jump', n:12} },
+    { when:{id:'touch_coin'},  then:{id:'collect'} },
+    { when:{id:'touch_spike'}, then:{id:'lose_life'} },
+    { when:{id:'touch_enemy'}, then:{id:'lose_life'} },
+    { when:{id:'fall_out'},    then:{id:'lose_life'} },
+    { when:{id:'touch_exit'},  then:{id:'win'} },
+    { when:{id:'lives_zero'},  then:{id:'lose'} },
+  ]),
+
+  mk('FLAP', { lives:1, speed:2.6 }, [
+    '..............................',
+    '..............................',
+    '.....#....#.......#.....#.....',
+    '.....#....#.......#.....#.....',
+    '.....#....#....o..#.....#.....',
+    '.....#....#.......#.....#.....',
+    '..........#.............#.....',
+    '.S...............o............',
+    '..............................',
+    '..........o...................',
+    '.....#............#.....#.....',
+    '.....#............#.....#.....',
+    '.....#....#.......#.....#.....',
+    '.....#....#.......#.....#.....',
+    '.....#....#.......#.....#.....',
+    '..............................',
+    '..............................',
+    '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^',
+  ], [
+    { when:{id:'press_space'}, then:{id:'jump_air', n:8} },
+    { when:{id:'press_up'},    then:{id:'jump_air', n:8} },
+    { when:{id:'touch_coin'},  then:{id:'collect'} },
+    { when:{id:'touch_spike'}, then:{id:'lose'} },
+    { when:{id:'fall_out'},    then:{id:'lose'} },
+    { when:{id:'time_reach', n:20}, then:{id:'win'} },
+  ]),
+
+  mk('THE VAULT', { gravity:false, speed:3.2, lives:3 }, [
+    '##############################',
+    '#S...#..........#............#',
+    '#....#..o...w...#....o.......#',
+    '#....#..........#............#',
+    '#....############....#########',
+    '#................#....#......#',
+    '####.#########...#....#..k...#',
+    '#....#.......#...#....#......#',
+    '#..o.#...f...#........#####D##',
+    '#....#.......#...#...........#',
+    '#....#########...#....####...#',
+    '#................#....#......#',
+    '#...####.#########....#...o..#',
+    '#......#.........#....#......#',
+    '####...#....o....#....########',
+    '#......#.........#..........E#',
+    '#..w...#.........#...........#',
+    '##############################',
+  ], [
+    { when:{id:'touch_coin'},        then:{id:'collect'} },
+    { when:{id:'touch_key'},         then:{id:'open_doors'} },
+    { when:{id:'press_space'},       then:{id:'dash', n:11} },
+    { when:{id:'touch_enemy'},       then:{id:'lose_life'} },
+    { when:{id:'coins_reach', n:5},  then:{id:'gain_life'} },
+    { when:{id:'touch_exit'},        then:{id:'win'} },
+    { when:{id:'lives_zero'},        then:{id:'lose'} },
+  ]),
+
+  mk('SHOOTING GALLERY', { gravity:false, speed:3.4, lives:3, timeLimit:45 }, [
+    '##############################',
+    '#............................#',
+    '#...f.......f........f.......#',
+    '#............................#',
+    '#......####.......####.......#',
+    '#......#..............#......#',
+    '#...f..#....f....f....#...f..#',
+    '#......#..............#......#',
+    '#......################......#',
+    '#............................#',
+    '#.....S......................#',
+    '#............................#',
+    '#...####..........f...####...#',
+    '#......#..............#......#',
+    '#...f..#....f.........#...f..#',
+    '#......#..............#......#',
+    '#............................#',
+    '##############################',
+  ], [
+    { when:{id:'press_space'},  then:{id:'shoot'} },
+    { when:{id:'touch_enemy'},  then:{id:'lose_life'} },
+    { when:{id:'enemies_gone'}, then:{id:'win'} },
+    { when:{id:'lives_zero'},   then:{id:'lose'} },
+    { when:{id:'time_reach', n:45}, then:{id:'lose'} },
+  ]),
+];
+
+document.getElementById('bEx').onclick = ()=>{
+  modal(`<h3 style="margin-top:0">EXAMPLES</h3>
+    <div class="note" style="margin-bottom:7px">Same editor, same rule blocks. Load one, play it,
+      then open its rules and see what makes it that game.</div>` +
+    EXAMPLES.map((g,i)=>`<div class="item" data-ex="${i}"><span>${g.name}</span>
+      <small>${g.gravity?'gravity':'top-down'} · ${g.rules.length} rules</small></div>`).join('') +
+    `<button id="mClose3" style="margin-top:10px">CLOSE</button>`);
+  document.getElementById('mClose3').onclick = closeModal;
+  document.querySelectorAll('[data-ex]').forEach(d=>{
+    d.onclick = ()=>{
+      game = decode(encode(EXAMPLES[+d.dataset.ex]));   // deep copy, so edits never dirty the original
+      mode='edit'; P=null; syncButtons(); refreshAll(); closeModal();
+      status('loaded “'+game.name+'”');
+    };
+  });
+};
+
+/* ===================== INPUT ===================== */
+const KEYMAP = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down',
+                 KeyA:'left', KeyD:'right', KeyW:'up', KeyS:'down' };
+addEventListener('keydown', e=>{
+  const tag = (e.target.tagName||'').toLowerCase();
+  if(tag==='input' || tag==='select' || tag==='textarea') return;
+  if(mode==='play'){
+    if(e.code==='Space'){ P.key.space = true; e.preventDefault(); }
+    if(KEYMAP[e.code]){ P.key[KEYMAP[e.code]] = true; e.preventDefault(); }
+    if(e.code==='Enter' && P.over){ overlay(false); startPlay(); }
+    if(e.code==='Escape'){ stopPlay(); }
+  } else {
+    if(e.code==='Enter'){ overlay(false); startPlay(); e.preventDefault(); }
+    if(e.code==='KeyB') { tool='brush'; buildTools(); }
+    if(e.code==='KeyF') { tool='fill';  buildTools(); }
+    if(e.code==='KeyP') { tool='pick';  buildTools(); }
+    if(e.code>='Digit1' && e.code<='Digit9'){
+      const i = +e.code.slice(5); if(TILES[i]){ paint = TILES[i].id; buildPalette(); }
+    }
+  }
+});
+addEventListener('keyup', e=>{
+  if(mode!=='play' || !P) return;
+  if(e.code==='Space') P.key.space = false;
+  if(KEYMAP[e.code]) P.key[KEYMAP[e.code]] = false;
+});
+
+/* ===================== MAIN LOOP ===================== */
+let acc = 0, last = performance.now();
+function loop(now){
+  requestAnimationFrame(loop);
+  const dt = Math.min(100, now-last); last = now;
+  if(mode==='play'){
+    acc += dt;
+    let guard = 0;
+    while(acc >= 1000/60 && guard++ < 5){ step(); acc -= 1000/60; }
+  } else acc = 0;
+  draw();
+}
+requestAnimationFrame(loop);
+
+refreshAll(); syncButtons();
+
+/* ===================== TEST HOOK ===================== */
+window.__MK = {
+  get game(){ return game; }, set game(g){ game = g; },
+  get P(){ return P; }, get mode(){ return mode; },
+  TILES, TRIGGERS, ACTIONS, TRIG, ACT, EXAMPLES, COLS, ROWS, T, W, H,
+  MONSTERS, MTRIGGERS, MACTIONS, MTRIG, MACT, MON, defaultMonsterRules, makeEnemy,
+  encode, decode, newGame, startPlay, stopPlay, step, draw, problems, findStart,
+  refreshAll, buildMonsterRules, mk, blankTiles, boxHitsSolid,
+};
+
+})();
+</script>
+</body>
+</html>

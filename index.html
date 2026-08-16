@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Twenty-Six Games</title>
+<title>Thirty-Six Games</title>
 <style>
   :root {
     color-scheme: dark;
@@ -14,6 +14,8 @@
     --dim:    #74858F;
     --text:   #E6EDF1;
     --amber:  #E0A02C;
+    --rust:   #C4634A;
+    --teal:   #4FA8A0;
     --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
     --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   }
@@ -46,11 +48,31 @@
     letter-spacing: 0.04em;
   }
 
+  h2.sec {
+    margin: 64px 0 0;
+    padding-top: 32px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  h2.sec:first-child { margin-top: 40px; padding-top: 0; border-top: none; }
+  .secnote {
+    margin: 8px 0 0;
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.03em;
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 16px;
-    margin-top: 40px;
+    margin-top: 22px;
   }
 
   a.card {
@@ -64,7 +86,7 @@
     transition: border-color .15s ease, transform .15s ease, background .15s ease;
   }
   a.card:hover, a.card:focus-visible {
-    border-color: var(--amber);
+    border-color: var(--accent, var(--amber));
     transform: translateY(-2px);
     outline: none;
   }
@@ -73,7 +95,7 @@
     font-family: var(--mono);
     font-size: 19px;
     letter-spacing: 0.12em;
-    color: var(--amber);
+    color: var(--accent, var(--amber));
     text-transform: uppercase;
   }
   .kind {
@@ -103,6 +125,9 @@
     padding: 2px 9px;
   }
 
+  .grid.horror { --accent: var(--rust); }
+  .grid.tools  { --accent: var(--teal); }
+
   footer {
     margin-top: 56px;
     padding-top: 24px;
@@ -121,11 +146,15 @@
 <div class="wrap">
 
   <header>
-    <h1>Twenty-Six Games</h1>
+    <h1>Thirty-Six Games</h1>
     <p class="sub">single-file HTML &middot; no build step &middot; keyboard + mouse &middot; open one and play</p>
   </header>
 
-  <main class="grid">
+  <main>
+
+    <h2 class="sec">Games</h2>
+
+    <div class="grid">
 
     <a class="card" href="aegis.html">
       <div class="name">Aegis</div>
@@ -137,7 +166,7 @@
     <a class="card" href="beetlebound.html">
       <div class="name">Beetlebound</div>
       <div class="kind">Endless racer</div>
-      <p class="blurb">Tap to jump, hold to fly, and outrun the rain that is always closing behind you. Flying is faster than running — the rain knows it too.</p>
+      <p class="blurb">Tap to jump, hold to fly, and outrun the rain that is always closing behind you. Flying is faster than running &mdash; the rain knows it too.</p>
       <ul class="facts"><li>Jump + fly</li><li>Rain chase</li><li>Canvas 2D</li></ul>
     </a>
 
@@ -151,7 +180,7 @@
     <a class="card" href="chainbreaker.html">
       <div class="name">Chainbreaker</div>
       <div class="kind">Deckbuilding roguelike</div>
-      <p class="blurb">The Chain does not reset between turns. What you built last turn is still holding — and still costing you.</p>
+      <p class="blurb">The Chain does not reset between turns. What you built last turn is still holding &mdash; and still costing you.</p>
       <ul class="facts"><li>Deckbuilder</li><li>Persistent chain</li><li>DOM UI</li></ul>
     </a>
 
@@ -172,7 +201,7 @@
     <a class="card" href="deeper.html">
       <div class="name">Deeper</div>
       <div class="kind">Descent</div>
-      <p class="blurb">The bag is the whole design. Every rope, lamp and stone you take down is one you have to carry back — and something out there freezes when you light it.</p>
+      <p class="blurb">The bag is the whole design. Every rope, lamp and stone you take down is one you have to carry back &mdash; and something out there freezes when you light it.</p>
       <ul class="facts"><li>Inventory puzzle</li><li>Light + dark</li><li>Canvas 2D</li></ul>
     </a>
 
@@ -193,7 +222,7 @@
     <a class="card" href="glide.html">
       <div class="name">Glide</div>
       <div class="kind">Sliding puzzle</div>
-      <p class="blurb">You do not stop when you want to — you stop when something stops you. Momentum is the whole problem, alone or against up to six others.</p>
+      <p class="blurb">You do not stop when you want to &mdash; you stop when something stops you. Momentum is the whole problem, alone or against up to six others.</p>
       <ul class="facts"><li>100 levels</li><li>2&ndash;7 players</li><li>Solver-proved</li></ul>
     </a>
 
@@ -214,7 +243,7 @@
     <a class="card" href="lanternhollow.html">
       <div class="name">Lantern Hollow</div>
       <div class="kind">Cozy tea garden</div>
-      <p class="blurb">Six herbs pair into twenty-one teas. Guests never order by name — they tell you a mood, and you work out the cup.</p>
+      <p class="blurb">Six herbs pair into twenty-one teas. Guests never order by name &mdash; they tell you a mood, and you work out the cup.</p>
       <ul class="facts"><li>21 teas</li><li>Journal</li><li>Cozy</li></ul>
     </a>
 
@@ -228,7 +257,7 @@
     <a class="card" href="burger.html">
       <div class="name">Market Day</div>
       <div class="kind">Minigame gauntlet</div>
-      <p class="blurb">Five stalls, five ingredients, five different games. You do not buy a burger here — you beat each stall for the part of it you want.</p>
+      <p class="blurb">Five stalls, five ingredients, five different games. You do not buy a burger here &mdash; you beat each stall for the part of it you want.</p>
       <ul class="facts"><li>5 minigames</li><li>1 burger</li><li>Canvas 2D</li></ul>
     </a>
 
@@ -237,6 +266,13 @@
       <div class="kind">Precision platformer</div>
       <p class="blurb">A game about the letter M. Hold M to climb, release to fall, and the path you take draws the Ms behind you.</p>
       <ul class="facts"><li>100 levels</li><li>One button</li><li>Your signature</li></ul>
+    </a>
+
+    <a class="card" href="mossford.html">
+      <div class="name">Mossford</div>
+      <div class="kind">Cozy 3D town</div>
+      <p class="blurb">A small town that wants nothing from you but the post. Carry letters between the people who live here and the town fills itself in around the round.</p>
+      <ul class="facts"><li>3D / three.js</li><li>Letters</li><li>No fail state</li></ul>
     </a>
 
     <a class="card" href="nectar.html">
@@ -256,7 +292,7 @@
     <a class="card" href="prototype.html">
       <div class="name">Prototype</div>
       <div class="kind">Game about games</div>
-      <p class="blurb">Pick four modules, paint the level, then actually play the game you just built — and then sit there and get reviewed for it.</p>
+      <p class="blurb">Pick four modules, paint the level, then actually play the game you just built &mdash; and then sit there and get reviewed for it.</p>
       <ul class="facts"><li>Level editor</li><li>Playtest</li><li>Reviews</li></ul>
     </a>
 
@@ -277,7 +313,7 @@
     <a class="card" href="heist.html">
       <div class="name">Sixty</div>
       <div class="kind">Stealth</div>
-      <p class="blurb">One perfect minute. The guards are deterministic, so the clock is the level — and you only learn the building by losing it.</p>
+      <p class="blurb">One perfect minute. The guards are deterministic, so the clock is the level &mdash; and you only learn the building by losing it.</p>
       <ul class="facts"><li>60 seconds</li><li>Deterministic</li><li>Learn by dying</li></ul>
     </a>
 
@@ -308,6 +344,113 @@
       <p class="blurb">Dig, build, and light the dark. Ore tiers gate how deep you can go, torches actually cast light, and the boss only comes out at night.</p>
       <ul class="facts"><li>Tile world</li><li>Real lighting</li><li>Night boss</li></ul>
     </a>
+
+    </div>
+
+    <h2 class="sec">Horror</h2>
+    <p class="secnote">the dark ones &middot; dread, body horror, sound &middot; play these with the lights however you like</p>
+
+    <div class="grid horror">
+
+    <a class="card" href="candlefire.html">
+      <div class="name">Candle Fire</div>
+      <div class="kind">3D yard defence</div>
+      <p class="blurb">Keep him out of the yard. Boards, traps and fire all buy you a night each, but blue light is the only thing that actually stops him.</p>
+      <ul class="facts"><li>3D / three.js</li><li>Traps</li><li>Blue light</li></ul>
+    </a>
+
+    <a class="card" href="halden.html">
+      <div class="name">Halden Deep</div>
+      <div class="kind">First-person horror</div>
+      <p class="blurb">Seven sublevels down, and everything living in them has a name in the logs before it has a shape in your torchlight. Twenty-seven datapads explain exactly how this happened.</p>
+      <ul class="facts"><li>7 sublevels</li><li>27 datapads</li><li>Raycast 3D</li></ul>
+    </a>
+
+    <a class="card" href="lastcall.html">
+      <div class="name">Last Call</div>
+      <div class="kind">3D bar sim</div>
+      <p class="blurb">You inherited your dad's bar. Night one is pouring drinks and making rent; by night six it is neither of those things.</p>
+      <ul class="facts"><li>6 nights</li><li>3D / three.js</li><li>Tips + rent</li></ul>
+    </a>
+
+    <a class="card" href="porridge.html">
+      <div class="name">Porridge</div>
+      <div class="kind">Fairy-tale horror</div>
+      <p class="blurb">Goldilocks shot the bear. You are the bear. Forage while you are alive and haunt the house once you are not &mdash; three bowls, three endings.</p>
+      <ul class="facts"><li>Two acts</li><li>3 endings</li><li>Canvas 2D</li></ul>
+    </a>
+
+    <a class="card" href="rime.html">
+      <div class="name">Rime</div>
+      <div class="kind">Sliding-puzzle horror</div>
+      <p class="blurb">Halden's corridors with Glide's rule: once you push off, you do not stop. Every deck is solver-proved and every par was ground down by hand.</p>
+      <ul class="facts"><li>Solver-proved</li><li>Raycast 3D</li><li>Par times</li></ul>
+    </a>
+
+    <a class="card" href="rowanline.html">
+      <div class="name">The Rowan Line</div>
+      <div class="kind">Audio horror</div>
+      <p class="blurb">You are the 911 dispatcher and the only thing you have is the line. There are no graphics. Choosing to say nothing is a move, and it is scored like one.</p>
+      <ul class="facts"><li>No graphics</li><li>Dispatch</li><li>Silence scored</li></ul>
+    </a>
+
+    <a class="card" href="tallow.html">
+      <div class="name">Tallow</div>
+      <div class="kind">Top-down horror</div>
+      <p class="blurb">Oil burns down whether or not you are using it. The Hollow is patient, and the pit at the bottom of Marrow Hill reaches back.</p>
+      <ul class="facts"><li>Lantern oil</li><li>Light + shadow</li><li>The Hollow</li></ul>
+    </a>
+
+    <a class="card" href="unknown.html">
+      <div class="name">Unknown</div>
+      <div class="kind">Survey horror</div>
+      <p class="blurb">Take a sounder down the Kettle Deep, drop beacons, and come back with the record. Nothing attacked the second team &mdash; they wanted that in the record.</p>
+      <ul class="facts"><li>Beacons</li><li>Dread meter</li><li>Strata</li></ul>
+    </a>
+
+    <a class="card" href="vigil.html">
+      <div class="name">Vigil</div>
+      <div class="kind">Narrative horror</div>
+      <p class="blurb">The knight killed the dragon. The dragon was the princess. Six days of the same grief in the same rooms, and only noticing what is wrong gets you out of it.</p>
+      <ul class="facts"><li>6 days</li><li>Role swap</li><li>True ending</li></ul>
+    </a>
+
+    </div>
+
+    <h2 class="sec">Tools &amp; Toys</h2>
+    <p class="secnote">not games &middot; things to make things with, and one thing to just watch</p>
+
+    <div class="grid tools">
+
+    <a class="card" href="inkflow.html">
+      <div class="name">Inkflow</div>
+      <div class="kind">Paint &amp; animation studio</div>
+      <p class="blurb">Smooth brushes rather than pixels, with layers, frames and onion skinning. Strokes land on a scratch buffer first, so nothing commits until you lift the pen.</p>
+      <ul class="facts"><li>Smooth brushes</li><li>Layers</li><li>Onion skin</li></ul>
+    </a>
+
+    <a class="card" href="maker.html">
+      <div class="name">Maker</div>
+      <div class="kind">Game maker</div>
+      <p class="blurb">Paint a level, then wire up WHEN/THEN blocks until it behaves. The rules are the engine &mdash; even the monsters are authored, not built in.</p>
+      <ul class="facts"><li>Rule blocks</li><li>Level painter</li><li>Play it</li></ul>
+    </a>
+
+    <a class="card" href="pixelforge.html">
+      <div class="name">Pixel Forge</div>
+      <div class="kind">Pixel animation studio</div>
+      <p class="blurb">Draw sprites frame by frame with layers and onion skin, then export the animation as a GIF the page encodes itself.</p>
+      <ul class="facts"><li>Layers + frames</li><li>Onion skin</li><li>GIF export</li></ul>
+    </a>
+
+    <a class="card" href="tidepool.html">
+      <div class="name">Tidepool</div>
+      <div class="kind">Ecosystem toy</div>
+      <p class="blurb">No score and no way to lose. Stock the tank, then leave it alone and see whether what you put in there can keep itself going.</p>
+      <ul class="facts"><li>No score</li><li>No lose state</li><li>Watch only</li></ul>
+    </a>
+
+    </div>
 
   </main>
 

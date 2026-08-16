@@ -1,0 +1,1721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VIGIL</title>
+<style>
+  html,body{margin:0;padding:0;background:#07070a;overflow:hidden;height:100%;}
+  body{display:flex;align-items:center;justify-content:center;
+       font-family:Georgia,'Times New Roman',serif;color:#cfc6b8;}
+  #wrap{position:relative;}
+  canvas{display:block;image-rendering:auto;background:#000;
+         box-shadow:0 0 60px rgba(0,0,0,.9);}
+  #hint{position:absolute;bottom:6px;right:10px;font-size:11px;
+        color:#3a3a44;letter-spacing:1px;pointer-events:none;font-family:monospace;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="960" height="576"></canvas>
+  <div id="hint">WASD move &middot; E interact &middot; SPACE act &middot; K skip day &middot; M mute</div>
+</div>
+<script>
+"use strict";
+/* ============================================================
+   VIGIL  -  a single-file 2D horror game, canvas 2D only.
+   No WebGL, no shadows, no particles beyond a hard cap.
+   Story: the knight kills the dragon. The dragon was the princess.
+   ============================================================ */
+
+const W = 960, H = 576, TS = 32, COLS = 30, ROWS = 18;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+
+/* ---------------- input ---------------- */
+const keys = Object.create(null);
+const pressed = Object.create(null);
+addEventListener('keydown', e => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (!keys[k]) pressed[k] = true;
+  keys[k] = true;
+  if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.key) >= 0) e.preventDefault();
+});
+addEventListener('keyup', e => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  keys[k] = false;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = false; return true; } return false; }
+function anyHit() { for (const k in pressed) { if (pressed[k]) { pressed[k] = false; return true; } } return false; }
+function held(a, b) { return !!(keys[a] || keys[b]); }
+function clearPressed() { for (const k in pressed) pressed[k] = false; }
+
+/* ---------------- audio (tiny, optional) ---------------- */
+const Audio_ = {
+  ac: null, muted: false, drone: null, droneGain: null,
+  init() {
+    if (this.ac) return;
+    try { this.ac = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { this.ac = null; }
+  },
+  tone(freq, dur, type, vol) {
+    if (!this.ac || this.muted) return;
+    const t = this.ac.currentTime;
+    const o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol == null ? 0.12 : vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.ac.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  noise(dur, vol) {
+    if (!this.ac || this.muted) return;
+    const n = Math.floor(this.ac.sampleRate * dur);
+    const buf = this.ac.createBuffer(1, n, this.ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const s = this.ac.createBufferSource(); s.buffer = buf;
+    const g = this.ac.createGain(); g.gain.value = vol == null ? 0.08 : vol;
+    const f = this.ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900;
+    s.connect(f); f.connect(g); g.connect(this.ac.destination); s.start();
+  },
+  startDrone() {
+    if (!this.ac || this.drone) return;
+    const o = this.ac.createOscillator(), o2 = this.ac.createOscillator();
+    const g = this.ac.createGain();
+    o.type = 'sine'; o.frequency.value = 46;
+    o2.type = 'sine'; o2.frequency.value = 69.3;
+    g.gain.value = 0.0;
+    o.connect(g); o2.connect(g); g.connect(this.ac.destination);
+    o.start(); o2.start();
+    this.drone = o; this.droneGain = g;
+  },
+  setDrone(v) { if (this.droneGain && this.ac) this.droneGain.gain.value = this.muted ? 0 : v; },
+  step() { this.tone(70 + Math.random() * 25, 0.09, 'triangle', 0.045); },
+  hurt() { this.tone(150, 0.22, 'sawtooth', 0.13); this.noise(0.2, 0.09); },
+  slash() { this.noise(0.14, 0.11); this.tone(620, 0.07, 'square', 0.05); },
+  fire() { this.noise(0.5, 0.13); },
+  stinger() { this.tone(1200, 0.5, 'sawtooth', 0.09); this.tone(83, 1.2, 'sine', 0.11); },
+  bell() { this.tone(392, 1.4, 'sine', 0.09); this.tone(587, 1.2, 'sine', 0.05); }
+};
+
+/* ---------------- rooms ---------------- */
+/* legend: # wall  . floor  p pillar  B bed  m mirror  T reliquary
+           G grave  c chest  w window  , grass  ~ mud  " tree  ^ stone
+           > exit east  < exit west                                   */
+/* row builder: mk(['"',2], [',',10], ['"',18]) -> a guaranteed-width row */
+function mk() {
+  let s = '';
+  for (let i = 0; i < arguments.length; i++) {
+    const p = arguments[i];
+    s += (typeof p === 'string') ? p : p[0].repeat(p[1]);
+  }
+  return s;
+}
+const ROOMS = [
+  { // 0 BEDCHAMBER
+    name: 'THE BEDCHAMBER', indoor: true, floor: '#191720', wall: '#0d0c12',
+    map: [
+      '##############################',
+      '#............................#',
+      '#..B.......................m.#',
+      '#..B.........................#',
+      '#............................#',
+      '#....p..................p....#',
+      '#............................#',
+      '#............................#',
+      '#............................#',
+      '#...........................>#',
+      '#............................#',
+      '#............................#',
+      '#....p..................p....#',
+      '#..c.........................#',
+      '#............................#',
+      '#............................#',
+      '#............................#',
+      '##############################'
+    ]
+  },
+  { // 1 GREAT HALL
+    name: 'THE GREAT HALL', indoor: true, floor: '#16151c', wall: '#0b0a10',
+    map: [
+      '##############################',
+      '#............................#',
+      '#..w......................w..#',
+      '#............................#',
+      '#....p..p..........p..p......#',
+      '#............................#',
+      '#.......TTTTTTTTTT...........#',
+      '#............................#',
+      '<............................>',
+      '#............................#',
+      '#............................#',
+      '#....p..p..........p..p......#',
+      '#............................#',
+      '#..w......................w..#',
+      '#............................#',
+      '#............................#',
+      '#............................#',
+      '##############################'
+    ]
+  },
+  { // 2 CHAPEL
+    name: 'THE CHAPEL', indoor: true, floor: '#141319', wall: '#0a090f',
+    map: [
+      '##############################',
+      '#............................#',
+      '#..........#....#............#',
+      '#..........#....#............#',
+      '#..........#....#............#',
+      '#..........#....#............#',
+      '#..........#.T..#............#',
+      '#..........#....#............#',
+      '<..........#....#............>',
+      '#..........#....#............#',
+      '#..........#....#............#',
+      '#..........#....#............#',
+      '#....p.....######............#',
+      '#............................#',
+      '#....................p.......#',
+      '#............................#',
+      '#............................#',
+      '##############################'
+    ]
+  },
+  { // 3 COURTYARD
+    name: 'THE COURTYARD', indoor: false, floor: '#1a1a16', wall: '#100f0d',
+    map: [
+      '##############################',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '#,,,,,,,,^^^^^^,,,,,,,,,,,,,,#',
+      '#,,,,,,,,^,,,,^,,,,,,,,,,,,,,#',
+      '#,,,,,,,,^,,,,^,,,,,,,,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '<,,,,,,,,,,,,,,,,,,,,,,,,,,,,>',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,~~~~,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,~~~~,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '#,,,,,,,,,,,,,,,,,,,,,,,,,,,,#',
+      '##############################'
+    ]
+  },
+  { // 4 THE HILL PATH
+    name: 'THE HILL PATH', indoor: false, floor: '#15170f', wall: '#0a0b07',
+    map: [
+      mk(['"', 30]),
+      mk(['"', 30]),
+      mk(['"', 2], [',', 10], ['"', 18]),
+      mk(['"', 2], [',', 12], ['"', 16]),
+      mk(['"', 2], [',', 6], ['"', 4], [',', 8], ['"', 10]),
+      mk(['"', 2], [',', 5], ['"', 6], [',', 8], ['"', 9]),
+      mk(['"', 2], [',', 5], ['"', 8], [',', 8], ['"', 7]),
+      mk(['"', 2], [',', 5], ['"', 10], [',', 8], ['"', 5]),
+      mk('<', [',', 7], ['"', 8], [',', 13], '>'),
+      mk(['"', 2], [',', 6], ['"', 8], [',', 9], ['"', 5]),
+      mk(['"', 2], [',', 7], ['"', 6], [',', 10], ['"', 5]),
+      mk(['"', 2], [',', 24], ['"', 4]),
+      mk(['"', 3], [',', 20], ['"', 7]),
+      mk(['"', 5], [',', 16], ['"', 9]),
+      mk(['"', 8], [',', 10], ['"', 12]),
+      mk(['"', 30]),
+      mk(['"', 30]),
+      mk(['"', 30])
+    ]
+  },
+  { // 5 THE BARROW
+    name: 'THE BARROW', indoor: false, floor: '#131610', wall: '#080a06',
+    map: [
+      mk(['"', 30]),
+      mk(['"', 4], [',', 23], ['"', 3]),
+      mk(['"', 3], [',', 25], ['"', 2]),
+      mk(['"', 2], [',', 27], ['"', 1]),
+      mk(['"', 2], [',', 27], ['"', 1]),
+      mk(['"', 2], [',', 27], ['"', 1]),
+      mk(['"', 2], [',', 11], ['G', 4], [',', 12], ['"', 1]),
+      mk(['"', 2], [',', 11], ['G', 4], [',', 12], ['"', 1]),
+      mk('<', [',', 28], ['"', 1]),
+      mk(['"', 2], [',', 27], ['"', 1]),
+      mk(['"', 2], [',', 27], ['"', 1]),
+      mk(['"', 2], [',', 27], ['"', 1]),
+      mk(['"', 2], [',', 27], ['"', 1]),
+      mk(['"', 3], [',', 25], ['"', 2]),
+      mk(['"', 4], [',', 23], ['"', 3]),
+      mk(['"', 7], [',', 17], ['"', 6]),
+      mk(['"', 30]),
+      mk(['"', 30])
+    ]
+  }
+];
+const SOLID = '#p"^BTmwc';
+function tileAt(room, tx, ty) {
+  if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) return '#';
+  const row = ROOMS[room].map[ty];
+  return row && row[tx] ? row[tx] : '#';
+}
+function solidAt(room, px, py) {
+  const t = tileAt(room, Math.floor(px / TS), Math.floor(py / TS));
+  return SOLID.indexOf(t) >= 0;
+}
+
+/* ---------------- game state ---------------- */
+const G = {
+  scene: 'title',
+  t: 0,
+  day: 1,
+  MAXDAY: 6,
+  room: 0,
+  px: 5 * TS, py: 8 * TS,
+  dir: 1, walkT: 0,
+  offering: null,          // item currently carried
+  offered: [],             // names offered across the run
+  noticed: [],             // ids of anomalies noticed
+  lucidity: 0,
+  phase: 'wake',           // wake -> hasOffering -> visited -> done
+  fade: 1, fadeTo: 0,
+  msg: null, msgT: 0, msgQueue: [],
+  kneelT: 0,
+  shake: 0,
+  ending: null,
+  herShown: 0,             // how many of HER lines have been delivered
+  hb: 0                    // heartbeat / dread level 0..1
+};
+const TRUTH_GATE = 8;      // lucidity needed to speak to the knight in the finale
+
+const OFFERINGS = [
+  { id: 'ribbon', name: 'her green ribbon', line: 'She wore it the day of the betrothal. It still smells of nothing at all.' },
+  { id: 'apple', name: 'a winter apple', line: 'She stole them from the orchard. She was never good at it. She always laughed.' },
+  { id: 'gauntlet', name: 'your left gauntlet', line: 'The hand that held the spear. You would give the arm too, if asked.' },
+  { id: 'tooth', name: 'the dragon’s tooth', line: 'You pried it from the jaw yourself. It is warm. It has always been warm.' },
+  { id: 'sword', name: 'your sword', line: 'It has one notch in it. You know exactly which stroke made the notch.' },
+  { id: 'stone', name: 'a stone from her tower', line: 'The tower is rubble now. You carried this one down in your teeth.' }
+];
+
+/* anomalies per day: room, tile x/y, kind, and the knight's line */
+const ANOM = {
+  1: [
+    { id: 'a1', room: 2, tx: 13, ty: 9, kind: 'candles',
+      text: 'Every candle in the chapel is lit.\nI lit none of them. I have not lit one since.' }
+  ],
+  2: [
+    { id: 'b1', room: 3, tx: 19, ty: 11, kind: 'prints',
+      text: 'Footprints in the mud. Bare feet. Small.\nThey lead from the barrow. To the keep.\nNone lead back.' },
+    { id: 'b2', room: 0, tx: 27, ty: 2, kind: 'mirror',
+      text: 'I raise my hand. The glass waits\na moment before it agrees.' }
+  ],
+  3: [
+    { id: 'c1', room: 5, tx: 13, ty: 10, kind: 'flowers',
+      text: 'The flowers I left yesterday have been moved.\nThey spell something. I will not read it.\n\n...it says STOP.' },
+    { id: 'c2', room: 1, tx: 12, ty: 6, kind: 'armor',
+      text: 'The table is laid for two.\nMy own place. And one across from it,\nset the way she liked. Knife on the wrong side.' }
+  ],
+  4: [
+    { id: 'd1', room: 0, tx: 4, ty: 13, kind: 'scales',
+      text: 'There is something on my forearm.\nI thought it was rust from the vambrace.\nIt is not rust. It does not scrape off.' },
+    { id: 'd2', room: 4, tx: 5, ty: 4, kind: 'trees',
+      text: 'Every tree on this hill leans toward the keep.\nThe wind here comes off the sea. It always has.' }
+  ],
+  5: [
+    { id: 'e1', room: 2, tx: 13, ty: 6, kind: 'tooth',
+      text: 'The dragon’s tooth is back in the reliquary.\nI buried it with her. I buried it four feet down.\nIt is warm.' },
+    { id: 'e2', room: 5, tx: 20, ty: 10, kind: 'mound',
+      text: 'The barrow is closer to the keep than it was.\nI paced it out on the first day. Two hundred strides.\nToday it is a hundred and sixty.' },
+    { id: 'e3', room: 1, tx: 25, ty: 2, kind: 'portrait',
+      text: 'My portrait hangs where it always hung.\nThe painter gave me a cloak.\nThe cloak has bones in it now. The cloak has a span.' }
+  ],
+  6: [
+    { id: 'f1', room: 5, tx: 13, ty: 6, kind: 'open',
+      text: 'The barrow is open.\nThe earth is thrown outward, not inward.\nSomething dug its way out, and it was not small,\nand it was not a girl.' }
+  ]
+};
+
+/* HER voice. One line unlocks per thing you notice, and they are delivered at the
+   barrow when you kneel. Notice nothing and she is silent for all six days.
+   Notice all eleven and you get her whole side of it before the end.          */
+const HER = [
+  '...',
+  'You are still coming up the hill.',
+  'I did not want to be found. I wanted the village left alone, and I was the only one',
+  'who could carry the thing they were afraid of.',
+  'I chose the shape. Nobody made me. That part was mine and you cannot have it.',
+  'I knew they would send someone. I did not know they would send you.',
+  'I saw you on the scree and I thought: he will know me. He will know me by the eye.',
+  'You did not. I do not blame you for that. The shape is very good. It is meant to be.',
+  'I had a voice for three more breaths after the spear. I spent them on nothing at all.',
+  'Stop bringing me things. I do not want the ribbon. I want you to walk down the hill.',
+  'You never do. So I am coming up.'
+];
+
+/* memory fragment shown when kneeling, per day */
+const MEMORY = {
+  1: ['They rang the bells for me for a week.',
+      'I sat in the hall while they rang and I looked at my hands.',
+      'I keep the vigil. That is the whole of it. I wake, I bring her a thing,',
+      'I kneel, I go back, I sleep. There is nothing else in the day.'],
+  2: ['She was sent to the mountain as tribute. That is the story.',
+      'The story is wrong. She was not given to the dragon.',
+      'I did not understand that until the scales came apart in my hands.'],
+  3: ['A knight is a shape a person is put into.',
+      'I was very good at the shape.',
+      'When the spear went in, the shape did the thinking. I have gone over it',
+      'ten thousand times looking for the moment I could have chosen, and',
+      'there is no moment. There is only the shape, doing what it is for.'],
+  4: ['She turned herself. That is what the maester finally told me,',
+      'when I would not stop asking. There is a bargain you can make',
+      'in that country. You take the shape of the thing they are afraid of,',
+      'and then they are afraid of you instead of the village.',
+      'She did it to save them. And they sent me.'],
+  5: ['I dream of it every night and in the dream I am slower,',
+      'and I see the green of her eye through the scale before I strike,',
+      'and I stop. I always stop, in the dream.',
+      'Then I wake, and my hands have already done it, years ago, and',
+      'no amount of stopping in a dream will take the spear back out.'],
+  6: ['I do not think I am grieving any more.',
+      'I think I am being answered.']
+};
+
+/* ---------------- text box ---------------- */
+function say(lines, opts) {
+  const arr = Array.isArray(lines) ? lines : String(lines).split('\n');
+  G.msgQueue.push({ lines: arr, opts: opts || {} });
+  if (!G.msg) nextMsg();
+}
+function nextMsg() {
+  if (G.msgQueue.length) { G.msg = G.msgQueue.shift(); G.msgT = 0; }
+  else G.msg = null;
+}
+function msgActive() { return !!G.msg; }
+function updateMsg(dt) {
+  if (!G.msg) return;
+  G.msgT += dt;
+  const total = G.msg.lines.join('').length;
+  const done = G.msgT * 42 >= total;
+  if (hit(' ') || hit('e') || hit('Enter')) {
+    if (!done) G.msgT = total / 42 + 1;
+    else { const cb = G.msg.opts.then; nextMsg(); if (cb && !G.msg) cb(); }
+  }
+}
+function drawMsg() {
+  if (!G.msg) return;
+  const lines = G.msg.lines;
+  const bh = 26 + lines.length * 26;
+  const by = H - bh - 26;
+  ctx.fillStyle = 'rgba(4,4,7,.90)';
+  ctx.fillRect(40, by, W - 80, bh);
+  ctx.strokeStyle = 'rgba(120,110,95,.35)'; ctx.lineWidth = 1;
+  ctx.strokeRect(40.5, by + 0.5, W - 81, bh - 1);
+  ctx.font = '19px Georgia, serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  let budget = Math.floor(G.msgT * 42);
+  for (let i = 0; i < lines.length; i++) {
+    const full = lines[i];
+    const shown = full.slice(0, Math.max(0, budget));
+    budget -= full.length;
+    ctx.fillStyle = G.msg.opts.color || '#c8bfae';
+    ctx.fillText(shown, 66, by + 34 + i * 26);
+    if (budget <= 0) break;
+  }
+  const total = lines.join('').length;
+  if (G.msgT * 42 >= total && Math.floor(G.t * 2) % 2 === 0) {
+    ctx.fillStyle = '#6d6455';
+    ctx.fillText('▾', W - 78, by + bh - 12);
+  }
+}
+
+/* ---------------- drawing helpers ---------------- */
+function rr(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w | 0, h | 0); }
+
+function drawKnight(x, y, dir, walk, scales, dead) {
+  const bob = dead ? 0 : Math.sin(walk * 9) * 1.5;
+  const s = 1;
+  ctx.save(); ctx.translate(x, y + bob);
+  if (dead) { ctx.rotate(1.4); }
+  // cape
+  ctx.fillStyle = '#3a1c1c';
+  ctx.beginPath();
+  ctx.moveTo(-8 * s, -16 * s); ctx.lineTo(8 * s, -16 * s);
+  ctx.lineTo(6 * s + Math.sin(walk * 9) * 2, 8 * s); ctx.lineTo(-6 * s, 8 * s);
+  ctx.closePath(); ctx.fill();
+  // body
+  rr(-7 * s, -16 * s, 14 * s, 20 * s, '#5a5e66');
+  rr(-7 * s, -16 * s, 14 * s, 4 * s, '#6e727a');
+  // scale corruption on the body
+  if (scales > 0) {
+    ctx.fillStyle = 'rgba(46,92,58,' + Math.min(0.85, scales) + ')';
+    for (let i = 0; i < 8; i++) {
+      const a = i * 1.7;
+      ctx.beginPath();
+      ctx.arc(-5 * s + (i % 4) * 3.2 * s, -12 * s + Math.floor(i / 4) * 6 * s + Math.sin(a) * 1, 2.1 * s, 0, 6.283);
+      ctx.fill();
+    }
+  }
+  // legs
+  const lo = dead ? 0 : Math.sin(walk * 9) * 3;
+  rr(-6 * s, 4 * s, 5 * s, 8 * s + lo, '#3c3f45');
+  rr(1 * s, 4 * s, 5 * s, 8 * s - lo, '#3c3f45');
+  // helm
+  rr(-6 * s, -28 * s, 12 * s, 13 * s, '#787c85');
+  rr(-6 * s, -28 * s, 12 * s, 3 * s, '#8b8f98');
+  ctx.fillStyle = '#0a0a0c';
+  ctx.fillRect((dir > 0 ? -1 : -5) * s, -24 * s, 6 * s, 3 * s);
+  ctx.restore();
+}
+
+function drawDragon(x, y, t, hurtT, scale, wingBeat) {
+  const s = scale == null ? 1 : scale;
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  const wb = Math.sin(wingBeat) * 0.5;
+  const tint = hurtT > 0 ? '#8a4a4a' : '#2c4a34';
+  const tint2 = hurtT > 0 ? '#a05656' : '#3a6044';
+  // wings
+  ctx.fillStyle = 'rgba(24,42,30,.92)';
+  for (const sgn of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.quadraticCurveTo(sgn * 46, -40 - wb * 22, sgn * 74, -6 + wb * 14);
+    ctx.quadraticCurveTo(sgn * 40, 4, 0, 10);
+    ctx.closePath(); ctx.fill();
+  }
+  // tail
+  ctx.strokeStyle = tint; ctx.lineWidth = 9; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 6);
+  ctx.quadraticCurveTo(-16 + Math.sin(t * 2) * 10, 30, -30 + Math.sin(t * 2) * 18, 44);
+  ctx.stroke();
+  // body
+  ctx.fillStyle = tint;
+  ctx.beginPath(); ctx.ellipse(0, 0, 22, 26, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = tint2;
+  ctx.beginPath(); ctx.ellipse(0, 4, 13, 17, 0, 0, 6.283); ctx.fill();
+  // neck + head
+  ctx.strokeStyle = tint; ctx.lineWidth = 13;
+  ctx.beginPath(); ctx.moveTo(0, -12);
+  ctx.quadraticCurveTo(6, -34, 2, -46); ctx.stroke();
+  ctx.fillStyle = tint2;
+  ctx.beginPath(); ctx.ellipse(2, -50, 14, 10, 0, 0, 6.283); ctx.fill();
+  // horns
+  ctx.strokeStyle = '#1a2a1e'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-6, -56); ctx.lineTo(-13, -66);
+  ctx.moveTo(10, -56); ctx.lineTo(17, -66); ctx.stroke();
+  // eye - green, always green
+  ctx.fillStyle = '#9fe08a';
+  ctx.beginPath(); ctx.arc(8, -51, 3.2, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#0a1a0c';
+  ctx.fillRect(7.2, -54, 1.6, 6);
+  ctx.restore();
+}
+
+function vignette(strength) {
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.25, W / 2, H / 2, H * 0.85);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,' + strength + ')');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+let grainPhase = 0;
+function grain(amount) {
+  grainPhase = (grainPhase + 1) % 4;
+  ctx.fillStyle = 'rgba(255,255,255,' + (amount * 0.014) + ')';
+  for (let i = 0; i < 120; i++) {
+    const x = (Math.random() * W) | 0, y = (Math.random() * H) | 0;
+    ctx.fillRect(x, y, 1, 1);
+  }
+}
+
+/* ---------------- room rendering ---------------- */
+function drawRoom() {
+  const R = ROOMS[G.room];
+  rr(0, 0, W, H, R.floor);
+  for (let ty = 0; ty < ROWS; ty++) {
+    const row = R.map[ty];
+    for (let tx = 0; tx < COLS; tx++) {
+      const t = row[tx] || '#';
+      const x = tx * TS, y = ty * TS;
+      if (t === '#') {
+        rr(x, y, TS, TS, R.wall);
+        rr(x, y, TS, 3, '#232028');
+      } else if (t === 'p') {
+        rr(x + 4, y - 6, TS - 8, TS + 8, '#26242c');
+        rr(x + 4, y - 6, TS - 8, 5, '#34313a');
+      } else if (t === '"') {
+        rr(x, y, TS, TS, '#0c0e08');
+        ctx.fillStyle = '#151c10';
+        ctx.beginPath();
+        ctx.arc(x + 16 + ((tx * 7 + ty * 3) % 5) - 2, y + 14, 13, 0, 6.283);
+        ctx.fill();
+        rr(x + 14, y + 18, 4, 14, '#0f1109');
+      } else if (t === ',') {
+        rr(x, y, TS, TS, R.floor);
+        if ((tx * 3 + ty * 5) % 7 === 0) rr(x + 8, y + 12, 3, 6, '#1f2618');
+      } else if (t === '~') {
+        rr(x, y, TS, TS, '#1d1a13');
+      } else if (t === '^') {
+        rr(x, y, TS, TS, '#1e1d1a');
+        rr(x + 2, y + 2, TS - 4, TS - 4, '#242320');
+      } else if (t === 'B') {
+        rr(x, y, TS, TS, '#2a2029');
+        rr(x + 2, y + 4, TS - 4, TS - 8, '#3b2b32');
+      } else if (t === 'm') {
+        rr(x + 4, y + 2, TS - 8, TS - 4, '#2b2b33');
+        rr(x + 7, y + 5, TS - 14, TS - 10, '#3d4450');
+      } else if (t === 'T') {
+        rr(x, y + 8, TS, TS - 12, '#2e2820');
+        rr(x, y + 8, TS, 4, '#3d3529');
+      } else if (t === 'w') {
+        rr(x, y, TS, TS, '#0e0d13');
+        rr(x + 5, y + 4, TS - 10, TS - 8, '#1d2634');
+      } else if (t === 'c') {
+        rr(x + 3, y + 8, TS - 6, TS - 12, '#2a2118');
+      } else if (t === 'G') {
+        rr(x, y, TS, TS, '#1b1a13');
+      } else if (t === '>' || t === '<') {
+        rr(x, y, TS, TS, '#000');
+        const g = ctx.createLinearGradient(x, y, x + TS, y);
+        g.addColorStop(0, 'rgba(60,55,45,.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g; ctx.fillRect(x, y, TS, TS);
+      } else {
+        rr(x, y, TS, TS, R.floor);
+      }
+    }
+  }
+  // the barrow mound itself, drawn big
+  if (G.room === 5) {
+    const open = G.day >= 6;
+    const mx = 15 * TS, my = 7 * TS;
+    ctx.fillStyle = open ? '#0a0a07' : '#241f16';
+    ctx.beginPath(); ctx.ellipse(mx, my, 78, 44, 0, 0, 6.283); ctx.fill();
+    if (!open) {
+      ctx.fillStyle = '#2c2619';
+      ctx.beginPath(); ctx.ellipse(mx, my - 8, 62, 30, 0, 0, 6.283); ctx.fill();
+    } else {
+      ctx.fillStyle = '#1a1610';
+      ctx.beginPath(); ctx.ellipse(mx, my, 96, 54, 0, 0, 6.283); ctx.stroke ? ctx.fill() : 0;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(mx, my, 66, 34, 0, 0, 6.283); ctx.fill();
+    }
+    // headstone
+    rr(mx - 8, my - 62, 16, 26, '#3a3a3a');
+    rr(mx - 12, my - 40, 24, 5, '#2e2e2e');
+  }
+  // room name, faint
+  ctx.font = '13px Georgia, serif'; ctx.textAlign = 'left';
+  ctx.fillStyle = 'rgba(150,140,120,.22)';
+  ctx.fillText(ROOMS[G.room].name, 14, 22);
+}
+
+/* ---------------- anomaly props ---------------- */
+function anomsToday() { return ANOM[G.day] || []; }
+function drawAnoms() {
+  for (const a of anomsToday()) {
+    if (a.room !== G.room) continue;
+    const x = a.tx * TS + 16, y = a.ty * TS + 16;
+    const seen = G.noticed.indexOf(a.id) >= 0;
+    ctx.save();
+    switch (a.kind) {
+      case 'candles':
+        for (let i = 0; i < 7; i++) {
+          const cx = x - 90 + i * 30, cy = y - 6 + (i % 2) * 10;
+          rr(cx - 2, cy, 4, 12, '#c8bb92');
+          const fl = 3 + Math.sin(G.t * 6 + i) * 1.1;
+          ctx.fillStyle = 'rgba(255,190,90,.9)';
+          ctx.beginPath(); ctx.arc(cx, cy - 3, fl, 0, 6.283); ctx.fill();
+          ctx.fillStyle = 'rgba(255,170,60,.09)';
+          ctx.beginPath(); ctx.arc(cx, cy - 3, 22, 0, 6.283); ctx.fill();
+        }
+        break;
+      case 'prints':
+        ctx.fillStyle = 'rgba(20,16,10,.85)';
+        for (let i = 0; i < 9; i++) {
+          ctx.beginPath();
+          ctx.ellipse(x - i * 26, y - i * 9 + (i % 2 ? 7 : -7), 5, 8, 0.2, 0, 6.283);
+          ctx.fill();
+        }
+        break;
+      case 'mirror':
+        rr(x - 12, y - 14, 24, 30, '#4a5262');
+        ctx.fillStyle = 'rgba(180,200,220,.10)';
+        ctx.fillRect(x - 9, y - 11, 18, 24);
+        break;
+      case 'flowers':
+        ctx.fillStyle = '#7e8a5a';
+        for (let i = 0; i < 14; i++) {
+          const ang = i * 0.9;
+          ctx.beginPath();
+          ctx.arc(x - 40 + i * 6, y + Math.sin(ang) * 9, 2.6, 0, 6.283);
+          ctx.fill();
+        }
+        break;
+      case 'armor':
+        drawKnight(x + 60, y + 4, -1, 0, 0, false);
+        ctx.globalAlpha = 0.55; drawKnight(x + 150, y + 4, 1, 0, 0, false); ctx.globalAlpha = 1;
+        break;
+      case 'scales':
+        ctx.fillStyle = 'rgba(60,120,74,.75)';
+        for (let i = 0; i < 10; i++) {
+          ctx.beginPath();
+          ctx.arc(x + (i % 5) * 7, y + Math.floor(i / 5) * 7, 3, 0, 6.283); ctx.fill();
+        }
+        break;
+      case 'trees':
+        ctx.strokeStyle = 'rgba(90,110,70,.35)'; ctx.lineWidth = 2;
+        for (let i = 0; i < 6; i++) {
+          ctx.beginPath(); ctx.moveTo(x + i * 40, y + 40);
+          ctx.lineTo(x + i * 40 + 26, y - 30); ctx.stroke();
+        }
+        break;
+      case 'tooth':
+        ctx.fillStyle = '#ddd2b4';
+        ctx.beginPath(); ctx.moveTo(x, y - 14); ctx.lineTo(x + 7, y + 10);
+        ctx.lineTo(x - 7, y + 10); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,120,60,' + (0.06 + Math.sin(G.t * 3) * 0.04) + ')';
+        ctx.beginPath(); ctx.arc(x, y, 30, 0, 6.283); ctx.fill();
+        break;
+      case 'mound':
+        ctx.strokeStyle = 'rgba(140,120,90,.25)';
+        ctx.setLineDash([5, 6]); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, y + 40); ctx.lineTo(x - 200, y + 40); ctx.stroke();
+        ctx.setLineDash([]);
+        break;
+      case 'portrait':
+        rr(x - 18, y - 22, 36, 46, '#2a2418');
+        rr(x - 14, y - 18, 28, 38, '#141018');
+        ctx.fillStyle = '#3d5a42';
+        ctx.beginPath(); ctx.moveTo(x - 13, y + 2);
+        ctx.quadraticCurveTo(x, y - 24, x + 13, y + 2); ctx.fill();
+        rr(x - 4, y - 8, 8, 16, '#5a5e66');
+        break;
+      case 'open':
+        break; // the mound already renders open on day 6
+    }
+    ctx.restore();
+    // interaction pip
+    if (!seen && nearTile(a.tx, a.ty, 3)) {
+      ctx.fillStyle = 'rgba(220,210,180,' + (0.35 + Math.sin(G.t * 4) * 0.25) + ')';
+      ctx.font = '16px Georgia, serif'; ctx.textAlign = 'center';
+      ctx.fillText('?', x, y - 34);
+    }
+  }
+}
+function nearTile(tx, ty, r) {
+  return Math.abs(G.px - (tx * TS + 16)) < r * TS && Math.abs(G.py - (ty * TS + 16)) < r * TS;
+}
+function tryNotice() {
+  for (const a of anomsToday()) {
+    if (a.room !== G.room) continue;
+    if (G.noticed.indexOf(a.id) >= 0) continue;
+    if (!nearTile(a.tx, a.ty, 3)) continue;
+    G.noticed.push(a.id);
+    G.lucidity++;
+    G.shake = 0.35;
+    Audio_.stinger();
+    say(a.text.split('\n'), { color: '#b9c4ae' });
+    return true;
+  }
+  return false;
+}
+
+/* ---------------- day scene ---------------- */
+function objective() {
+  if (G.phase === 'wake') return 'Take an offering from the chapel.';
+  if (G.phase === 'hasOffering') return 'Carry ' + G.offering.name + ' to the barrow.';
+  if (G.phase === 'visited') return 'Return to bed. Sleep.';
+  return '';
+}
+function pickOffering() {
+  const pool = OFFERINGS.filter(o => G.offered.indexOf(o.id) < 0);
+  const list = pool.length ? pool : OFFERINGS;
+  return list[(G.day - 1) % list.length];
+}
+
+function updateDay(dt) {
+  updateSkip(dt);
+  if (G.scene !== 'day') return;   // the skip may have ended the day already
+  updateMsg(dt);
+  if (msgActive()) return;
+
+  const R = ROOMS[G.room];
+  let vx = 0, vy = 0;
+  const SPD = 152;
+  if (held('a', 'ArrowLeft')) vx -= 1;
+  if (held('d', 'ArrowRight')) vx += 1;
+  if (held('w', 'ArrowUp')) vy -= 1;
+  if (held('s', 'ArrowDown')) vy += 1;
+  if (vx || vy) {
+    const m = Math.hypot(vx, vy) || 1;
+    vx = vx / m * SPD * dt; vy = vy / m * SPD * dt;
+    if (vx) G.dir = vx > 0 ? 1 : -1;
+    G.walkT += dt;
+    if (Math.floor(G.walkT * 4.5) !== Math.floor((G.walkT - dt) * 4.5)) Audio_.step();
+  }
+  // axis-separated collision, body box 14x14 around feet
+  const HB = 8;
+  let nx = G.px + vx;
+  if (!solidAt(G.room, nx - HB, G.py) && !solidAt(G.room, nx + HB, G.py) &&
+      !solidAt(G.room, nx - HB, G.py + 10) && !solidAt(G.room, nx + HB, G.py + 10)) G.px = nx;
+  let ny = G.py + vy;
+  if (!solidAt(G.room, G.px - HB, ny) && !solidAt(G.room, G.px + HB, ny) &&
+      !solidAt(G.room, G.px - HB, ny + 10) && !solidAt(G.room, G.px + HB, ny + 10)) G.py = ny;
+
+  // room transitions
+  const ttx = Math.floor(G.px / TS), tty = Math.floor(G.py / TS);
+  const tt = tileAt(G.room, ttx, tty);
+  if (tt === '>' && G.room < ROOMS.length - 1) { G.room++; G.px = 1.6 * TS; }
+  else if (tt === '<' && G.room > 0) { G.room--; G.px = (COLS - 2.2) * TS; }
+  if (G.px < 12) G.px = 12;
+  if (G.px > W - 12) G.px = W - 12;
+
+  // interactions
+  if (hit('e')) {
+    if (tryNotice()) return;
+    // reliquary in chapel
+    if (G.room === 2 && G.phase === 'wake' && nearTile(13, 6, 2.6)) {
+      G.offering = pickOffering();
+      G.offered.push(G.offering.id);
+      G.phase = 'hasOffering';
+      Audio_.bell();
+      say(['You take ' + G.offering.name + '.', G.offering.line]);
+      return;
+    }
+    // the barrow
+    if (G.room === 5 && G.phase === 'hasOffering' && nearTile(15, 7, 3.4)) {
+      G.phase = 'visited';
+      Audio_.bell();
+      const m = MEMORY[G.day] || [];
+      say(['You kneel, and set ' + G.offering.name + ' against the stone.']);
+      say(m, { color: '#a9b39d' });
+      // her voice: one line for every thing you have noticed since you last knelt
+      if (G.lucidity > G.herShown) {
+        const lines = HER.slice(G.herShown, Math.min(HER.length, G.lucidity));
+        G.herShown = Math.min(HER.length, G.lucidity);
+        if (lines.length) {
+          Audio_.tone(196, 1.6, 'sine', 0.05);
+          say(['Something answers from under the stone.'], { color: '#8f9a86' });
+          say(lines, { color: '#9fc08a' });
+        }
+      }
+      if (G.day === 6) {
+        say(['The hole goes down further than a grave should.',
+             'You can feel warm air coming up out of it.',
+             'It smells like the inside of a mouth.'], { color: '#b8a08a' });
+      }
+      G.offering = null;
+      return;
+    }
+    // bed
+    if (G.room === 0 && G.phase === 'visited' && nearTile(3, 2, 2.6)) {
+      endDay();
+      return;
+    }
+    // flavour on the bed too early
+    if (G.room === 0 && nearTile(3, 2, 2.6) && G.phase !== 'visited') {
+      say(['Not yet. The day is not finished.']);
+      return;
+    }
+  }
+
+  // dread pressure rises with the day and with what you have seen
+  const target = Math.min(1, (G.day - 1) / 5 * 0.7 + G.lucidity * 0.05);
+  G.hb += (target - G.hb) * dt * 0.6;
+  Audio_.setDrone(0.02 + G.hb * 0.06);
+}
+
+/* ---- skip day ----
+   Click the button or hold K. Skipping costs you the day's anomalies, which is
+   the whole trade: you get the time back, and you notice nothing.            */
+const SKIPBTN = { x: W - 158, y: 76, w: 142, h: 30 };
+const Skip = { hold: 0, hover: false, armed: false };
+function canSkip() { return G.scene === 'day' && !msgActive(); }
+function skipDay() {
+  Skip.hold = 0; Skip.armed = false;
+  G.offering = null; G.phase = 'done';
+  endDay();
+}
+function updateSkip(dt) {
+  if (!canSkip()) { Skip.hold = 0; return; }
+  if (keys['k']) { Skip.hold += dt; if (Skip.hold >= 0.7) skipDay(); }
+  else Skip.hold = Math.max(0, Skip.hold - dt * 2.5);
+}
+function drawSkipBtn() {
+  if (!canSkip()) return;
+  const b = SKIPBTN;
+  ctx.fillStyle = Skip.hover ? 'rgba(30,28,24,.92)' : 'rgba(14,13,16,.72)';
+  ctx.fillRect(b.x, b.y, b.w, b.h);
+  if (Skip.hold > 0) {
+    ctx.fillStyle = 'rgba(120,105,70,.45)';
+    ctx.fillRect(b.x, b.y, b.w * Math.min(1, Skip.hold / 0.7), b.h);
+  }
+  ctx.strokeStyle = Skip.hover ? 'rgba(180,168,140,.55)' : 'rgba(120,110,95,.28)';
+  ctx.lineWidth = 1; ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+  ctx.textAlign = 'center'; ctx.font = '14px Georgia, serif';
+  ctx.fillStyle = Skip.hover ? 'rgba(215,205,180,.9)' : 'rgba(170,160,140,.55)';
+  ctx.fillText('skip the day', b.x + b.w / 2, b.y + 20);
+  ctx.font = '11px Georgia, serif';
+  ctx.fillStyle = 'rgba(140,130,112,.35)';
+  ctx.fillText('or hold K', b.x + b.w / 2, b.y + 44);
+}
+function pointInSkip(mx, my) {
+  const b = SKIPBTN;
+  return mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h;
+}
+function canvasPos(e) {
+  const r = cv.getBoundingClientRect ? cv.getBoundingClientRect() : { left: 0, top: 0, width: W, height: H };
+  return { x: (e.clientX - r.left) * (W / (r.width || W)),
+           y: (e.clientY - r.top) * (H / (r.height || H)) };
+}
+if (cv.addEventListener) {
+  cv.addEventListener('mousemove', function (e) {
+    const p = canvasPos(e);
+    Skip.hover = canSkip() && pointInSkip(p.x, p.y);
+  });
+  cv.addEventListener('mousedown', function (e) {
+    if (!canSkip()) return;
+    const p = canvasPos(e);
+    if (pointInSkip(p.x, p.y)) skipDay();
+  });
+}
+
+function endDay() {
+  G.fadeTo = 1;
+  G.scene = 'dayend';
+  G.t = 0;
+  Audio_.bell();
+}
+
+function startDay(n) {
+  G.day = n;
+  G.room = 0; G.px = 6 * TS; G.py = 3 * TS + 8;
+  G.phase = 'wake'; G.offering = null;
+  G.scene = 'day'; G.fade = 1; G.fadeTo = 0;
+  G.msg = null; G.msgQueue = [];
+  clearPressed();
+  const head = ['DAY ' + n + ' OF THE VIGIL'];
+  say(head, { color: '#8d8676' });
+  if (n === 1) {
+    say(['You wake in the keep she was to have lived in.',
+         'You do what you do. There is nothing else in the day.']);
+  }
+  if (n === 6) {
+    say(['You wake with your hands closed.',
+         'You do not remember closing them.']);
+  }
+}
+
+function drawDay() {
+  ctx.save();
+  if (G.shake > 0) {
+    ctx.translate((Math.random() - 0.5) * G.shake * 14, (Math.random() - 0.5) * G.shake * 14);
+  }
+  drawRoom();
+  drawAnoms();
+  const scales = Math.max(0, (G.day - 3)) * 0.22 + G.lucidity * 0.03;
+  drawKnight(G.px, G.py, G.dir, G.walkT, scales, false);
+  ctx.restore();
+
+  // interaction prompts
+  let prompt = null;
+  if (G.room === 2 && G.phase === 'wake' && nearTile(13, 6, 2.6)) prompt = 'E — take an offering';
+  if (G.room === 5 && G.phase === 'hasOffering' && nearTile(15, 7, 3.4)) prompt = 'E — kneel';
+  if (G.room === 0 && G.phase === 'visited' && nearTile(3, 2, 2.6)) prompt = 'E — sleep';
+  if (prompt && !msgActive()) {
+    ctx.font = '15px Georgia, serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(215,205,180,.75)';
+    ctx.fillText(prompt, W / 2, H - 30);
+  }
+
+  // HUD
+  ctx.textAlign = 'right'; ctx.font = '14px Georgia, serif';
+  ctx.fillStyle = 'rgba(180,170,150,.5)';
+  ctx.fillText('Day ' + G.day + ' of the vigil', W - 16, 24);
+  ctx.fillStyle = 'rgba(180,170,150,.32)';
+  ctx.fillText(objective(), W - 16, 44);
+  if (G.lucidity > 0) {
+    ctx.fillStyle = G.lucidity >= TRUTH_GATE ? 'rgba(170,215,160,.42)' : 'rgba(150,190,150,.30)';
+    ctx.fillText('noticed ' + G.lucidity + ' of ' + totalAnoms(), W - 16, 64);
+  }
+
+  vignette(0.55 + G.hb * 0.3);
+  grain(0.5 + G.hb);
+  drawSkipBtn();
+  drawMsg();
+}
+
+/* ---------------- combat: shared arena ---------------- */
+const Fight = {
+  mode: 'prologue',   // 'prologue' (you are the knight) | 'finale' (you are the dragon)
+  kx: 0, ky: 0, kvx: 0, kvy: 0, khp: 0, kdir: 1, kwalk: 0, kiframe: 0, kslash: 0,
+  dx: 0, dy: 0, dhp: 0, dhurt: 0, dstate: 'idle', dtimer: 0, dtargetx: 0, dtargety: 0,
+  fires: [], t: 0, over: false, resultT: 0, dragonEverAttacked: false, spoke: false,
+  wing: 0, throwT: 0, inReach: false
+};
+
+function startFight(mode) {
+  const F = Fight;
+  F.mode = mode; F.t = 0; F.over = false; F.resultT = 0; F.fires = [];
+  F.dragonEverAttacked = false; F.spoke = false; F.wing = 0; F.inReach = false;
+  F.throwT = mode === 'prologue' ? 0 : 2.2;
+  F.kx = 200; F.ky = 430; F.kvx = 0; F.kvy = 0; F.khp = mode === 'prologue' ? 5 : 60;
+  F.kdir = 1; F.kwalk = 0; F.kiframe = 0; F.kslash = 0;
+  F.dx = 700; F.dy = 200; F.dhp = mode === 'prologue' ? 100 : 100;
+  F.dhurt = 0; F.dstate = 'idle'; F.dtimer = 1.2;
+  G.scene = mode === 'prologue' ? 'prologue' : 'finale';
+  G.fade = 1; G.fadeTo = 0;
+  G.msg = null; G.msgQueue = [];
+  clearPressed();
+  Audio_.setDrone(0.09);
+}
+
+function arenaClamp(o, pad) {
+  if (o.x < pad) o.x = pad; if (o.x > W - pad) o.x = W - pad;
+  if (o.y < 90) o.y = 90; if (o.y > H - 40) o.y = H - 40;
+  return o;
+}
+
+function spawnFire(x, y, ang, speed, owner) {
+  if (Fight.fires.length > 90) return;
+  Fight.fires.push({ x: x, y: y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, life: 1.6, owner: owner, r: 7 });
+}
+
+function updateFires(dt) {
+  const F = Fight;
+  for (let i = F.fires.length - 1; i >= 0; i--) {
+    const f = F.fires[i];
+    f.x += f.vx * dt; f.y += f.vy * dt; f.life -= dt;
+    f.r += dt * 6;
+    if (f.life <= 0 || f.x < -40 || f.x > W + 40 || f.y < -40 || f.y > H + 40) { F.fires.splice(i, 1); continue; }
+    if (f.owner === 'dragon' && F.mode === 'prologue' && F.kiframe <= 0) {
+      if (Math.hypot(f.x - F.kx, f.y - F.ky + 10) < f.r + 12) {
+        F.khp--; F.kiframe = 1.9; G.shake = 0.6; Audio_.hurt(); F.fires.splice(i, 1);
+      }
+    }
+    if (f.owner === 'knight') {
+      if (Math.hypot(f.x - F.dx, f.y - F.dy + 10) < f.r + 26) {
+        F.dhp -= (F.mode === 'prologue' ? 5
+                  : (G.lucidity >= totalAnoms() ? 4 : 7));
+        F.dhurt = 0.18; G.shake = 0.4; Audio_.hurt(); F.fires.splice(i, 1);
+      }
+      continue;
+    }
+    if (f.owner === 'dragon' && F.mode === 'finale') {
+      if (Math.hypot(f.x - F.kx, f.y - F.ky + 10) < f.r + 12) {
+        F.khp -= 13; G.shake = 0.4; Audio_.hurt(); F.fires.splice(i, 1);
+      }
+    }
+  }
+}
+
+function drawArena(mode) {
+  // mountain ledge, same place both times
+  rr(0, 0, W, H, '#0a0b0e');
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, mode === 'prologue' ? '#171a26' : '#1c1213');
+  g.addColorStop(1, '#07070a');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // distant ridge
+  ctx.fillStyle = '#0e1016';
+  ctx.beginPath(); ctx.moveTo(0, 210);
+  for (let x = 0; x <= W; x += 60) ctx.lineTo(x, 200 + Math.sin(x * 0.011) * 40 + Math.cos(x * 0.03) * 14);
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+  // ground
+  rr(0, H - 96, W, 96, '#12120f');
+  rr(0, H - 96, W, 4, '#1c1c16');
+  for (let i = 0; i < 22; i++) rr((i * 47 + 11) % W, H - 90 + (i % 5) * 12, 14, 3, '#171712');
+}
+
+function drawFires() {
+  for (const f of Fight.fires) {
+    if (f.owner === 'knight') {   // the borrowed spear
+      const a = Math.atan2(f.vy, f.vx);
+      ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(a);
+      ctx.fillStyle = '#8b8f98'; ctx.fillRect(-22, -1.5, 44, 3);
+      ctx.fillStyle = '#c9ccd4';
+      ctx.beginPath(); ctx.moveTo(22, -5); ctx.lineTo(34, 0); ctx.lineTo(22, 5);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    ctx.fillStyle = 'rgba(255,150,50,.30)';
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 6, 0, 6.283); ctx.fill();
+    ctx.fillStyle = 'rgba(255,215,130,.85)';
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r * 0.6, 0, 6.283); ctx.fill();
+  }
+}
+function drawBar(x, y, w, frac, col, label) {
+  rr(x, y, w, 10, 'rgba(0,0,0,.6)');
+  rr(x + 1, y + 1, Math.max(0, (w - 2) * frac), 8, col);
+  ctx.strokeStyle = 'rgba(160,150,130,.35)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, y + .5, w - 1, 9);
+  if (label) {
+    ctx.font = '12px Georgia, serif'; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(180,170,150,.55)'; ctx.fillText(label, x, y - 5);
+  }
+}
+
+/* -------- PROLOGUE: you are the knight -------- */
+function updatePrologue(dt) {
+  const F = Fight;
+  updateMsg(dt);
+  if (msgActive()) return;
+  if (F.over) {
+    F.resultT += dt;
+    if (F.resultT > 1.2 && anyHit()) {
+      if (F.khp <= 0) { startFight('prologue'); }
+      else { G.scene = 'reveal'; G.t = 0; G.fade = 0; G.msg = null; G.msgQueue = []; Audio_.setDrone(0.12); }
+    }
+    return;
+  }
+  F.t += dt; F.wing += dt * 5;
+  if (F.kiframe > 0) F.kiframe -= dt;
+  if (F.kslash > 0) F.kslash -= dt;
+
+  // knight movement
+  let vx = 0, vy = 0;
+  if (held('a', 'ArrowLeft')) vx -= 1;
+  if (held('d', 'ArrowRight')) vx += 1;
+  if (held('w', 'ArrowUp')) vy -= 1;
+  if (held('s', 'ArrowDown')) vy += 1;
+  const m = Math.hypot(vx, vy) || 1;
+  const SPD = 235;
+  F.kx += vx / m * SPD * dt; F.ky += vy / m * SPD * dt;
+  if (vx) F.kdir = vx > 0 ? 1 : -1;
+  if (vx || vy) F.kwalk += dt;
+  arenaClamp({ get x() { return F.kx; }, set x(v) { F.kx = v; },
+               get y() { return F.ky; }, set y(v) { F.ky = v; } }, 20);
+
+  // slash
+  // strike: auto-aims at the wyrm. In reach it is a thrust; out of reach you throw.
+  const reach = Math.hypot(F.kx - F.dx, F.ky - 8 - (F.dy - 10));
+  F.inReach = reach < 110;
+  if (hit(' ') && F.kslash <= 0) {
+    F.kdir = F.dx >= F.kx ? 1 : -1;
+    if (F.inReach) {
+      F.kslash = 0.30; Audio_.slash();
+      F.dhp -= 7.5; F.dhurt = 0.16; G.shake = 0.25;
+      Audio_.tone(220, 0.1, 'square', 0.08);
+    } else if (F.throwT <= 0) {
+      F.throwT = 0.75; F.kslash = 0.22; Audio_.slash();
+      const a = Math.atan2(F.dy - 10 - (F.ky - 8), F.dx - F.kx);
+      F.fires.push({ x: F.kx, y: F.ky - 14, vx: Math.cos(a) * 430, vy: Math.sin(a) * 430,
+                     life: 2.2, owner: 'knight', r: 6 });
+    }
+  }
+  if (F.throwT > 0) F.throwT -= dt;
+  if (F.dhurt > 0) F.dhurt -= dt;
+
+  // dragon AI
+  F.dtimer -= dt;
+  const phase = F.dhp > 66 ? 0 : F.dhp > 33 ? 1 : 2;
+  if (F.dstate === 'idle') {
+    F.dx += Math.sin(F.t * 1.1) * 40 * dt;
+    F.dy += Math.sin(F.t * 1.7) * 26 * dt;
+    if (F.dtimer <= 0) {
+      const r = Math.random();
+      F.dstate = r < (0.30 + phase * 0.07) ? 'breathe' : (r < 0.86 ? 'reposition' : 'dive');
+      F.dtimer = F.dstate === 'breathe' ? 0.7 : 1.0;
+      if (F.dstate === 'reposition') {
+        F.dtargetx = 120 + Math.random() * (W - 240);
+        F.dtargety = 130 + Math.random() * 130;
+      }
+      if (F.dstate === 'dive') { F.dtargetx = F.kx; F.dtargety = F.ky - 30; }
+    }
+  } else if (F.dstate === 'breathe') {
+    if (F.dtimer > 0.45) {
+      // telegraph
+    } else {
+      if (Math.random() < 0.34) {
+        const a = Math.atan2(F.ky - F.dy, F.kx - F.dx) + (Math.random() - 0.5) * (0.75 + phase * 0.1);
+        spawnFire(F.dx, F.dy - 40, a, 150 + phase * 25, 'dragon');
+        if (Math.random() < 0.4) Audio_.fire();
+      }
+    }
+    if (F.dtimer <= 0) { F.dstate = 'idle'; F.dtimer = 1.7 - phase * 0.2; }
+  } else if (F.dstate === 'reposition') {
+    F.dx += (F.dtargetx - F.dx) * dt * 2.4;
+    F.dy += (F.dtargety - F.dy) * dt * 2.4;
+    if (F.dtimer <= 0) { F.dstate = 'idle'; F.dtimer = 1.2 - phase * 0.25; }
+  } else if (F.dstate === 'dive') {
+    F.dx += (F.dtargetx - F.dx) * dt * 2.6;
+    F.dy += (F.dtargety - F.dy) * dt * 2.6;
+    if (F.kiframe <= 0 && Math.hypot(F.dx - F.kx, F.dy - F.ky + 10) < 46) {
+      F.khp--; F.kiframe = 1.9; G.shake = 0.6; Audio_.hurt();
+    }
+    if (F.dtimer <= 0) { F.dstate = 'idle'; F.dtimer = 1.4 - phase * 0.3; }
+  }
+  if (F.dx < 70) F.dx = 70; if (F.dx > W - 70) F.dx = W - 70;
+  if (F.dy < 110) F.dy = 110; if (F.dy > H - 150) F.dy = H - 150;
+
+  updateFires(dt);
+
+  if (F.dhp <= 0) { F.over = true; F.dhp = 0; Audio_.stinger(); G.shake = 1; }
+  if (F.khp <= 0) { F.over = true; Audio_.stinger(); }
+}
+
+function drawPrologue() {
+  const F = Fight;
+  ctx.save();
+  if (G.shake > 0) ctx.translate((Math.random() - 0.5) * G.shake * 16, (Math.random() - 0.5) * G.shake * 16);
+  drawArena('prologue');
+  if (F.dhp > 0 || F.resultT < 0.4) drawDragon(F.dx, F.dy, F.t, F.dhurt, 1, F.wing);
+  else drawDragon(F.dx, H - 130, F.t, 0.001, 1, 0);
+  drawFires();
+  if (!(F.over && F.khp <= 0)) {
+    // reach ring: tells you at a glance whether SPACE will thrust or throw
+    if (!F.over) {
+      ctx.strokeStyle = F.inReach ? 'rgba(215,225,235,.30)' : 'rgba(120,130,145,.12)';
+      ctx.lineWidth = F.inReach ? 2 : 1;
+      ctx.setLineDash(F.inReach ? [] : [4, 8]);
+      ctx.beginPath(); ctx.arc(F.kx, F.ky - 8, 110, 0, 6.283); ctx.stroke();
+      ctx.setLineDash([]);
+      if (F.inReach) {   // an aim line to the wyrm so the auto-aim is legible
+        ctx.strokeStyle = 'rgba(220,200,160,.20)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(F.kx, F.ky - 8); ctx.lineTo(F.dx, F.dy - 10); ctx.stroke();
+      }
+    }
+    const blink = F.kiframe > 0 && Math.floor(F.t * 18) % 2 === 0;
+    if (!blink) drawKnight(F.kx, F.ky, F.kdir, F.kwalk, 0, false);
+    if (F.kslash > 0) {
+      // the thrust reaches out toward whatever you aimed at
+      const a = Math.atan2(F.dy - 10 - (F.ky - 8), F.dx - F.kx);
+      ctx.save(); ctx.translate(F.kx, F.ky - 8); ctx.rotate(a);
+      ctx.strokeStyle = 'rgba(230,230,240,' + Math.min(1, F.kslash * 2.6) + ')';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(96, 0); ctx.stroke();
+      ctx.fillStyle = 'rgba(240,240,250,' + Math.min(1, F.kslash * 2.6) + ')';
+      ctx.beginPath(); ctx.moveTo(96, -6); ctx.lineTo(112, 0); ctx.lineTo(96, 6);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+  } else {
+    drawKnight(F.kx, F.ky + 10, F.kdir, 0, 0, true);
+  }
+  ctx.restore();
+
+  drawBar(W / 2 - 180, 34, 360, Math.max(0, F.dhp / 100), '#5c8a5f', 'THE WYRM OF THE ASHGATE');
+  ctx.textAlign = 'left'; ctx.font = '20px Georgia, serif';
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = i < F.khp ? '#b04a4a' : '#2a2226';
+    ctx.fillText('♥', 18 + i * 24, 40);
+  }
+  if (!F.over) {
+    ctx.textAlign = 'center'; ctx.font = '14px Georgia, serif';
+    ctx.fillStyle = 'rgba(180,170,150,.45)';
+    ctx.fillText('SPACE — ' + (F.inReach ? 'thrust' : 'throw the spear'), W / 2, 68);
+  }
+  vignette(0.6); grain(1.1);
+
+  if (F.over) {
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.font = '30px Georgia, serif';
+    if (F.khp <= 0) {
+      ctx.fillStyle = '#8a7a70'; ctx.fillText('The wyrm of the Ashgate stands over you.', W / 2, H / 2 - 10);
+      ctx.font = '16px Georgia, serif'; ctx.fillStyle = '#5f574f';
+      ctx.fillText('press any key to take up the spear again', W / 2, H / 2 + 30);
+    } else {
+      ctx.fillStyle = '#a89a86'; ctx.fillText('It is done.', W / 2, H / 2 - 10);
+      ctx.font = '16px Georgia, serif'; ctx.fillStyle = '#5f574f';
+      if (F.resultT > 1.2) ctx.fillText('press any key', W / 2, H / 2 + 30);
+    }
+  }
+  drawMsg();
+}
+
+/* ---------------- the reveal ---------------- */
+const REVEAL_LINES = [
+  { t: 0.5, s: 'You kneel to take the tooth, as is customary.' },
+  { t: 4.0, s: 'The scales at the throat are loose. They come away in your hand' },
+  { t: 6.0, s: 'like the plates of an old cuirass, like something built,' },
+  { t: 8.0, s: 'like something someone climbed into on purpose.' },
+  { t: 12.0, s: 'Underneath there is a shoulder. There is a collarbone.' },
+  { t: 15.0, s: 'There is a green ribbon, wound twice, tied in the way' },
+  { t: 17.5, s: 'she tied it, the way she could never get straight.' },
+  { t: 22.0, s: 'Her eyes are open. They are the same green they were' },
+  { t: 24.5, s: 'through the scale, at the moment you decided.' },
+  { t: 29.0, s: 'You have killed the princess of Marrow Hall.' },
+  { t: 32.5, s: 'You have killed her with your own two hands and a borrowed spear' },
+  { t: 35.0, s: 'and they will give you a title for it.' }
+];
+function updateReveal(dt) {
+  G.t += dt;
+  Audio_.setDrone(0.05 + Math.min(0.09, G.t * 0.004));
+  if (G.t > 40 || (G.t > 6 && hit('Escape'))) {
+    G.scene = 'toDay'; G.t = 0; G.fade = 0; G.fadeTo = 1;
+  }
+}
+function drawReveal() {
+  rr(0, 0, W, H, '#070609');
+  const t = G.t;
+  // the body on the ledge
+  ctx.save();
+  ctx.translate(W / 2, H / 2 + 60);
+  const peel = Math.min(1, Math.max(0, (t - 3) / 12));
+  // dragon husk, opening
+  ctx.fillStyle = 'rgba(30,50,36,' + (1 - peel * 0.7) + ')';
+  ctx.beginPath(); ctx.ellipse(0, 0, 190, 80, 0, 0, 6.283); ctx.fill();
+  for (const sgn of [-1, 1]) {
+    ctx.save(); ctx.rotate(sgn * peel * 0.5);
+    ctx.fillStyle = 'rgba(22,38,28,.95)';
+    ctx.beginPath();
+    ctx.ellipse(sgn * (40 + peel * 70), 6, 120, 54, 0, 0, 6.283); ctx.fill();
+    ctx.restore();
+  }
+  // her
+  const her = Math.min(1, Math.max(0, (t - 10) / 6));
+  ctx.globalAlpha = her;
+  ctx.fillStyle = '#c9b9a6';
+  ctx.beginPath(); ctx.ellipse(0, -4, 26, 54, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#d6c7b4';
+  ctx.beginPath(); ctx.arc(0, -66, 20, 0, 6.283); ctx.fill();
+  // hair
+  ctx.fillStyle = '#3a2a20';
+  ctx.beginPath(); ctx.ellipse(0, -74, 23, 15, 0, 0, 6.283); ctx.fill();
+  // ribbon
+  const rib = Math.min(1, Math.max(0, (t - 14) / 3));
+  ctx.globalAlpha = her * rib;
+  ctx.strokeStyle = '#5d8a54'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(-20, -48); ctx.quadraticCurveTo(0, -42, 20, -48); ctx.stroke();
+  // eye
+  const ey = Math.min(1, Math.max(0, (t - 21) / 2));
+  ctx.globalAlpha = her * ey;
+  ctx.fillStyle = '#9fe08a';
+  ctx.beginPath(); ctx.arc(-7, -68, 3.4, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.arc(8, -68, 3.4, 0, 6.283); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // kneeling knight
+  drawKnight(W / 2 - 210, H / 2 + 100, 1, 0, 0, false);
+
+  // text
+  ctx.textAlign = 'center'; ctx.font = '21px Georgia, serif';
+  let y = 92;
+  for (const L of REVEAL_LINES) {
+    if (t < L.t) continue;
+    const a = Math.min(1, (t - L.t) / 1.1);
+    ctx.fillStyle = 'rgba(200,190,172,' + (a * 0.92) + ')';
+    ctx.fillText(L.s, W / 2, y);
+    y += 30;
+  }
+  vignette(0.72); grain(1.4);
+  ctx.textAlign = 'center'; ctx.font = '13px Georgia, serif';
+  ctx.fillStyle = 'rgba(90,84,76,.5)';
+  ctx.fillText('esc to continue', W / 2, H - 14);
+}
+
+/* ---------------- FINALE: you are the dragon ---------------- */
+function updateFinale(dt) {
+  const F = Fight;
+  updateMsg(dt);
+  if (msgActive()) return;
+  if (F.over) { F.resultT += dt; if (F.resultT > 1.4 && anyHit()) { G.scene = 'ending'; G.t = 0; } return; }
+  F.t += dt; F.wing += dt * 4;
+  if (F.dhurt > 0) F.dhurt -= dt;
+
+  // YOU are the dragon: free flight
+  let vx = 0, vy = 0;
+  if (held('a', 'ArrowLeft')) vx -= 1;
+  if (held('d', 'ArrowRight')) vx += 1;
+  if (held('w', 'ArrowUp')) vy -= 1;
+  if (held('s', 'ArrowDown')) vy += 1;
+  const m = Math.hypot(vx, vy) || 1;
+  F.dx += vx / m * 200 * dt; F.dy += vy / m * 170 * dt;
+  if (F.dx < 70) F.dx = 70; if (F.dx > W - 70) F.dx = W - 70;
+  if (F.dy < 110) F.dy = 110; if (F.dy > H - 140) F.dy = H - 140;
+
+  // breathe
+  if (held(' ', ' ') && F.t % 0.09 < dt * 1.5) {
+    const a = Math.atan2(F.ky - F.dy, F.kx - F.dx) + (Math.random() - 0.5) * 0.3;
+    spawnFire(F.dx, F.dy - 40, a, 240, 'dragon');
+    F.dragonEverAttacked = true;
+    if (Math.random() < 0.3) Audio_.fire();
+  }
+
+  // speak - only if you noticed enough.
+  // If you noticed EVERYTHING you have earned it: no distance requirement at all.
+  const perfect = G.lucidity >= totalAnoms();
+  const speakRange = perfect ? Infinity : 340;
+  if (hit('e')) {
+    if (G.lucidity >= TRUTH_GATE && Math.hypot(F.dx - F.kx, F.dy - F.ky) < speakRange) {
+      F.spoke = true; F.over = true;
+      Audio_.bell();
+      if (G.lucidity >= totalAnoms()) {
+        // saw everything. the fifth ending.
+        G.ending = 'communion';
+        say(['You open your mouth to say his name,',
+             'and it is not your voice that comes out of you.',
+             '',
+             'It has been her voice since the day the barrow opened.',
+             'She did not climb out. She climbed IN, the way she climbed into the scales,',
+             'because you were the thing the village was afraid of by then,',
+             'and she has never once let a monster stand alone.'], { color: '#a8c89a' });
+      } else {
+        G.ending = 'truth';
+        say(['You do the one thing a dragon is never given the chance to do.',
+             'You say his name.',
+             '',
+             'He stops with the spear halfway back.',
+             'He is very young. He is the shape, doing what it is for.',
+             'And a shape can be told.'], { color: '#b6c6ac' });
+      }
+      return;
+    } else if (G.lucidity >= TRUTH_GATE) {
+      say(['He is too far off to hear you. Get closer.'], { color: '#8a9284' });
+    } else {
+      say(['You try to speak. It comes out as a sound off a mountain.',
+           'He does not hear a word in it. There was never a word in it for her, either.',
+           '',
+           'You noticed ' + G.lucidity + ' of the ' + totalAnoms() + ' things that were wrong.',
+           'It was not enough to know what to say.'], { color: '#7f8a78' });
+    }
+  }
+
+  // knight AI: approach, slash, and throw the spear if you fly out of reach
+  const dist = Math.hypot(F.dx - F.kx, F.dy - F.ky);
+  const wantx = F.dx, wanty = F.dy + 40;
+  const ks = 148;
+  F.throwT -= dt;
+  if (F.throwT <= 0 && dist > 80) {
+    F.throwT = 1.25;
+    const a = Math.atan2(F.dy - F.ky, F.dx - F.kx);
+    F.fires.push({ x: F.kx, y: F.ky - 14, vx: Math.cos(a) * 360, vy: Math.sin(a) * 360,
+                   life: 2.2, owner: 'knight', r: 6 });
+    Audio_.slash();
+  }
+  if (F.kslash > 0) { F.kslash -= dt; }
+  else if (dist > 70) {
+    const a = Math.atan2(wanty - F.ky, wantx - F.kx);
+    F.kx += Math.cos(a) * ks * dt; F.ky += Math.sin(a) * ks * dt;
+    F.kdir = Math.cos(a) > 0 ? 1 : -1; F.kwalk += dt;
+  } else {
+    F.kslash = 0.55; Audio_.slash();
+    // at full lucidity he hesitates - something in the wyrm's eye is the wrong green
+    F.dhp -= perfect ? 3 : 5;
+    F.dhurt = 0.18; G.shake = 0.35; Audio_.hurt();
+  }
+  // he dodges fire sometimes
+  for (const f of F.fires) {
+    if (Math.hypot(f.x - F.kx, f.y - F.ky) < 70) {
+      F.kx -= (f.vx) * dt * 0.5; F.ky -= (f.vy) * dt * 0.5;
+    }
+  }
+  if (F.ky < 300) F.ky = 300; if (F.ky > H - 40) F.ky = H - 40;
+  if (F.kx < 20) F.kx = 20; if (F.kx > W - 20) F.kx = W - 20;
+
+  updateFires(dt);
+
+  if (F.khp <= 0) {
+    F.over = true; G.ending = 'loop'; Audio_.stinger(); G.shake = 1;
+    say(['He comes apart the way you did not.',
+         'You lie down on the warm stone above the barrow and wait',
+         'for the next one. There is always a next one.',
+         'You understand now why she did not run.'], { color: '#c0a0a0' });
+  }
+  if (F.dhp <= 0) {
+    F.over = true; F.dhp = 0;
+    G.ending = F.dragonEverAttacked ? 'fought' : 'release';
+    Audio_.stinger();
+    if (G.ending === 'release') {
+      say(['You do not lift a claw.',
+           'The spear goes in under the throat, where the scales are loose,',
+           'where you knew they were loose, because you were the one who found that out.',
+           '',
+           'It does not hurt the way you expected.',
+           'It is only a door, and someone has finally opened it.'], { color: '#b4bcae' });
+    } else {
+      say(['He is better than you were. He does not hesitate.',
+           'The last thing you see is the spear, and behind it a face',
+           'that has not yet learned what it is about to learn.'], { color: '#b09a92' });
+    }
+  }
+}
+
+function drawFinale() {
+  const F = Fight;
+  ctx.save();
+  if (G.shake > 0) ctx.translate((Math.random() - 0.5) * G.shake * 16, (Math.random() - 0.5) * G.shake * 16);
+  drawArena('finale');
+  drawFires();
+  if (!(F.over && F.khp <= 0)) drawKnight(F.kx, F.ky, F.kdir, F.kwalk, 0, false);
+  else drawKnight(F.kx, F.ky + 10, F.kdir, 0, 0, true);
+  if (F.kslash > 0) {
+    ctx.strokeStyle = 'rgba(230,230,240,' + (F.kslash * 2.2) + ')'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(F.kx, F.ky - 8, 40, -0.9, 0.9); ctx.stroke();
+  }
+  drawDragon(F.dx, F.dy, F.t, F.dhurt, 1.15, F.wing);
+  ctx.restore();
+
+  drawBar(W / 2 - 180, 34, 360, Math.max(0, F.dhp / 100), '#7a4a4a', 'YOU');
+  drawBar(W / 2 - 120, H - 26, 240, Math.max(0, F.khp / 60), '#5a6a86', 'THE KNIGHT');
+  ctx.textAlign = 'center'; ctx.font = '14px Georgia, serif';
+  ctx.fillStyle = 'rgba(180,170,150,.4)';
+  if (!F.over) {
+    const total = totalAnoms();
+    const perfect = G.lucidity >= total;
+    const dist = Math.hypot(F.dx - F.kx, F.dy - F.ky);
+    const canSpeak = G.lucidity >= TRUTH_GATE && (perfect || dist < 340);
+    ctx.fillText('WASD fly · SPACE breathe', W / 2, 68);
+    // your count, always visible - you should never have to guess whether you qualify
+    ctx.font = '13px Georgia, serif';
+    ctx.fillStyle = G.lucidity >= TRUTH_GATE ? 'rgba(170,215,160,.55)' : 'rgba(160,150,132,.38)';
+    ctx.fillText('you noticed ' + G.lucidity + ' of ' + total + ' things that were wrong',
+                 W / 2, 88);
+    if (canSpeak) {
+      ctx.font = '17px Georgia, serif';
+      ctx.fillStyle = 'rgba(180,225,170,' + (0.55 + Math.sin(G.t * 3) * 0.3) + ')';
+      ctx.fillText(perfect ? 'E — SPEAK' : 'E — SPEAK (he can hear you)', W / 2, 112);
+    } else if (G.lucidity >= TRUTH_GATE) {
+      ctx.font = '15px Georgia, serif';
+      ctx.fillStyle = 'rgba(150,170,145,.42)';
+      ctx.fillText('get closer to him — then E', W / 2, 112);
+    }
+  }
+  vignette(0.62); grain(1.3);
+  if (F.over && !msgActive() && F.resultT > 1.4) {
+    ctx.fillStyle = 'rgba(95,87,79,.7)'; ctx.font = '15px Georgia, serif';
+    ctx.fillText('press any key', W / 2, H / 2 + 60);
+  }
+  drawMsg();
+}
+
+/* ---------------- endings ---------------- */
+const ENDINGS = {
+  release: {
+    title: 'THE DOOR',
+    lines: ['They will bury you on the hill, beside a grave they think is empty.',
+            'It is not empty. It never was. You put her there yourself,',
+            'and then you spent six days walking to her and back,',
+            'and on the seventh you finally arrived.',
+            '',
+            'You did not fight. That is the whole of it.',
+            'It is the only thing in the story you ever chose.']
+  },
+  fought: {
+    title: 'THE SHAPE',
+    lines: ['You fought, at the end. Of course you did. You always do.',
+            'It is the shape you were put into, and you wore it so long',
+            'that when they made you the other thing, you wore that the same way.',
+            '',
+            'The new knight will kneel to take your tooth.',
+            'The scales at the throat are loose.',
+            'They come away in his hand like something built.']
+  },
+  loop: {
+    title: 'THE VIGIL',
+    lines: ['You kill him. Of course you kill him. You are very good at it.',
+            'You drag what is left up the hill and you lay it by the stone,',
+            'and in the morning you will bring it something,',
+            'and you will kneel, and you will go back, and you will sleep.',
+            '',
+            'There is nothing else in the day.',
+            'There never was. She knew that before you did.']
+  },
+  communion: {
+    title: 'BOTH OF YOU',
+    lines: ['She tells him the whole of it, and it takes until morning,',
+            'because every part of it is a thing somebody did to somebody else',
+            'in the belief that it was the only shape available.',
+            '',
+            'Then she tells you the last of it, the part she spent her three breaths on',
+            'and never got out: that she saw you coming and was not afraid,',
+            'because she thought being known by you would be enough.',
+            '',
+            'It is enough. It is four years late and it is enough.',
+            'The scales come away in her hands like something built,',
+            'and underneath there is only a man, and he is crying, and he can stop.',
+            '',
+            'The young knight walks down the hill alone and tells them the wyrm is dead.',
+            'He is not lying. There was never a wyrm. There were two people',
+            'wearing the only shape anyone offered them.']
+  },
+  truth: {
+    title: 'HER NAME',
+    lines: ['He lowers the spear. He asks who you are.',
+            'You tell him, and it takes a long time, because it is a long story',
+            'and every part of it is a thing someone did to someone else',
+            'in the belief that it was the only shape available.',
+            '',
+            'He listens. He is the first one who ever did.',
+            'In the morning there are two sets of footprints on the hill,',
+            'going down, and none coming back.',
+            '',
+            'They were not, either of you, ever the monster.']
+  }
+};
+function drawEnding() {
+  const E = ENDINGS[G.ending] || ENDINGS.fought;
+  rr(0, 0, W, H, '#06060a');
+  ctx.textAlign = 'center';
+  ctx.font = '34px Georgia, serif';
+  ctx.fillStyle = 'rgba(190,180,160,' + Math.min(1, G.t / 1.5) + ')';
+  ctx.fillText(E.title, W / 2, E.lines.length > 11 ? 96 : 120);
+  // long endings tighten up so they never run off the bottom of the canvas
+  const fs = E.lines.length > 11 ? 16 : 19;
+  const sp = fs + 7;
+  const top = E.lines.length > 11 ? 150 : 190;
+  ctx.font = fs + 'px Georgia, serif';
+  for (let i = 0; i < E.lines.length; i++) {
+    const a = Math.min(1, Math.max(0, (G.t - 1.2 - i * 0.75) / 1.1));
+    ctx.fillStyle = 'rgba(178,168,150,' + (a * 0.9) + ')';
+    ctx.fillText(E.lines[i], W / 2, top + i * sp);
+  }
+  const tail = 1.2 + E.lines.length * 0.75 + 2;
+  if (G.t > tail) {
+    ctx.font = '15px Georgia, serif';
+    ctx.fillStyle = 'rgba(120,112,100,.6)';
+    ctx.fillText('you noticed ' + G.lucidity + ' of ' + totalAnoms() + ' things that were wrong', W / 2, H - 84);
+    ctx.fillStyle = 'rgba(100,94,84,' + (0.4 + Math.sin(G.t * 2) * 0.2) + ')';
+    ctx.fillText('press any key to keep the vigil again', W / 2, H - 44);
+    if (anyHit()) resetGame();
+  }
+  vignette(0.7); grain(0.8);
+}
+function totalAnoms() { let n = 0; for (const k in ANOM) n += ANOM[k].length; return n; }
+
+/* ---------------- title ---------------- */
+function drawTitle() {
+  rr(0, 0, W, H, '#06060a');
+  const t = G.t;
+  ctx.save(); ctx.globalAlpha = 0.30;
+  drawDragon(W / 2 + 190, 300 + Math.sin(t * 0.7) * 14, t, 0, 1.5, t * 2.4);
+  ctx.restore();
+  drawKnight(W / 2 - 210, 380, 1, 0, 0, false);
+
+  ctx.textAlign = 'center';
+  ctx.font = '76px Georgia, serif';
+  ctx.fillStyle = '#b9ae99';
+  ctx.fillText('VIGIL', W / 2, 160);
+  ctx.font = 'italic 18px Georgia, serif';
+  ctx.fillStyle = 'rgba(150,142,126,.7)';
+  ctx.fillText('he killed the dragon. the dragon was the princess.', W / 2, 200);
+  ctx.fillText('then he cried about it every day.', W / 2, 226);
+  ctx.fillText('then one day something strange happened.', W / 2, 252);
+
+  ctx.font = '17px Georgia, serif';
+  ctx.fillStyle = 'rgba(170,160,140,' + (0.45 + Math.sin(t * 2.2) * 0.3) + ')';
+  ctx.fillText('press any key', W / 2, H - 90);
+  ctx.font = '13px Georgia, serif';
+  ctx.fillStyle = 'rgba(90,86,78,.65)';
+  ctx.fillText('WASD move  ·  E interact and notice  ·  SPACE strike', W / 2, H - 52);
+  ctx.fillText('the things that are wrong will not point themselves out to you', W / 2, H - 30);
+  vignette(0.66); grain(0.7);
+}
+
+function resetGame() {
+  G.day = 1; G.offered = []; G.noticed = []; G.lucidity = 0; G.herShown = 0;
+  G.ending = null; G.hb = 0; G.scene = 'title'; G.t = 0;
+  G.fade = 0; G.fadeTo = 0; G.msg = null; G.msgQueue = [];
+  Audio_.setDrone(0.02);
+  clearPressed();
+}
+
+/* ---------------- main loop ---------------- */
+let last = performance.now();
+let acc = 0;
+function frame(now) {
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.05) dt = 0.05;     // never let a stall snowball
+  G.t += dt;
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * 1.6);
+  if (hit('m')) { Audio_.muted = !Audio_.muted; Audio_.setDrone(Audio_.muted ? 0 : 0.04); }
+
+  switch (G.scene) {
+    case 'title':
+      if (anyHit()) {
+        Audio_.init(); Audio_.startDrone(); Audio_.setDrone(0.04);
+        startFight('prologue');
+        say(['THE ASHGATE. THE LAST DAY OF THE HUNT.',
+             'Kill it. That is all a knight is for.'], { color: '#9a9081' });
+      }
+      drawTitle();
+      break;
+    case 'prologue': updatePrologue(dt); drawPrologue(); break;
+    case 'reveal':   updateReveal(dt);   drawReveal();   break;
+    case 'toDay':
+      G.fade += dt * 0.7;
+      drawReveal();
+      if (G.fade >= 1.6) { startDay(1); }
+      break;
+    case 'day':      updateDay(dt);      drawDay();      break;
+    case 'dayend':
+      G.fade = Math.min(1, G.fade + dt * 1.3);
+      drawDay();
+      if (G.fade >= 1) {
+        if (G.day >= G.MAXDAY) {
+          G.scene = 'wakeAsDragon'; G.t = 0; G.fade = 1;
+          Audio_.setDrone(0.1);
+        } else { startDay(G.day + 1); }
+      }
+      break;
+    case 'wakeAsDragon': updateWakeAsDragon(dt); drawWakeAsDragon(); break;
+    case 'finale':   updateFinale(dt);   drawFinale();   break;
+    case 'ending':   drawEnding();       break;
+  }
+
+  // global fade layer
+  if (G.fade > 0 && G.scene !== 'ending' && G.scene !== 'title') {
+    ctx.fillStyle = 'rgba(0,0,0,' + Math.min(1, G.fade) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (G.scene === 'day' || G.scene === 'prologue' || G.scene === 'finale') {
+    G.fade = Math.max(G.fadeTo, G.fade - dt * 1.1);
+  }
+  clearPressed();
+  requestAnimationFrame(frame);
+}
+
+/* -------- day 7: you wake up wrong -------- */
+const WAKE_LINES = [
+  { t: 0.8, s: 'DAY SEVEN.' },
+  { t: 3.0, s: 'You wake on the hill and not in the bed.' },
+  { t: 6.0, s: 'The keep is a long way below you and you can see all of it at once.' },
+  { t: 9.5, s: 'Your hands will not close. Your hands have not been hands for some time.' },
+  { t: 13.5, s: 'The barrow is open and it is empty and you know now' },
+  { t: 16.5, s: 'what climbed out of it, because it is wearing your grief' },
+  { t: 19.0, s: 'the way she wore the scales: on purpose, to spare someone.' },
+  { t: 23.5, s: 'There is a rider on the low road. Young. Borrowed spear.' },
+  { t: 27.0, s: 'He has come to kill the thing that haunts the Ashgate keep.' },
+  { t: 30.5, s: 'He is not wrong about what lives here.' }
+];
+function updateWakeAsDragon(dt) {
+  G.t += 0;
+  if (G.fade > 0) G.fade = Math.max(0, G.fade - dt * 0.8);
+  if (G.t > 35 || hit('Escape') || hit(' ')) {
+    startFight('finale');
+    say(['You are the wyrm of the Ashgate now.',
+         'He is the shape, coming up the hill, doing what it is for.'], { color: '#a08a84' });
+  }
+}
+function drawWakeAsDragon() {
+  rr(0, 0, W, H, '#08070a');
+  drawArena('finale');
+  ctx.save(); ctx.globalAlpha = 0.9;
+  drawDragon(W / 2, 330 + Math.sin(G.t * 0.9) * 8, G.t, 0, 1.5, G.t * 2);
+  ctx.restore();
+  ctx.textAlign = 'center'; ctx.font = '21px Georgia, serif';
+  let y = 80;
+  for (const L of WAKE_LINES) {
+    if (G.t < L.t) continue;
+    const a = Math.min(1, (G.t - L.t) / 1.1);
+    ctx.fillStyle = 'rgba(198,186,168,' + (a * 0.9) + ')';
+    ctx.fillText(L.s, W / 2, y); y += 28;
+  }
+  vignette(0.68); grain(1.2);
+  ctx.font = '13px Georgia, serif'; ctx.fillStyle = 'rgba(90,84,76,.5)';
+  ctx.fillText('esc to continue', W / 2, H - 14);
+}
+
+/* expose for the headless harness */
+window.__VIGIL__ = { G: G, Fight: Fight, ROOMS: ROOMS, ANOM: ANOM, OFFERINGS: OFFERINGS,
+                     ENDINGS: ENDINGS, startDay: startDay, startFight: startFight,
+                     solidAt: solidAt, tileAt: tileAt, totalAnoms: totalAnoms,
+                     say: say, keys: keys, pressed: pressed, MEMORY: MEMORY,
+                     Skip: Skip, SKIPBTN: SKIPBTN, skipDay: skipDay, canSkip: canSkip,
+                     pointInSkip: pointInSkip, HER: HER, TRUTH_GATE: TRUTH_GATE,
+                     step: function (dt) { last = performance.now() - dt * 1000; } };
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

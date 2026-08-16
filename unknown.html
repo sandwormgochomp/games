@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UNKNOWN — a sounding</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#000;color:#9fb3bd;font-family:"Courier New",Courier,monospace;overflow:hidden}
+  #cv{position:fixed;inset:0;display:block;background:#000;cursor:none}
+  .scr{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+       background:radial-gradient(ellipse at 50% 45%,#06090c 0%,#000 70%);z-index:20;padding:28px;overflow-y:auto}
+  .scr.on{display:flex}
+  h1{font-size:clamp(34px,9vw,88px);letter-spacing:.42em;color:#cfe6ef;text-shadow:0 0 34px #1d5a72;font-weight:400;margin-left:.42em}
+  h2{font-size:15px;letter-spacing:.32em;color:#5d7d8b;margin:8px 0 30px;font-weight:400}
+  .btn{display:block;width:290px;margin:6px auto;padding:11px 0;background:#070d11;border:1px solid #1f3b47;
+       color:#8fb2c0;font:inherit;font-size:13px;letter-spacing:.22em;cursor:pointer;transition:.14s}
+  .btn:hover{background:#0f1c23;border-color:#3d7f99;color:#daf1fa}
+  .body{max-width:660px;line-height:1.75;font-size:13.5px;color:#7f9aa6}
+  .body p{margin:0 0 13px}
+  .body b{color:#cfe6ef;font-weight:400;letter-spacing:.08em}
+  .body .q{color:#4d6672;font-style:italic}
+  .ttl{font-size:14px;letter-spacing:.3em;color:#9fd0e2;margin-bottom:18px}
+  .keys{display:grid;grid-template-columns:120px 1fr;gap:7px 16px;font-size:13px;max-width:560px}
+  .keys i{color:#cfe6ef;font-style:normal}
+  .beast{max-width:640px;border:1px solid #16272f;padding:14px 16px;margin-bottom:11px;background:#04080a}
+  .beast .nm{color:#cfe6ef;letter-spacing:.24em;font-size:13px}
+  .beast .st{font-size:11px;letter-spacing:.2em;color:#3f5a66;margin:3px 0 8px}
+  .beast .tx{font-size:12.5px;line-height:1.65;color:#6e8c99}
+  .beast.unid .nm{color:#3c5460}
+  .beast.unid .tx{color:#33484f}
+  .lvls{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;max-width:640px;width:100%}
+  .lvls .btn{width:100%;margin:0;font-size:11px;letter-spacing:.12em;padding:9px 4px}
+  #hud{position:fixed;left:0;right:0;bottom:0;padding:12px 18px;z-index:5;pointer-events:none;
+       font-size:11.5px;letter-spacing:.18em;color:#5f8494;display:flex;gap:26px;align-items:flex-end}
+  #hud .k{color:#2f4a56}
+  #bars{position:fixed;left:18px;top:16px;z-index:5;pointer-events:none;width:190px}
+  .bar{height:4px;background:#0b141a;border:1px solid #16272f;margin-bottom:9px;position:relative}
+  .bar>i{position:absolute;inset:0;width:0;display:block;transition:width .12s linear}
+  .bar>b{position:absolute;left:0;top:-13px;font-size:9.5px;letter-spacing:.24em;color:#3f5a66;font-weight:400}
+  #hpF{background:#7fb3c4}#drF{background:#8e3346}
+  #obj{position:fixed;right:18px;top:16px;z-index:5;pointer-events:none;text-align:right;
+       font-size:11.5px;letter-spacing:.2em;color:#5f8494;line-height:1.85}
+  #obj .o{color:#cfe6ef}
+  #toast{position:fixed;left:0;right:0;top:34%;text-align:center;z-index:6;pointer-events:none;
+         font-size:15px;letter-spacing:.28em;color:#cfe6ef;opacity:0;transition:opacity .35s;text-shadow:0 0 20px #000}
+  #sub{position:fixed;left:0;right:0;bottom:23%;text-align:center;z-index:6;pointer-events:none;
+       font-size:12.5px;letter-spacing:.14em;color:#6b8996;opacity:0;transition:opacity .5s;font-style:italic}
+  #flash{position:fixed;inset:0;z-index:7;pointer-events:none;background:#fff;opacity:0}
+  .dim{color:#3f5a66}
+  .warn{color:#b8566a}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="bars">
+  <div class="bar"><b>INTEGRITY</b><i id="hpF"></i></div>
+  <div class="bar"><b>DREAD</b><i id="drF"></i></div>
+</div>
+<div id="obj"></div>
+<div id="hud"></div>
+<div id="toast"></div>
+<div id="sub"></div>
+<div id="flash"></div>
+
+<!-- ==================== MENU ==================== -->
+<div class="scr on" id="sMenu">
+  <h1>UNKNOWN</h1><h2>A SOUNDING OF THE KETTLE DEEP</h2>
+  <button class="btn" id="bStart">BEGIN THE SOUNDING</button>
+  <button class="btn" id="bBrief">BRIEFING</button>
+  <button class="btn" id="bBeast">WHAT IS DOWN THERE</button>
+  <button class="btn" id="bKeys">CONTROLS</button>
+  <button class="btn" id="bSel">STRATUM SELECT</button>
+</div>
+
+<div class="scr" id="sBrief">
+  <div class="ttl">BRIEFING</div>
+  <div class="body">
+    <p>There is no light in the Kettle Deep. Not dim light. None. Lamps were tried and lamps were
+    lost, and what came back up the shaft afterward was not worth writing down.</p>
+    <p>So you go down with a <b>sounder</b> instead. You clap the dark and you listen to what comes
+    back, and for about a second and a half you know where you are.</p>
+    <p>Then you don't.</p>
+    <p>Nine strata. Three <b>beacons</b> on each — set them all and the way down opens. A lit beacon
+    holds a piece of the Deep in the known, permanently. That is the whole job: turn unknown into
+    known, one small circle at a time.</p>
+    <p>It will cost you. A sounding is a shout. Everything down here has been waiting a long time
+    for a shout.</p>
+    <p class="q">"Nothing attacked the second team. I want that in the record. Nothing attacked them.
+    They simply could not stand not knowing, and they ran, and the Deep is not a place you can run
+    in." — Survey Master Ilke Rannoch, final log</p>
+  </div>
+  <button class="btn back" id="bBriefBack">BACK</button>
+</div>
+
+<div class="scr" id="sBeast">
+  <div class="ttl">WHAT IS DOWN THERE</div>
+  <div id="beastList" style="width:100%;display:flex;flex-direction:column;align-items:center"></div>
+  <button class="btn back" id="bBeastBack">BACK</button>
+</div>
+
+<div class="scr" id="sKeys">
+  <div class="ttl">CONTROLS</div>
+  <div class="keys">
+    <i>W A S D</i><span>move</span>
+    <i>MOUSE</i><span>aim the sounder — <b>independent of the way you are walking</b></span>
+    <i>SHIFT</i><span>run — very loud</span>
+    <i>C</i><span>crouch (toggle) — near-silent, slow</span>
+    <i>SPACE / LMB</i><span>SOUNDING — full circle. Loud. Everything hears it.</span>
+    <i>F / RMB</i><span>focused sounding — narrow, long, quiet. The only way to <b>identify</b> a thing, and quiet enough that a Listener will only wander toward it rather than charge.</span>
+    <i>Q (hold)</i><span>listen — you stop moving. Bearings only, no distance, no shape.</span>
+    <i>E (hold)</i><span>set a beacon. The world does not stop while you do this.</span>
+    <i>M</i><span>enlarge the survey chart</span>
+    <i>ESC</i><span>pause</span>
+  </div>
+  <button class="btn back" id="bKeysBack">BACK</button>
+</div>
+
+<div class="scr" id="sSel">
+  <div class="ttl">STRATUM SELECT</div>
+  <div class="lvls" id="selList"></div>
+  <button class="btn back" id="bSelBack" style="margin-top:20px">BACK</button>
+</div>
+
+<!-- ==================== IN-RUN ==================== -->
+<div class="scr" id="sIntro">
+  <div class="ttl" id="introTtl"></div>
+  <div class="body" style="max-width:560px;text-align:center"><p id="introTx"></p></div>
+  <button class="btn" id="bDescend" style="margin-top:26px">DESCEND</button>
+</div>
+
+<div class="scr" id="sPause">
+  <div class="ttl">HELD</div>
+  <button class="btn" id="bResume">RESUME</button>
+  <button class="btn" id="bPauseBeast">WHAT IS DOWN THERE</button>
+  <button class="btn" id="bPauseMenu">ABANDON THE SOUNDING</button>
+</div>
+
+<div class="scr" id="sDead">
+  <div class="ttl warn" id="deadTtl">THE RECORD ENDS HERE</div>
+  <div class="body" style="max-width:520px;text-align:center"><p id="deadTx"></p></div>
+  <button class="btn" id="bRetry" style="margin-top:24px">SOUND IT AGAIN</button>
+  <button class="btn" id="bDeadMenu">ABANDON THE SOUNDING</button>
+</div>
+
+<div class="scr" id="sWin">
+  <div class="ttl">THE SOUNDING IS COMPLETE</div>
+  <div class="body" style="max-width:600px" id="winTx"></div>
+  <button class="btn" id="bWinMenu" style="margin-top:24px">RETURN</button>
+</div>
+
+<script>
+"use strict";
+/* ============================================================================
+   UNKNOWN — a sounding of the Kettle Deep
+   Single file. No assets. Canvas 2D + procedural WebAudio.
+
+   Design thesis: the player is never shown the world. They are shown a decaying
+   memory of the world, assembled from echoes, and the game's threats are built
+   so that the three obvious safety behaviours contradict each other:
+     - the LISTENER punishes sounding
+     - the STILL   punishes NOT sounding
+     - the ANSWER  punishes standing still
+   Identifying a creature (focused sounding, close, line of sight) makes it
+   materially less dangerous. Knowledge is the weapon. One creature can never
+   be identified, and that is the point of it.
+   ========================================================================== */
+
+/* ---------------------------------- RNG --------------------------------- */
+let _s = 1;
+function srand(s){ _s = (s>>>0) || 1; }
+function rnd(){ _s ^= _s<<13; _s>>>=0; _s ^= _s>>17; _s ^= _s<<5; _s>>>=0; return _s/4294967296; }
+function rint(a,b){ return a + Math.floor(rnd()*(b-a+1)); }
+function pick(a){ return a[Math.floor(rnd()*a.length)|0]; }
+
+/* -------------------------------- TILES --------------------------------- */
+const T_WALL=0, T_FLOOR=1, T_GRIT=2, T_WATER=3, T_DEAD=4;
+const SOLID = t => t===T_WALL;
+/* T_DEAD — "still air". Walkable. Absorbs sound completely: no echo ever
+   returns from inside it and nothing inside it can be perceived. You cross it
+   blind or you go around. */
+
+/* ------------------------------- BALANCE -------------------------------- */
+const SPD_WALK=2.65, SPD_RUN=4.6, SPD_CROUCH=1.42;
+const P_RAD=0.27;
+
+const ECHO_SPEED=34;          // tiles/sec, out-and-back — reveal front moves at half this
+const ECHO_LIFE=5.4;          // seconds a returned point stays legible
+const PING_RANGE=25, PING_RAYS=520, PING_COST_NOISE=92;
+/* The two soundings must mean different things, or there is no decision to
+   make. Full = shout, heard 24 tiles, charges everything. Focused = whisper,
+   heard 7 tiles, and quiet enough that holding one on THE STILL to keep it
+   pinned does not simultaneously call every Listener on the stratum.
+   At 44 it did, and contact could never be broken. */
+const FOC_RANGE=41, FOC_RAYS=120, FOC_ARC=0.46, FOC_NOISE=26;
+const PING_CD=1.15, FOC_CD=1.9;
+const ID_RANGE=8.5;           // max distance a focused sounding can identify at
+
+const N_CROUCH=7, N_WALK=23, N_RUN=71;
+const NOISE_NOTICE=20, NOISE_CHARGE=58;
+const NOISE_CARRY=0.26;       // tiles a noise travels per level. 92 -> 24 tiles.
+                              // At 0.42 a single sounding was audible across an
+                              // entire stratum and distance stopped mattering.
+const GRIT_NOISE=1.85, WATER_NOISE=2.45, WATER_DRAG=0.72, GRIT_DRAG=0.86;
+
+const OBS_HOLD=2.25;          // how long a sounding pins the STILL
+const HIT_DMG=22, IFRAME=1.35;       // five hits, not three — a mistake has to
+                                     // be survivable or there is nothing to
+                                     // learn from having made it
+const RECOIL=2.6, RECOIL_PUSH=3.4;   // a hit throws the thing off you. Without
+                              // this, first contact was simply death: 42 damage
+                              // every 1.35s with nothing to break the grip.
+
+const DR_BASE=0.019, DR_CONTACT=0.050, DR_DEAD=0.155, DR_STALE=0.030;
+                              // going dark has to be a real option. At 0.052
+                              // with a x3 ramp, six seconds of silence filled
+                              // the meter and the panic gave you away anyway.
+const DR_CALM=-0.165, DR_BEACON=-0.30;
+const DR_CONTACT_MAX=2;       // a crowd is not N times as frightening as a pair
+const DR_FALSE=0.40, DR_PHANTOM=0.66, DR_BREAK=0.86;
+const PANIC_CD=12;            // panics must never chain — each one calls the
+                              // Listener, and a chain is an unbreakable spiral
+const HUNT_LEASH=8.5, SEEK_LEASH=6.0;   // how long a fix survives before the
+                              // Listener writes it off and goes back to wandering
+
+const BEACON_TIME=2.6, BEACON_LIGHT=7.5, BEACON_CHIRP=4.2, BEACON_NOISE=48;
+
+const EP_CAP=9000;
+
+/* -------------------------------- LEVELS -------------------------------- */
+const LEVELS = [
+ {n:'STRATUM I — THRESHOLD', w:44,h:44, listener:0,still:0,answer:0,unk:0, dead:2, water:1, grit:3,
+  tx:'The shaft ends. Your boots find grit and then they find nothing you can name. Clap the dark. See what the dark is shaped like.'},
+ {n:'STRATUM II — THE LONG ROOMS', w:50,h:50, listener:1,still:0,answer:0,unk:0, dead:3, water:2, grit:4,
+  tx:'Rannoch’s second team mapped this far. Their chart is accurate and their chart stops mid-corridor, mid-line, as though the pen were set down politely.'},
+ {n:'STRATUM III — THE HELD', w:54,h:52, listener:1,still:1,answer:0,unk:0, dead:3, water:2, grit:5,
+  tx:'Something down here holds very still while you are looking at it. That should be a comfort. Work out for yourself why it is not.'},
+ {n:'STRATUM IV — ANSWERING GALLERY', w:56,h:54, listener:1,still:1,answer:1,unk:0, dead:4, water:3, grit:5,
+  tx:'The gallery gives your sounding back to you. Not an echo — a reply. It is close enough that you will not tell the difference until you walk into one.'},
+ {n:'STRATUM V — SUMP', w:58,h:56, listener:2,still:1,answer:1,unk:0, dead:4, water:7, grit:4,
+  tx:'Standing water to the shin. Every step you take is a shout, and the Deep is very good at arithmetic.'},
+ {n:'STRATUM VI — WHERE IT WAITS', w:60,h:58, listener:2,still:2,answer:1,unk:1, dead:5, water:4, grit:6,
+  tx:'There is a return here that resolves to nothing. Not a wall, not a creature, not a fault in the sounder. It has been at nine metres for a hundred years.'},
+ {n:'STRATUM VII — THE DEAD AIR', w:62,h:58, listener:2,still:2,answer:2,unk:1, dead:9, water:3, grit:6,
+  tx:'Great lungfuls of still air, and nothing comes back out of them. You will cross them blind. There is no other way and there never was.'},
+ {n:'STRATUM VIII — RANNOCH’S LINE', w:64,h:60, listener:3,still:2,answer:2,unk:1, dead:7, water:5, grit:7,
+  tx:'The last of the old beacons. She set two of the three and then, by the record, she stopped. She was not attacked. She stopped.'},
+ {n:'STRATUM IX — THE KETTLE', w:66,h:62, listener:3,still:3,answer:2,unk:2, dead:8, water:6, grit:7,
+  tx:'The bottom. Whatever the Deep is a mouth of, this is the throat of it. Set three beacons and the way opens. It opens either way, in the end.'}
+];
+
+/* ------------------------------ BESTIARY -------------------------------- */
+const SPECIES = {
+  listener:{ name:'THE LISTENER',
+    unid:'A return that moves toward the place you last made noise. It is never where you are. It is always where you WERE.',
+    id:'Blind, and built entirely of ear. It cannot find you — it can only find a sound and go stand in it. Every sounding you make is an address written down. Once identified, your chart marks the point it is walking to, so you can read your own mistakes.'},
+  still:{ name:'THE STILL',
+    unid:'It does not move. You have soundings a second and a half old that prove it does not move. It is closer than it was.',
+    id:'It moves only while unperceived. A sounding that touches it pins it for about two seconds, and it will not take a step for as long as you keep spending soundings on it — which is exactly as long as the Listener needs. It will not set foot inside a lit beacon: a thing that moves only while unknown cannot cross into what you have made known. Identified, your chart shows how much pin it has left.'},
+  answer:{ name:'THE ANSWER',
+    unid:'It gives back soundings that no wall made. Half of your chart is a lie and there is no way to know which half.',
+    id:'It replies. Every sounding you cast near one comes back with returns it invented — plausible ones, at plausible ranges. It is slow, silent, and it never stops walking at you, so the counter is simply to keep moving. Identified, its forgeries return very slightly cold, and a trained eye can tell.'},
+  unknown:{ name:'——————',
+    unid:'——————',
+    id:'——————'}
+};
+
+/* ------------------------------- STATE ---------------------------------- */
+const G = {
+  state:'menu', level:0, t:0, dt:0,
+  w:0, h:0, map:null, seen:null, beac:null,
+  rooms:[], spawn:{x:0,y:0}, exit:{x:0,y:0}, exitOpen:false,
+  beacons:[], ents:[], noises:[],
+  p:{ x:0,y:0, dir:0, hp:100, dread:0, crouch:false, iframe:0, dead:false,
+      pingCd:0, focCd:0, listening:0, setting:0, stepPh:0, lastEcho:-99, walkT:0 },
+  ep:{ x:new Float32Array(EP_CAP), y:new Float32Array(EP_CAP), rt:new Float32Array(EP_CAP),
+       s:new Float32Array(EP_CAP), k:new Uint8Array(EP_CAP), m:new Uint8Array(EP_CAP), n:0, head:0 },
+  fronts:[], known:{listener:false,still:false,answer:false,unknown:false},
+  mapBig:false, shake:0, deaths:0, idCount:0, unkStare:0,
+  keys:Object.create(null)
+};
+/* echo kinds */
+const K_WALL=0, K_WATER=1, K_GRIT=2, K_ENT=3, K_FAKE=4, K_GARBLE=5;
+
+/* ----------------------------- DOM HELPERS ------------------------------ */
+const $ = id => document.getElementById(id);
+function bindBtn(id, fn){ const e=$(id); if(e) e.addEventListener('click', fn); }
+function setText(id, s){ const e=$(id); if(e) e.textContent = s; }
+function setHTML(id, s){ const e=$(id); if(e) e.innerHTML = s; }
+
+const SCREENS = ['sMenu','sBrief','sBeast','sKeys','sSel','sIntro','sPause','sDead','sWin'];
+function show(id){
+  for(const s of SCREENS){ const e=$(s); if(e) e.classList.toggle('on', s===id); }
+}
+function hideAll(){ for(const s of SCREENS){ const e=$(s); if(e) e.classList.remove('on'); } }
+
+/* -------------------------------- AUDIO --------------------------------- */
+const Snd = (()=>{
+  let ac=null, master=null, ok=true;
+  function ctx(){
+    if(ac) return ac;
+    try{
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC){ ok=false; return null; }
+      ac = new AC();
+      master = ac.createGain(); master.gain.value=0.5; master.connect(ac.destination);
+    }catch(e){ ok=false; return null; }
+    return ac;
+  }
+  function noiseBuf(d){
+    const c=ctx(); if(!c) return null;
+    const n=Math.max(1,(c.sampleRate*d)|0), b=c.createBuffer(1,n,c.sampleRate), a=b.getChannelData(0);
+    for(let i=0;i<n;i++) a[i]=Math.random()*2-1;
+    return b;
+  }
+  function env(node,g,a,d,pan){
+    const c=ctx(); if(!c) return;
+    const gn=c.createGain(); gn.gain.setValueAtTime(0.0001,c.currentTime);
+    gn.gain.exponentialRampToValueAtTime(Math.max(0.0002,g), c.currentTime+a);
+    gn.gain.exponentialRampToValueAtTime(0.0001, c.currentTime+a+d);
+    let last=gn;
+    if(pan!==undefined && c.createStereoPanner){ const p=c.createStereoPanner(); p.pan.value=Math.max(-1,Math.min(1,pan)); gn.connect(p); last=p; }
+    last.connect(master); node.connect(gn);
+    return gn;
+  }
+  const S = {
+    resume(){ const c=ctx(); if(c && c.state==='suspended'){ try{c.resume();}catch(e){} } },
+    ping(){ const c=ctx(); if(!c) return;
+      const o=c.createOscillator(); o.type='sine';
+      o.frequency.setValueAtTime(1180,c.currentTime);
+      o.frequency.exponentialRampToValueAtTime(320,c.currentTime+0.22);
+      env(o,0.30,0.006,0.30); o.start(); o.stop(c.currentTime+0.4);
+    },
+    foc(){ const c=ctx(); if(!c) return;
+      const o=c.createOscillator(); o.type='triangle';
+      o.frequency.setValueAtTime(1650,c.currentTime);
+      o.frequency.exponentialRampToValueAtTime(880,c.currentTime+0.13);
+      env(o,0.14,0.004,0.16); o.start(); o.stop(c.currentTime+0.24);
+    },
+    tick(dist,pan,kind){ const c=ctx(); if(!c) return;
+      const b=noiseBuf(0.035); if(!b) return;
+      const src=c.createBufferSource(); src.buffer=b;
+      const f=c.createBiquadFilter(); f.type='bandpass';
+      f.frequency.value = kind===K_WATER?900 : kind===K_GRIT?2400 : kind===K_ENT?520 : 1750;
+      f.Q.value=kind===K_ENT?2.2:6;
+      src.connect(f);
+      const g=Math.max(0.004, 0.075*(1-dist/PING_RANGE));
+      env(f,g,0.002,0.05,pan); src.start();
+    },
+    step(loud,pan){ const c=ctx(); if(!c) return;
+      const b=noiseBuf(0.09); if(!b) return;
+      const src=c.createBufferSource(); src.buffer=b;
+      const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.value=420+loud*380;
+      src.connect(f); env(f,0.02+loud*0.05,0.004,0.10,pan); src.start();
+    },
+    beacon(){ const c=ctx(); if(!c) return;
+      const o=c.createOscillator(); o.type='sine'; o.frequency.value=642;
+      env(o,0.11,0.01,0.5); o.start(); o.stop(c.currentTime+0.62);
+    },
+    lit(){ const c=ctx(); if(!c) return;
+      [392,588,784].forEach((fr,i)=>{ const o=c.createOscillator(); o.type='sine'; o.frequency.value=fr;
+        const g=c.createGain(); g.gain.setValueAtTime(0.0001,c.currentTime+i*0.09);
+        g.gain.exponentialRampToValueAtTime(0.10,c.currentTime+i*0.09+0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+i*0.09+0.8);
+        o.connect(g); g.connect(master); o.start(); o.stop(c.currentTime+i*0.09+0.9); });
+    },
+    hit(){ const c=ctx(); if(!c) return;
+      const b=noiseBuf(0.5); if(!b) return;
+      const src=c.createBufferSource(); src.buffer=b;
+      const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(1400,c.currentTime);
+      f.frequency.exponentialRampToValueAtTime(90,c.currentTime+0.45);
+      src.connect(f); env(f,0.55,0.003,0.55); src.start();
+      const o=c.createOscillator(); o.type='sawtooth';
+      o.frequency.setValueAtTime(160,c.currentTime);
+      o.frequency.exponentialRampToValueAtTime(38,c.currentTime+0.5);
+      env(o,0.32,0.004,0.55); o.start(); o.stop(c.currentTime+0.6);
+    },
+    scream(){ const c=ctx(); if(!c) return;
+      const o=c.createOscillator(); o.type='sawtooth';
+      o.frequency.setValueAtTime(300,c.currentTime);
+      o.frequency.linearRampToValueAtTime(940,c.currentTime+0.16);
+      o.frequency.exponentialRampToValueAtTime(210,c.currentTime+1.0);
+      const f=c.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1100; f.Q.value=1.4;
+      o.connect(f); env(f,0.34,0.02,1.1); o.start(); o.stop(c.currentTime+1.2);
+    },
+    whisper(){ const c=ctx(); if(!c) return;
+      const b=noiseBuf(0.9); if(!b) return;
+      const src=c.createBufferSource(); src.buffer=b;
+      const f=c.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1200+Math.random()*900; f.Q.value=8;
+      src.connect(f); env(f,0.035,0.25,0.7,Math.random()*2-1); src.start();
+    },
+    garble(){ const c=ctx(); if(!c) return;
+      const o=c.createOscillator(); o.type='square'; o.frequency.setValueAtTime(58,c.currentTime);
+      o.frequency.linearRampToValueAtTime(41,c.currentTime+0.9);
+      const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.value=260;
+      o.connect(f); env(f,0.22,0.05,0.95); o.start(); o.stop(c.currentTime+1.1);
+    },
+    listen(){ const c=ctx(); if(!c) return;
+      const b=noiseBuf(0.25); if(!b) return;
+      const src=c.createBufferSource(); src.buffer=b;
+      const f=c.createBiquadFilter(); f.type='highpass'; f.frequency.value=3200;
+      src.connect(f); env(f,0.02,0.06,0.2); src.start();
+    },
+    open(){ const c=ctx(); if(!c) return;
+      const o=c.createOscillator(); o.type='sine'; o.frequency.setValueAtTime(120,c.currentTime);
+      o.frequency.exponentialRampToValueAtTime(420,c.currentTime+1.2);
+      env(o,0.16,0.3,1.3); o.start(); o.stop(c.currentTime+1.6);
+    }
+  };
+  return S;
+})();
+
+/* ============================ LEVEL GENERATION ========================== */
+function idx(x,y){ return y*G.w + x; }
+function at(x,y){
+  if(x<0||y<0||x>=G.w||y>=G.h) return T_WALL;
+  return G.map[y*G.w+x];
+}
+function solidAt(x,y){ return SOLID(at(x|0,y|0)); }
+
+function carveRoom(r){
+  for(let y=r.y;y<r.y+r.h;y++) for(let x=r.x;x<r.x+r.w;x++) G.map[idx(x,y)]=T_FLOOR;
+}
+function carveCorr(x0,y0,x1,y1){
+  let x=x0,y=y0;
+  const horizFirst = rnd()<0.5;
+  const stepX=()=>{ while(x!==x1){ x += x<x1?1:-1; G.map[idx(x,y)]=T_FLOOR; } };
+  const stepY=()=>{ while(y!==y1){ y += y<y1?1:-1; G.map[idx(x,y)]=T_FLOOR; } };
+  G.map[idx(x,y)]=T_FLOOR;
+  if(horizFirst){ stepX(); stepY(); } else { stepY(); stepX(); }
+}
+
+function blob(cx,cy,rx,ry,tile,onlyFloor){
+  for(let y=Math.max(1,(cy-ry)|0); y<=Math.min(G.h-2,(cy+ry)|0); y++){
+    for(let x=Math.max(1,(cx-rx)|0); x<=Math.min(G.w-2,(cx+rx)|0); x++){
+      const dx=(x-cx)/rx, dy=(y-cy)/ry;
+      if(dx*dx+dy*dy<=1){
+        const t=G.map[idx(x,y)];
+        if(onlyFloor && t===T_WALL) continue;
+        G.map[idx(x,y)]=tile;
+      }
+    }
+  }
+}
+
+function floodFrom(sx,sy){
+  const n=G.w*G.h, seenF=new Uint8Array(n), q=new Int32Array(n);
+  let qh=0, qt=0;
+  const s=idx(sx|0,sy|0);
+  if(SOLID(G.map[s])) return seenF;
+  seenF[s]=1; q[qt++]=s;
+  while(qh<qt){
+    const c=q[qh++], cx=c%G.w, cy=(c/G.w)|0;
+    for(let d=0;d<4;d++){
+      const nx=cx+(d===0?1:d===1?-1:0), ny=cy+(d===2?1:d===3?-1:0);
+      if(nx<0||ny<0||nx>=G.w||ny>=G.h) continue;
+      const ni=idx(nx,ny);
+      if(seenF[ni]||SOLID(G.map[ni])) continue;
+      seenF[ni]=1; q[qt++]=ni;
+    }
+  }
+  return seenF;
+}
+
+/* nearest reachable floor tile to (x,y) */
+function nearestOpen(reach, x, y){
+  let best=null, bd=1e9;
+  for(let yy=0;yy<G.h;yy++) for(let xx=0;xx<G.w;xx++){
+    if(!reach[idx(xx,yy)]) continue;
+    if(G.map[idx(xx,yy)]===T_DEAD) continue;
+    const d=(xx-x)*(xx-x)+(yy-y)*(yy-y);
+    if(d<bd){ bd=d; best={x:xx,y:yy}; }
+  }
+  return best;
+}
+
+function genLevel(li){
+  const L = LEVELS[li];
+  srand(0x5eed ^ (li*2654435761));
+  G.w=L.w; G.h=L.h;
+  const n=G.w*G.h;
+  G.map = new Uint8Array(n);          // all wall
+  G.seen = new Uint8Array(n);
+  G.beac = new Float32Array(n);
+  G.rooms=[]; G.beacons=[]; G.ents=[]; G.noises=[]; G.fronts=[];
+  G.ep.n=0; G.ep.head=0;
+  G.exitOpen=false;
+
+  /* --- rooms --- */
+  const target = 12 + Math.floor(L.w*L.h/240);
+  let tries=0;
+  while(G.rooms.length<target && tries<900){
+    tries++;
+    const rw=rint(4,9), rh=rint(4,8);
+    const rx=rint(1,G.w-rw-2), ry=rint(1,G.h-rh-2);
+    let clash=false;
+    for(const r of G.rooms){
+      if(rx < r.x+r.w+1 && rx+rw+1 > r.x && ry < r.y+r.h+1 && ry+rh+1 > r.y){ clash=true; break; }
+    }
+    if(clash) continue;
+    const r={x:rx,y:ry,w:rw,h:rh,cx:rx+(rw>>1),cy:ry+(rh>>1)};
+    carveRoom(r); G.rooms.push(r);
+  }
+  /* --- connect: spanning chain + loops --- */
+  for(let i=1;i<G.rooms.length;i++){
+    const a=G.rooms[i], b=G.rooms[i-1];
+    carveCorr(a.cx,a.cy,b.cx,b.cy);
+  }
+  const loops = 2 + Math.floor(G.rooms.length*0.30);
+  for(let i=0;i<loops;i++){
+    const a=pick(G.rooms), b=pick(G.rooms);
+    if(a!==b) carveCorr(a.cx,a.cy,b.cx,b.cy);
+  }
+
+  /* --- terrain --- */
+  for(let i=0;i<L.grit;i++){ const r=pick(G.rooms); blob(r.cx+rint(-2,2), r.cy+rint(-2,2), rint(2,5), rint(2,4), T_GRIT, true); }
+  for(let i=0;i<L.water;i++){ const r=pick(G.rooms); blob(r.cx+rint(-2,2), r.cy+rint(-2,2), rint(2,5), rint(2,4), T_WATER, true); }
+
+  /* --- spawn (before dead air, so we never wake up inside it) --- */
+  const home = G.rooms[0];
+  G.spawn = { x: home.cx+0.5, y: home.cy+0.5 };
+
+  /* --- dead air: never over spawn, never over a room centre we need --- */
+  let placed=0, dtries=0;
+  while(placed<L.dead && dtries<260){
+    dtries++;
+    const r=pick(G.rooms);
+    const cx=r.cx+rint(-3,3), cy=r.cy+rint(-3,3);
+    const rx=rint(2,5), ry=rint(2,4);
+    const dsx=cx-G.spawn.x, dsy=cy-G.spawn.y;
+    if(dsx*dsx+dsy*dsy < 196) continue;                 // 14 tiles clear of spawn
+    blob(cx,cy,rx,ry,T_DEAD,true);
+    placed++;
+  }
+  /* spawn tile is always plain floor */
+  G.map[idx(home.cx,home.cy)] = T_FLOOR;
+
+  /* --- reachability, computed once, used by every placement --- */
+  const reach = floodFrom(home.cx, home.cy);
+
+  /* --- beacons: three far-apart reachable rooms --- */
+  const cands = G.rooms.filter(r=>reach[idx(r.cx,r.cy)] && G.map[idx(r.cx,r.cy)]!==T_DEAD)
+                       .map(r=>({r, d:(r.cx-home.cx)**2 + (r.cy-home.cy)**2}))
+                       .sort((a,b)=>b.d-a.d);
+  const chosen=[];
+  for(const c of cands){
+    if(chosen.length>=3) break;
+    let far=true;
+    for(const o of chosen){ const dx=o.r.cx-c.r.cx, dy=o.r.cy-c.r.cy; if(dx*dx+dy*dy < 100){ far=false; break; } }
+    if(far) chosen.push(c);
+  }
+  let ci=0;
+  while(chosen.length<3 && ci<cands.length){ if(!chosen.includes(cands[ci])) chosen.push(cands[ci]); ci++; }
+  for(const c of chosen){
+    G.map[idx(c.r.cx,c.r.cy)] = T_FLOOR;
+    G.beacons.push({ x:c.r.cx+0.5, y:c.r.cy+0.5, lit:false, prog:0, chirp:rnd()*BEACON_CHIRP });
+  }
+
+  /* --- exit: the farthest reachable room that is not a beacon room --- */
+  let ex=null, exd=-1;
+  for(const c of cands){
+    if(chosen.includes(c)) continue;
+    if(c.d>exd){ exd=c.d; ex=c.r; }
+  }
+  if(!ex) ex = cands.length ? cands[0].r : home;
+  G.map[idx(ex.cx,ex.cy)] = T_FLOOR;
+  G.exit = { x:ex.cx+0.5, y:ex.cy+0.5 };
+
+  /* --- creatures: reachable, far from spawn, never in dead air --- */
+  const spawnEnt=(sp)=>{
+    let best=null, bt=0;
+    while(bt<400){
+      bt++;
+      const r=pick(G.rooms);
+      const x=r.x+rint(0,r.w-1), y=r.y+rint(0,r.h-1);
+      if(!reach[idx(x,y)]) continue;
+      if(G.map[idx(x,y)]===T_DEAD) continue;
+      const dx=x-G.spawn.x, dy=y-G.spawn.y;
+      if(dx*dx+dy*dy < 484) continue;                   // 22 tiles off the player
+      best={x:x+0.5,y:y+0.5}; break;
+    }
+    if(!best){
+      const nb = nearestOpen(reach, G.w-2, G.h-2);
+      if(!nb) return;
+      best={x:nb.x+0.5,y:nb.y+0.5};
+    }
+    G.ents.push(makeEnt(sp, best.x, best.y));
+  };
+  for(let i=0;i<L.listener;i++) spawnEnt('listener');
+  for(let i=0;i<L.still;i++)    spawnEnt('still');
+  for(let i=0;i<L.answer;i++)   spawnEnt('answer');
+  for(let i=0;i<L.unk;i++)      spawnEnt('unknown');
+
+  /* --- final guard: anything that ended up unreachable gets relocated.
+         The user-facing failure this prevents is an unsettable beacon. --- */
+  const fix = (o) => {
+    if(reach[idx(o.x|0, o.y|0)]) return true;
+    const nb = nearestOpen(reach, o.x|0, o.y|0);
+    if(!nb) return false;
+    o.x=nb.x+0.5; o.y=nb.y+0.5; return true;
+  };
+  for(const b of G.beacons) fix(b);
+  fix(G.exit);
+  for(const e of G.ents) fix(e);
+
+  return { reach };
+}
+
+/* ------------------------------ ENTITIES -------------------------------- */
+function makeEnt(sp,x,y){
+  const base = {
+    sp, x, y, tx:x, ty:y, obs:0, field:null, fieldFor:-1, repath:0,
+    vx:0, vy:0, state:'wander', wanderT:0, last:{x,y}, moving:0, stare:0
+  };
+  base.recoil=0;
+  /* Speeds are set against the player's three gaits — crouch 1.42, walk 2.65,
+     run 4.6 — and that relationship is the balance:
+       LISTENER seeks at 1.20 (under crouch, so creeping away always works) and
+                hunts at 3.00 (over walk, so a loud mistake must be sprinted from)
+       STILL    2.25 — over crouch, under walk. It cannot be outcrept, only
+                pinned. It used to be 5.1, faster than the player's sprint.
+       ANSWER   1.05 — under every gait. It only ever catches the stationary. */
+  if(sp==='listener') base.spd=3.00;
+  if(sp==='still')    base.spd=2.25;
+  if(sp==='answer')   base.spd=1.05;
+  if(sp==='unknown')  base.spd=2.0;
+  return base;
+}
+
+/* BFS distance field toward (tx,ty) — entities descend it. Recomputed only
+   when the target tile changes or the cache ages out. */
+function bfsField(tx,ty){
+  const n=G.w*G.h, dist=new Int32Array(n).fill(-1), q=new Int32Array(n);
+  let qh=0,qt=0;
+  tx|=0; ty|=0;
+  if(tx<0||ty<0||tx>=G.w||ty>=G.h) return dist;
+  const s=idx(tx,ty);
+  if(SOLID(G.map[s])) return dist;
+  dist[s]=0; q[qt++]=s;
+  while(qh<qt){
+    const c=q[qh++], cx=c%G.w, cy=(c/G.w)|0, d=dist[c];
+    for(let k=0;k<4;k++){
+      const nx=cx+(k===0?1:k===1?-1:0), ny=cy+(k===2?1:k===3?-1:0);
+      if(nx<0||ny<0||nx>=G.w||ny>=G.h) continue;
+      const ni=idx(nx,ny);
+      if(dist[ni]!==-1||SOLID(G.map[ni])) continue;
+      dist[ni]=d+1; q[qt++]=ni;
+    }
+  }
+  return dist;
+}
+function stepAlong(e, dt, speedMul, avoidLit){
+  if(!e.field) return;
+  const cx=e.x|0, cy=e.y|0, here=e.field[idx(cx,cy)];
+  if(here<=0) return;
+  let bx=cx, by=cy, bd=here;
+  for(let k=0;k<8;k++){
+    const nx=cx+[1,-1,0,0,1,1,-1,-1][k], ny=cy+[0,0,1,-1,1,-1,1,-1][k];
+    if(nx<0||ny<0||nx>=G.w||ny>=G.h) continue;
+    if(SOLID(G.map[idx(nx,ny)])) continue;
+    if(k>=4 && (SOLID(G.map[idx(nx,cy)]) || SOLID(G.map[idx(cx,ny)]))) continue;
+    /* THE STILL will not enter charted, beacon-held ground. A lit beacon is
+       the only real safe territory in the game, which is the entire point of
+       the objective: the thing that only moves while unknown cannot cross into
+       what you have made known. */
+    if(avoidLit && G.beac[idx(nx,ny)]>0.04) continue;
+    const d=e.field[idx(nx,ny)];
+    if(d>=0 && d<bd){ bd=d; bx=nx; by=ny; }
+  }
+  if(bx===cx && by===cy) return;
+  const tgx=bx+0.5, tgy=by+0.5;
+  let dx=tgx-e.x, dy=tgy-e.y;
+  const len=Math.hypot(dx,dy)||1;
+  const drag = tileDrag(e.x,e.y);
+  const s = e.spd*speedMul*drag*dt;
+  moveEnt(e, dx/len*s, dy/len*s);
+}
+function tileDrag(x,y){
+  const t=at(x|0,y|0);
+  return t===T_WATER?WATER_DRAG : t===T_GRIT?GRIT_DRAG : 1;
+}
+function moveEnt(e,dx,dy){
+  const R=0.3;
+  if(!solidAt(e.x+dx+Math.sign(dx)*R, e.y)) e.x+=dx;
+  if(!solidAt(e.x, e.y+dy+Math.sign(dy)*R)) e.y+=dy;
+}
+
+/* --------------------------- NOISE BROADCAST ---------------------------- */
+/* A noise is an event at a POSITION, with a level. Nothing in this game is
+   ever handed the player's live coordinates — the Listener may only ever hold
+   a fix on where a sound came from. */
+function makeNoise(x,y,level){
+  if(level < NOISE_NOTICE) return;
+  G.noises.push({x,y,level,t:G.t});
+  for(const e of G.ents){
+    if(e.sp!=='listener') continue;
+    const d=Math.hypot(e.x-x,e.y-y);
+    const carry = level*NOISE_CARRY;          // tiles the sound carries
+    if(d>carry) continue;
+    e.tx=x; e.ty=y;
+    e.state = level>=NOISE_CHARGE ? 'hunt' : 'seek';
+    e.leash = level>=NOISE_CHARGE ? HUNT_LEASH : SEEK_LEASH;
+    e.fieldFor=-1;                            // force repath
+  }
+}
+
+/* ------------------------------ ECHO POOL ------------------------------- */
+function addEcho(x,y,rt,s,k){
+  const ep=G.ep, i=ep.head;
+  ep.x[i]=x; ep.y[i]=y; ep.rt[i]=rt; ep.s[i]=s; ep.k[i]=k; ep.m[i]=0;
+  ep.head=(i+1)%EP_CAP;
+  if(ep.n<EP_CAP) ep.n++;
+}
+
+/* DDA cast: returns {d, kind, hx, hy} or null if the ray died in dead air. */
+function castRay(x0,y0,ang,range){
+  const dx=Math.cos(ang), dy=Math.sin(ang);
+  let mx=x0|0, my=y0|0;
+  /* the medium at the ORIGIN absorbs too — a sounding made from inside still
+     air is swallowed where it is born, and nothing comes back out of it. */
+  if(mx<0||my<0||mx>=G.w||my>=G.h) return null;
+  if(G.map[idx(mx,my)]===T_DEAD) return null;
+  const dxd = dx===0?1e9:Math.abs(1/dx), dyd = dy===0?1e9:Math.abs(1/dy);
+  const sx = dx<0?-1:1, sy = dy<0?-1:1;
+  let sdx = dx<0 ? (x0-mx)*dxd : (mx+1-x0)*dxd;
+  let sdy = dy<0 ? (y0-my)*dyd : (my+1-y0)*dyd;
+  let d=0, side=0, guard=0;
+  const samples=[];
+  while(d<range && guard++<400){
+    if(sdx<sdy){ d=sdx; sdx+=dxd; mx+=sx; side=0; }
+    else       { d=sdy; sdy+=dyd; my+=sy; side=1; }
+    if(mx<0||my<0||mx>=G.w||my>=G.h) return {d, kind:K_WALL, hx:x0+dx*d, hy:y0+dy*d, samples};
+    const t=G.map[idx(mx,my)];
+    if(t===T_DEAD) return null;                       // absorbed. Nothing comes back.
+    if(t===T_WALL) return {d, kind:K_WALL, hx:x0+dx*d, hy:y0+dy*d, samples};
+    if(t===T_WATER||t===T_GRIT){
+      if(rnd()<0.16) samples.push({d, kind:t===T_WATER?K_WATER:K_GRIT, x:x0+dx*d, y:y0+dy*d});
+    }
+  }
+  return {d:range, kind:-1, hx:x0+dx*range, hy:y0+dy*range, samples};
+}
+
+/* line of sight, tile-stepped, dead air blocks perception too */
+function los(x0,y0,x1,y1,blockDead){
+  const dx=x1-x0, dy=y1-y0, dist=Math.hypot(dx,dy);
+  const steps=Math.ceil(dist*3);
+  for(let i=1;i<steps;i++){
+    const x=x0+dx*i/steps, y=y0+dy*i/steps;
+    const t=at(x|0,y|0);
+    if(t===T_WALL) return false;
+    if(blockDead && t===T_DEAD) return false;
+  }
+  return true;
+}
+
+function sound(focused){
+  const p=G.p;
+  const range = focused?FOC_RANGE:PING_RANGE;
+  const rays  = focused?FOC_RAYS:PING_RAYS;
+  const a0    = focused ? p.dir-FOC_ARC/2 : 0;
+  const span  = focused ? FOC_ARC : Math.PI*2;
+  const now=G.t;
+
+  G.fronts.push({x:p.x,y:p.y,t0:now,range,focused,dir:p.dir});
+  if(G.fronts.length>6) G.fronts.shift();
+
+  /* Standing in still air: you still emit — the wavefront draws, the sounder
+     chirps, and everything that hunts by ear gets the address. You simply get
+     nothing back. Not a faint return. Nothing. */
+  if(at(p.x|0,p.y|0)===T_DEAD){
+    p.lastEcho = -99;
+    if(focused){ p.focCd=FOC_CD; Snd.foc(); makeNoise(p.x,p.y,FOC_NOISE); }
+    else       { p.pingCd=PING_CD; Snd.ping(); makeNoise(p.x,p.y,PING_COST_NOISE); }
+    return;
+  }
+
+  for(let i=0;i<rays;i++){
+    const ang = a0 + span*(i/rays) + (focused?0:0.0007*i);
+    const r = castRay(p.x,p.y,ang,range);
+    if(!r) continue;
+    for(const s of r.samples) addEcho(s.x, s.y, now + s.d*2/ECHO_SPEED, 0.5*(1-s.d/range), s.kind);
+    if(r.kind===K_WALL){
+      addEcho(r.hx, r.hy, now + r.d*2/ECHO_SPEED, 1-r.d/range*0.75, K_WALL);
+    }
+  }
+
+  /* creatures return an echo of their own — at the position they occupied
+     when the front reached them, which is not where they are now. */
+  for(const e of G.ents){
+    const d=Math.hypot(e.x-p.x, e.y-p.y);
+    if(d>range) continue;
+    if(at(e.x|0,e.y|0)===T_DEAD) continue;
+    const rt = now + d*2/ECHO_SPEED;
+    const str = 1 - d/range*0.6;
+
+    /* A FULL sounding pins THE STILL whether or not you can see it. Sound goes
+       around a corner; sight does not. Requiring line of sight meant a Still
+       approaching down a side passage could never be pinned at all, and at
+       2.25 tiles/sec against a 1.42 crouch that was damage with no move
+       against it. You stop it either way — you just don't learn anything. */
+    if(e.sp==='still' && !focused) e.obs = Math.max(e.obs, rt + OBS_HOLD);
+
+    if(focused){
+      let da=Math.atan2(e.y-p.y,e.x-p.x)-p.dir;
+      while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+      if(Math.abs(da) > FOC_ARC/2 + 0.09) continue;
+    }
+    if(!los(p.x,p.y,e.x,e.y,true)) continue;
+
+    if(e.sp==='unknown'){
+      /* it does not resolve. It has never resolved. */
+      for(let i=0;i<26;i++){
+        const a=rnd()*Math.PI*2, rr=rnd()*2.6;
+        addEcho(e.x+Math.cos(a)*rr, e.y+Math.sin(a)*rr, rt+rnd()*0.5, str*(0.3+rnd()*0.5), K_GARBLE);
+      }
+      if(focused && d<ID_RANGE){
+        G.unkStare++;
+        G.p.dread=Math.min(1.4, G.p.dread+0.26);
+        Snd.garble();
+        toast(pick(['NO RESOLUTION','THE RETURN IS NOT A SHAPE','——————','IT DOES NOT ANSWER']));
+      }
+      continue;
+    }
+
+    for(let i=0;i<11;i++){
+      const a=rnd()*Math.PI*2, rr=rnd()*0.42;
+      addEcho(e.x+Math.cos(a)*rr, e.y+Math.sin(a)*rr, rt, str, K_ENT);
+    }
+    if(e.sp==='still') e.obs = rt + OBS_HOLD;
+
+    if(focused && d<ID_RANGE && !G.known[e.sp]){
+      G.known[e.sp]=true; G.idCount++;
+      Snd.lit();
+      toast('IDENTIFIED — ' + SPECIES[e.sp].name);
+      sub('it is a thing that can be described. that is worth something.');
+    }
+  }
+
+  /* THE ANSWER replies with returns that no wall made. */
+  for(const e of G.ents){
+    if(e.sp!=='answer') continue;
+    if(Math.hypot(e.x-p.x,e.y-p.y) > 19) continue;
+    const fakes = focused?2:rint(3,6);
+    for(let f=0;f<fakes;f++){
+      const a=rnd()*Math.PI*2, rr=5+rnd()*(range*0.5);
+      const fx=p.x+Math.cos(a)*rr, fy=p.y+Math.sin(a)*rr;
+      const frt=now + rr*2/ECHO_SPEED;
+      for(let i=0;i<9;i++){
+        const aa=rnd()*Math.PI*2, r2=rnd()*0.42;
+        addEcho(fx+Math.cos(aa)*r2, fy+Math.sin(aa)*r2, frt, 0.85, K_FAKE);
+      }
+    }
+  }
+
+  /* dread invents contacts of its own. These are never marked. */
+  if(p.dread>DR_FALSE){
+    const cnt = Math.floor((p.dread-DR_FALSE)*9);
+    for(let f=0;f<cnt;f++){
+      const a=rnd()*Math.PI*2, rr=4+rnd()*(range*0.7);
+      const fx=p.x+Math.cos(a)*rr, fy=p.y+Math.sin(a)*rr;
+      const frt=now + rr*2/ECHO_SPEED;
+      const k = (p.dread>DR_PHANTOM && rnd()<0.5) ? K_FAKE : K_WALL;
+      const pts = k===K_FAKE?8:1;
+      for(let i=0;i<pts;i++){
+        const aa=rnd()*Math.PI*2, r2=rnd()*0.42;
+        addEcho(fx+Math.cos(aa)*r2, fy+Math.sin(aa)*r2, frt, 0.6, k);
+      }
+    }
+  }
+
+  p.lastEcho = now;
+  if(focused){ p.focCd=FOC_CD; Snd.foc(); makeNoise(p.x,p.y,FOC_NOISE); }
+  else       { p.pingCd=PING_CD; Snd.ping(); makeNoise(p.x,p.y,PING_COST_NOISE); }
+}
+
+/* ------------------------------ TOASTS ---------------------------------- */
+let toastT=0, subT=0;
+function toast(s){ setText('toast',s); const e=$('toast'); if(e) e.style.opacity='1'; toastT=2.6; }
+function sub(s){ setText('sub',s); const e=$('sub'); if(e) e.style.opacity='1'; subT=4.2; }
+
+/* ------------------------------- PLAYER --------------------------------- */
+function movePlayer(dx,dy){
+  const p=G.p, R=P_RAD;
+  if(!solidAt(p.x+dx+Math.sign(dx)*R, p.y)) p.x+=dx;
+  if(!solidAt(p.x, p.y+dy+Math.sign(dy)*R)) p.y+=dy;
+}
+function damage(n){
+  const p=G.p;
+  if(p.iframe>0||p.dead) return;
+  p.hp-=n; p.iframe=IFRAME; G.shake=1;
+  Snd.hit();
+  const fl=$('flash'); if(fl){ fl.style.background='#5c1020'; fl.style.opacity='0.55';
+    setTimeout(()=>{ if(fl) fl.style.opacity='0'; },90); }
+  p.dread=Math.min(1.4,p.dread+0.22);
+  if(p.hp<=0){ p.hp=0; die(); }
+}
+
+/* --------------------------- UPDATE: PLAYER ----------------------------- */
+function updatePlayer(dt){
+  const p=G.p, K=G.keys;
+  p.pingCd=Math.max(0,p.pingCd-dt);
+  p.focCd =Math.max(0,p.focCd-dt);
+  p.iframe=Math.max(0,p.iframe-dt);
+
+  /* listening freezes you and gives bearings only */
+  p.listening = K['q'] ? p.listening+dt : 0;
+  const frozen = p.listening>0 || p.setting>0;
+
+  let mx=0,my=0;
+  if(!frozen){
+    if(K['w']) my-=1; if(K['s']) my+=1;
+    if(K['a']) mx-=1; if(K['d']) mx+=1;
+  }
+  const run = !!K['shift'] && !p.crouch;
+  let spd = p.crouch?SPD_CROUCH : run?SPD_RUN : SPD_WALK;
+  const tile = at(p.x|0,p.y|0);
+  spd *= tileDrag(p.x,p.y);
+
+  if(mx||my){
+    const l=Math.hypot(mx,my);
+    mx/=l; my/=l;
+    /* Facing is only welded to movement until the player touches the mouse.
+       It has to come apart: the counter to THE STILL is a focused sounding
+       held on it, and that is worthless if you cannot aim behind you while
+       walking away from it. */
+    if(!G.mouseAim) p.dir = Math.atan2(my,mx);
+    movePlayer(mx*spd*dt, my*spd*dt);
+    p.walkT += dt*spd;
+    /* footfalls: a discrete noise event, and a faint self-echo so you are
+       never completely without perception. */
+    const period = p.crouch?0.62 : run?0.30 : 0.44;
+    p.stepPh += dt;
+    if(p.stepPh>=period){
+      p.stepPh=0;
+      let lvl = p.crouch?N_CROUCH : run?N_RUN : N_WALK;
+      if(tile===T_WATER) lvl*=WATER_NOISE;
+      if(tile===T_GRIT)  lvl*=GRIT_NOISE;
+      makeNoise(p.x,p.y,lvl);
+      Snd.step(p.crouch?0:run?1:0.5, 0);
+      /* passive return: a very short, very weak sounding */
+      const rr = p.crouch?2.4 : run?5.5 : 4.0;
+      for(let i=0;i<46;i++){
+        const a=(i/46)*Math.PI*2;
+        const r=castRay(p.x,p.y,a,rr);
+        if(!r||r.kind!==K_WALL) continue;
+        addEcho(r.hx,r.hy,G.t + r.d*2/ECHO_SPEED, 0.34*(1-r.d/rr), K_WALL);
+      }
+      if(!p.crouch) p.lastEcho=G.t;
+    }
+  } else {
+    p.stepPh = 99;   // next step lands immediately when you start again
+  }
+
+  /* soundings */
+  if(K[' '] && p.pingCd<=0 && !p.setting){ K[' ']=false; sound(false); }
+  if(K['f'] && p.focCd<=0 && !p.setting){ K['f']=false; sound(true); }
+
+  /* listening pulses */
+  if(p.listening>0){
+    p.listenPulse=(p.listenPulse||0)+dt;
+    if(p.listenPulse>0.42){ p.listenPulse=0; Snd.listen(); }
+  }
+
+  /* beacons */
+  let near=null, nd=1e9;
+  for(const b of G.beacons){
+    if(b.lit) continue;
+    const d=Math.hypot(b.x-p.x,b.y-p.y);
+    if(d<1.5 && d<nd){ nd=d; near=b; }
+  }
+  if(near && K['e']){
+    p.setting += dt;
+    near.prog = p.setting/BEACON_TIME;
+    if(Math.floor(p.setting*3)!==Math.floor((p.setting-dt)*3)) Snd.beacon();
+    makeNoise(p.x,p.y,26);
+    if(p.setting>=BEACON_TIME){
+      near.lit=true; near.prog=1; p.setting=0;
+      Snd.lit();
+      /* the lit circle becomes permanently known */
+      for(let y=Math.max(0,(near.y-BEACON_LIGHT)|0); y<=Math.min(G.h-1,(near.y+BEACON_LIGHT)|0); y++)
+      for(let x=Math.max(0,(near.x-BEACON_LIGHT)|0); x<=Math.min(G.w-1,(near.x+BEACON_LIGHT)|0); x++){
+        const d=Math.hypot(x+0.5-near.x, y+0.5-near.y);
+        if(d>BEACON_LIGHT) continue;
+        if(!los(near.x,near.y,x+0.5,y+0.5,false)) continue;
+        G.seen[idx(x,y)]=1;
+        G.beac[idx(x,y)]=Math.max(G.beac[idx(x,y)], 1-d/BEACON_LIGHT);
+      }
+      const litN=G.beacons.filter(b=>b.lit).length;
+      toast('BEACON SET — '+litN+' OF 3');
+      if(litN>=3){
+        G.exitOpen=true; Snd.open();
+        sub('the way down is open. it was always open.');
+      } else sub('a piece of the Deep is known now. it will stay known.');
+    }
+  } else if(!K['e']) {
+    if(p.setting>0 && near) near.prog=0;
+    p.setting=0;
+  }
+
+  /* exit */
+  if(G.exitOpen && Math.hypot(G.exit.x-p.x,G.exit.y-p.y)<1.2){
+    nextLevel();
+  }
+}
+
+/* ---------------------------- UPDATE: DREAD ----------------------------- */
+function updateDread(dt){
+  const p=G.p;
+  let d = DR_BASE;
+
+  const inDead = at(p.x|0,p.y|0)===T_DEAD;
+  if(inDead) d += DR_DEAD;
+
+  /* Contacts contribute by proximity, strongest first, and only the nearest
+     few count. A flat per-contact term meant the deepest strata filled the
+     meter in three seconds purely by creature count. */
+  let contacts=0;
+  const terms=[];
+  for(const e of G.ents){
+    const dist=Math.hypot(e.x-p.x,e.y-p.y);
+    if(dist>=11) continue;
+    contacts++;
+    const near = 1 - dist/11;
+    terms.push(DR_CONTACT * near * (G.known[e.sp]?0.45:1) * (e.sp==='unknown'?2.1:1));
+  }
+  terms.sort((a,b)=>b-a);
+  for(let i=0;i<Math.min(DR_CONTACT_MAX,terms.length);i++) d += terms[i];
+  const stale = G.t - p.lastEcho;
+  if(stale>5.5) d += DR_STALE*Math.min(2,(stale-5.5)/6+1);
+  /* Relief scales with how fresh your chart is, and it is NOT cancelled by
+     something being nearby. Requiring zero contacts within 11 tiles made the
+     meter a one-way ratchet on every deep stratum — six creatures on the map
+     meant calm was unreachable and the panic fired forever. The thesis of the
+     game is that knowing is the antidote, so knowing has to pay out even when
+     what you know is bad. */
+  if(!inDead) d += DR_CALM * Math.max(0, 1 - stale/2.5);
+
+  const bl = G.beac[idx(Math.max(0,Math.min(G.w-1,p.x|0)), Math.max(0,Math.min(G.h-1,p.y|0)))];
+  if(bl>0) d += DR_BEACON*bl;
+
+  p.dread = Math.max(0, Math.min(1.4, p.dread + d*dt));
+
+  /* fear gives you away — but never twice in a row, or it is a spiral you
+     cannot climb out of: every panic calls the Listener, which raises dread. */
+  p.panicCd = Math.max(0, (p.panicCd||0) - dt);
+  if(p.dread>=1 && !p.breaking){
+    if(p.panicCd>0){
+      p.dread=0.94;                      // held at the lip instead
+    } else {
+      p.breaking=true; p.panicCd=PANIC_CD;
+      Snd.scream();
+      makeNoise(p.x,p.y,100);
+      toast('YOU MAKE A SOUND YOU DID NOT CHOOSE');
+      sub('everything down here now knows exactly where that came from.');
+      p.dread=0.45;
+      G.shake=1.2;
+      setTimeout(()=>{ p.breaking=false; }, 400);
+    }
+  }
+
+  if(p.dread>DR_BREAK && rnd()<dt*1.5) Snd.whisper();
+}
+
+/* --------------------------- UPDATE: CREATURES -------------------------- */
+function updateEnts(dt){
+  const p=G.p;
+  for(const e of G.ents){
+    const dist=Math.hypot(e.x-p.x,e.y-p.y);
+    const px=e.x, py=e.y;
+
+    /* thrown off by a hit it just landed — backs away and does not re-engage */
+    if(e.recoil>0){
+      e.recoil-=dt;
+      const a=Math.atan2(e.y-p.y, e.x-p.x);
+      moveEnt(e, Math.cos(a)*RECOIL_PUSH*dt, Math.sin(a)*RECOIL_PUSH*dt);
+      e.moving=1;
+      continue;
+    }
+
+    if(e.sp==='listener'){
+      /* Only ever walks to a remembered noise. Never to the live player. */
+      e.repath-=dt;
+      /* and it gives up. A fix that never expires is a fix you cannot escape,
+         because every sounding you make to see it renews the thing chasing you. */
+      if(e.state!=='wander'){
+        e.leash=(e.leash||0)-dt;
+        if(e.leash<=0){
+          e.state = e.state==='hunt' ? 'seek' : 'wander';
+          e.leash = SEEK_LEASH;
+          if(e.state==='wander') e.wanderT=0;
+        }
+      }
+      if(e.state==='wander'){
+        e.wanderT-=dt;
+        if(e.wanderT<=0){
+          e.wanderT=3+rnd()*4;
+          const r=pick(G.rooms);
+          if(r){ e.tx=r.cx+0.5; e.ty=r.cy+0.5; e.fieldFor=-1; }
+        }
+      }
+      const key=(e.tx|0)*8192+(e.ty|0);
+      if(e.fieldFor!==key || e.repath<=0){ e.field=bfsField(e.tx,e.ty); e.fieldFor=key; e.repath=1.1; }
+      const mul = e.state==='hunt'?1 : e.state==='seek'?0.40 : 0.30;
+      stepAlong(e,dt,mul);
+      if(Math.hypot(e.x-e.tx,e.y-e.ty)<0.8){
+        /* arrived at the sound. It is not there. It waits, then drifts. */
+        if(e.state!=='wander'){ e.state='wander'; e.wanderT=1.4+rnd()*2; }
+      }
+    }
+
+    else if(e.sp==='still'){
+      /* moves only while it is not being perceived */
+      if(G.t < e.obs){ e.moving=0; }
+      else{
+        e.moving=1;
+        e.tx=p.x; e.ty=p.y;
+        const key=(e.tx|0)*8192+(e.ty|0);
+        e.repath-=dt;
+        if(e.fieldFor!==key || e.repath<=0){ e.field=bfsField(e.tx,e.ty); e.fieldFor=key; e.repath=0.45; }
+        stepAlong(e,dt,1,true);
+      }
+    }
+
+    else if(e.sp==='answer'){
+      /* slow, silent, constant. Standing still is what kills you. */
+      e.tx=p.x; e.ty=p.y;
+      const key=(e.tx|0)*8192+(e.ty|0);
+      e.repath-=dt;
+      if(e.fieldFor!==key || e.repath<=0){ e.field=bfsField(e.tx,e.ty); e.fieldFor=key; e.repath=0.8; }
+      stepAlong(e,dt,1);
+      e.moving=1;
+    }
+
+    else if(e.sp==='unknown'){
+      /* It does not attack. It has never attacked anybody.
+         It keeps a distance and it does not leave. */
+      const want=7.0;
+      if(Math.abs(dist-want)>1.6){
+        if(dist>want){ e.tx=p.x; e.ty=p.y; }
+        else{
+          const a=Math.atan2(e.y-p.y,e.x-p.x);
+          e.tx=Math.max(1,Math.min(G.w-2, p.x+Math.cos(a)*want));
+          e.ty=Math.max(1,Math.min(G.h-2, p.y+Math.sin(a)*want));
+        }
+        const key=(e.tx|0)*8192+(e.ty|0);
+        e.repath-=dt;
+        if(e.fieldFor!==key||e.repath<=0){ e.field=bfsField(e.tx,e.ty); e.fieldFor=key; e.repath=0.9; }
+        stepAlong(e,dt,1);
+        e.moving=1;
+      } else e.moving=0;
+      continue;                     // never damages, never collides
+    }
+
+    e.moving = Math.hypot(e.x-px,e.y-py)>0.0015 ? 1 : 0;
+
+    /* contact */
+    if(dist<0.72 && p.iframe<=0){
+      G.lastHitBy=e.sp;
+      damage(HIT_DMG);
+      e.recoil=RECOIL;
+      if(e.sp==='still') e.obs=0;          // a hit does not leave it pinned
+      if(e.sp==='listener'){ e.state='wander'; e.wanderT=1.2; }
+    }
+  }
+
+  /* prune noise log */
+  while(G.noises.length && G.t-G.noises[0].t>6) G.noises.shift();
+}
+
+/* -------------------------- UPDATE: ECHO MARKS -------------------------- */
+function updateEchoes(){
+  const ep=G.ep, now=G.t;
+  let ticks=0;
+  for(let i=0;i<ep.n;i++){
+    if(ep.m[i]) continue;
+    if(now < ep.rt[i]) continue;
+    ep.m[i]=1;
+    const k=ep.k[i];
+    /* fabricated returns never enter the chart — but you cannot tell that
+       from the screen, only from the fact that they do not persist. */
+    if(k===K_WALL||k===K_WATER||k===K_GRIT){
+      const tx=ep.x[i]|0, ty=ep.y[i]|0;
+      if(tx>=0&&ty>=0&&tx<G.w&&ty<G.h) G.seen[idx(tx,ty)]=1;
+    }
+    if(ticks<9 && ep.s[i]>0.25){
+      ticks++;
+      const dx=ep.x[i]-G.p.x, dy=ep.y[i]-G.p.y;
+      const d=Math.hypot(dx,dy);
+      Snd.tick(Math.min(PING_RANGE,d), Math.max(-1,Math.min(1,dx/12)), k);
+    }
+  }
+  while(G.fronts.length && (now-G.fronts[0].t0)*ECHO_SPEED/2 > G.fronts[0].range+3) G.fronts.shift();
+}
+
+/* -------------------------------- FLOW ---------------------------------- */
+function startLevel(li){
+  G.level=li;
+  genLevel(li);
+  const p=G.p;
+  p.x=G.spawn.x; p.y=G.spawn.y; p.dir=-Math.PI/2;
+  p.hp=100; p.dread=0.12; p.crouch=false; p.iframe=0; p.dead=false;
+  p.pingCd=0; p.focCd=0; p.listening=0; p.setting=0; p.stepPh=99; p.lastEcho=-99;
+  p.breaking=false; p.panicCd=0;
+  G.t=0; G.shake=0; G.mapBig=false;
+  G.state='play';
+  hideAll();
+  /* a free opening sounding, so you are never dropped in with nothing */
+  sound(false);
+  updateBeast();
+}
+function beginRun(li){
+  G.known={listener:false,still:false,answer:false,unknown:false};
+  G.deaths=0; G.idCount=0; G.unkStare=0;
+  showIntro(li===undefined?0:li);
+}
+function showIntro(li){
+  G.level=li; G.state='intro';
+  setText('introTtl', LEVELS[li].n);
+  setText('introTx', LEVELS[li].tx);
+  show('sIntro');
+}
+function nextLevel(){
+  if(G.level+1 >= LEVELS.length){ win(); return; }
+  G.state='intro';
+  showIntro(G.level+1);
+}
+function die(){
+  G.p.dead=true; G.state='dead'; G.deaths++;
+  const lines = [
+    'You are found at the bottom of a shaft you did not walk down.',
+    'The sounder is recovered. The last eight seconds of chart are a clean, complete, perfectly accurate map of a room with nothing in it.',
+    'The record ends mid-line, as though the pen were set down politely.',
+    'Nothing attacked you. Write that in the record.'
+  ];
+  setText('deadTtl', G.p.hp<=0 ? 'THE RECORD ENDS HERE' : 'THE RECORD ENDS HERE');
+  setText('deadTx', pick(lines));
+  show('sDead');
+}
+function win(){
+  G.state='win';
+  const idn=Object.keys(G.known).filter(k=>G.known[k] && k!=='unknown').length;
+  let t='<p>You come up the shaft in the dark, the way you went down, and the Deep gives you back without comment.</p>';
+  if(idn>=3) t+='<p>Three things have names now. They are shorter names than they deserve and they are not good names, but a thing with a name is a thing that can be written in a report, argued about, planned around, walked away from. That is the entire difference between the Kettle Deep and the world above it, and it is enough.</p>';
+  else if(idn>0) t+='<p>You brought back '+idn+' name'+(idn>1?'s':'')+'. The rest of the chart is honest about what it does not contain, which is more than the second team managed.</p>';
+  else t+='<p>You brought back nothing you can describe. Every page of the chart is geometry. The survey office will accept it. You will not sleep well, and you will not be able to say what about.</p>';
+  if(G.unkStare>0) t+='<p>You aimed the sounder at it '+G.unkStare+' time'+(G.unkStare>1?'s':'')+'. It never resolved. It was at nine metres when you started and nine metres when you left, and the sounder is in perfect working order — they checked it twice, because you asked them to twice.</p>';
+  else t+='<p>You never once aimed the sounder at the thing that held station off your shoulder for four strata. That was the correct decision and you know exactly why you made it.</p>';
+  t+='<p class="q">Nothing attacked the second team. I want that in the record.</p>';
+  setHTML('winTx', t);
+  show('sWin');
+}
+function toMainMenu(){
+  G.state='menu';
+  G.p.setting=0; G.p.listening=0; G.mapBig=false; G.shake=0;
+  G.keys=Object.create(null);
+  show('sMenu');
+}
+
+/* ================================ RENDER ================================ */
+const cv=$('cv'), ctx = cv && cv.getContext ? cv.getContext('2d') : null;
+let VW=800, VH=600;
+function resize(){
+  if(!cv) return;
+  VW = window.innerWidth||800; VH = window.innerHeight||600;
+  cv.width=VW; cv.height=VH;
+}
+if(typeof window!=='undefined' && window.addEventListener) window.addEventListener('resize',resize);
+resize();
+
+const KCOL = {
+  0:[168,210,226],   // wall   — pale ice
+  1:[ 96,178,182],   // water  — teal
+  2:[196,166,110],   // grit   — amber
+  3:[214, 96,104],   // entity — red
+  4:[214, 96,104],   // fake   — red (identical unless you know THE ANSWER)
+  5:[150, 92,190]    // garble — violet
+};
+
+function render(){
+  if(!ctx) return;
+  const p=G.p;
+  const PX = G.mapBig ? 9 : 24;
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle='#000';
+  ctx.fillRect(0,0,VW,VH);
+
+  let sx=0, sy=0;
+  if(G.shake>0){ sx=(Math.random()*2-1)*G.shake*9; sy=(Math.random()*2-1)*G.shake*9; }
+  const camX = VW/2 - p.x*PX + sx, camY = VH/2 - p.y*PX + sy;
+
+  /* ---- the chart: everything you have ever confirmed, drawn very dim ---- */
+  const x0=Math.max(0,((-camX)/PX)|0), x1=Math.min(G.w-1,((VW-camX)/PX)|0);
+  const y0=Math.max(0,((-camY)/PX)|0), y1=Math.min(G.h-1,((VH-camY)/PX)|0);
+  for(let y=y0;y<=y1;y++){
+    for(let x=x0;x<=x1;x++){
+      const i=idx(x,y);
+      if(!G.seen[i]) continue;
+      const t=G.map[i];
+      const b=G.beac[i];
+      let a = 0.055 + b*0.30;
+      if(t===T_WALL){
+        ctx.fillStyle='rgba(96,132,148,'+(a*1.5).toFixed(3)+')';
+        ctx.fillRect(camX+x*PX, camY+y*PX, PX, PX);
+      }else{
+        let col = t===T_WATER?'70,128,132' : t===T_GRIT?'118,102,68' : '44,64,74';
+        ctx.fillStyle='rgba('+col+','+(a).toFixed(3)+')';
+        ctx.fillRect(camX+x*PX, camY+y*PX, PX, PX);
+      }
+    }
+  }
+
+  /* ---- expanding wavefronts ---- */
+  for(const f of G.fronts){
+    const r=(G.t-f.t0)*ECHO_SPEED/2;
+    if(r<=0||r>f.range+2) continue;
+    const a=Math.max(0,0.30*(1-r/f.range));
+    ctx.strokeStyle='rgba(180,226,240,'+a.toFixed(3)+')';
+    ctx.lineWidth=1.4;
+    ctx.beginPath();
+    if(f.focused) ctx.arc(camX+f.x*PX, camY+f.y*PX, r*PX, f.dir-FOC_ARC/2, f.dir+FOC_ARC/2);
+    else ctx.arc(camX+f.x*PX, camY+f.y*PX, r*PX, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  /* ---- echo returns ---- */
+  const ep=G.ep, now=G.t;
+  const knowAns=G.known.answer;
+  for(let i=0;i<ep.n;i++){
+    const rt=ep.rt[i];
+    if(now<rt) continue;
+    const age=now-rt;
+    if(age>ECHO_LIFE) continue;
+    const k=ep.k[i];
+    let a = (1-age/ECHO_LIFE);
+    a = a*a*ep.s[i];
+    if(a<0.012) continue;
+    const c=KCOL[k];
+    let r=c[0],g=c[1],b=c[2];
+    if(k===K_FAKE && knowAns){ r=168; g=132; b=196; }   /* identified: the forgeries run cold */
+    const px=camX+ep.x[i]*PX, py=camY+ep.y[i]*PX;
+    if(px<-6||py<-6||px>VW+6||py>VH+6) continue;
+    ctx.fillStyle='rgba('+r+','+g+','+b+','+a.toFixed(3)+')';
+    const s = k===K_ENT||k===K_FAKE ? 3.0 : k===K_GARBLE ? 2.6 : 2.1;
+    ctx.fillRect(px-s/2, py-s/2, s, s);
+  }
+
+  /* ---- beacons ---- */
+  for(const b of G.beacons){
+    const px=camX+b.x*PX, py=camY+b.y*PX;
+    if(b.lit){
+      const gr=ctx.createRadialGradient(px,py,0,px,py,BEACON_LIGHT*PX);
+      gr.addColorStop(0,'rgba(120,200,220,0.22)');
+      gr.addColorStop(1,'rgba(120,200,220,0)');
+      ctx.fillStyle=gr;
+      ctx.beginPath(); ctx.arc(px,py,BEACON_LIGHT*PX,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(190,238,250,0.85)';
+      ctx.fillRect(px-3,py-3,6,6);
+    } else {
+      const d=Math.hypot(b.x-p.x,b.y-p.y);
+      if(d<3.2 || G.seen[idx(b.x|0,b.y|0)]){
+        const pulse=0.28+0.22*Math.sin(G.t*3);
+        ctx.strokeStyle='rgba(150,205,220,'+pulse.toFixed(2)+')';
+        ctx.lineWidth=1.2;
+        ctx.strokeRect(px-5,py-5,10,10);
+      }
+      if(b.prog>0){
+        ctx.strokeStyle='rgba(200,240,250,0.9)'; ctx.lineWidth=2.4;
+        ctx.beginPath(); ctx.arc(px,py,13,-Math.PI/2,-Math.PI/2+Math.PI*2*b.prog); ctx.stroke();
+      }
+    }
+  }
+
+  /* ---- exit ---- */
+  if(G.exitOpen){
+    const px=camX+G.exit.x*PX, py=camY+G.exit.y*PX;
+    const a=0.30+0.22*Math.sin(G.t*2.2);
+    ctx.strokeStyle='rgba(150,230,200,'+a.toFixed(2)+')'; ctx.lineWidth=1.6;
+    ctx.beginPath(); ctx.arc(px,py,9+Math.sin(G.t*2)*2,0,Math.PI*2); ctx.stroke();
+  }
+
+  /* ---- identified tells: knowledge is literally drawn on the screen ---- */
+  for(const e of G.ents){
+    const px=camX+e.x*PX, py=camY+e.y*PX;
+    if(e.sp==='listener' && G.known.listener){
+      const tx=camX+e.tx*PX, ty=camY+e.ty*PX;
+      ctx.strokeStyle='rgba(214,96,104,0.30)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tx-5,ty); ctx.lineTo(tx+5,ty);
+      ctx.moveTo(tx,ty-5); ctx.lineTo(tx,ty+5); ctx.stroke();
+    }
+    if(e.sp==='still' && G.known.still && G.t<e.obs){
+      const left=(e.obs-G.t)/OBS_HOLD;
+      ctx.strokeStyle='rgba(226,180,120,'+(0.22+left*0.4).toFixed(2)+')'; ctx.lineWidth=1.6;
+      ctx.beginPath(); ctx.arc(px,py,15,-Math.PI/2,-Math.PI/2+Math.PI*2*left); ctx.stroke();
+    }
+  }
+
+  /* ---- listening: bearings only. No distance. No shape. ---- */
+  if(p.listening>0.25){
+    const cx=VW/2+sx, cy=VH/2+sy, R=Math.min(VW,VH)*0.30;
+    ctx.strokeStyle='rgba(90,130,146,0.14)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.stroke();
+    for(const e of G.ents){
+      if(!e.moving) continue;
+      const d=Math.hypot(e.x-p.x,e.y-p.y);
+      if(d>23) continue;
+      if(at(e.x|0,e.y|0)===T_DEAD) continue;
+      const a=Math.atan2(e.y-p.y,e.x-p.x);
+      const w=0.13 + 0.11*(d/23);
+      const al=0.20+0.34*(1-d/23);
+      ctx.strokeStyle='rgba(226,120,128,'+al.toFixed(2)+')'; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.arc(cx,cy,R,a-w,a+w); ctx.stroke();
+    }
+    for(const n of G.noises){
+      const age=G.t-n.t; if(age>1.4) continue;
+      const a=Math.atan2(n.y-p.y,n.x-p.x);
+      ctx.strokeStyle='rgba(150,205,220,'+(0.30*(1-age/1.4)).toFixed(2)+')'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(cx,cy,R*0.86,a-0.05,a+0.05); ctx.stroke();
+    }
+  }
+
+  /* ---- the surveyor ---- */
+  const ppx=VW/2+sx, ppy=VH/2+sy;
+  ctx.fillStyle = p.iframe>0 ? 'rgba(226,120,128,0.85)' : 'rgba(190,224,236,0.62)';
+  ctx.beginPath(); ctx.arc(ppx,ppy,3.4,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='rgba(190,224,236,0.30)'; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.moveTo(ppx,ppy);
+  ctx.lineTo(ppx+Math.cos(p.dir)*11, ppy+Math.sin(p.dir)*11); ctx.stroke();
+
+  /* ---- in dead air, say so. It is the one place the game is honest. ---- */
+  if(at(p.x|0,p.y|0)===T_DEAD){
+    ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,VW,VH);
+    ctx.fillStyle='rgba(120,150,164,'+(0.35+0.15*Math.sin(G.t*2)).toFixed(2)+')';
+    ctx.font='12px Courier New'; ctx.textAlign='center';
+    ctx.fillText('S T I L L   A I R', VW/2, VH*0.60);
+    ctx.textAlign='left';
+  }
+
+  /* ---- post: vignette + dread ---- */
+  const dr=Math.min(1,p.dread);
+  const vg=ctx.createRadialGradient(VW/2,VH/2,Math.min(VW,VH)*0.16, VW/2,VH/2,Math.max(VW,VH)*0.62);
+  vg.addColorStop(0,'rgba(0,0,0,0)');
+  vg.addColorStop(1,'rgba(0,0,0,'+(0.72+dr*0.2).toFixed(2)+')');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,VW,VH);
+
+  if(dr>0.5){
+    const a=(dr-0.5)*0.14;
+    ctx.fillStyle='rgba(70,10,22,'+a.toFixed(3)+')';
+    ctx.fillRect(0,0,VW,VH);
+  }
+  if(dr>0.35){
+    const n=Math.floor((dr-0.35)*420);
+    ctx.fillStyle='rgba(180,200,210,0.05)';
+    for(let i=0;i<n;i++) ctx.fillRect(Math.random()*VW, Math.random()*VH, 1.5, 1.5);
+  }
+  /* heartbeat squeeze */
+  if(dr>0.6){
+    const b=Math.sin(G.t*(3.2+dr*3))*0.5+0.5;
+    ctx.strokeStyle='rgba(140,30,48,'+((dr-0.6)*0.5*b).toFixed(3)+')';
+    ctx.lineWidth=Math.min(VW,VH)*0.10*b;
+    ctx.strokeRect(0,0,VW,VH);
+  }
+}
+
+/* -------------------------------- HUD ----------------------------------- */
+function updateHUD(){
+  const p=G.p;
+  const hp=$('hpF'); if(hp) hp.style.width=Math.max(0,p.hp)+'%';
+  const dr=$('drF'); if(dr) dr.style.width=Math.min(100,p.dread*100)+'%';
+
+  const lit=G.beacons.filter(b=>b.lit).length;
+  let o = '<div>'+LEVELS[G.level].n+'</div>';
+  o += '<div>BEACONS <span class="o">'+lit+' / 3</span></div>';
+  if(G.exitOpen) o += '<div class="o">THE WAY DOWN IS OPEN</div>';
+  const near = G.beacons.find(b=>!b.lit && Math.hypot(b.x-p.x,b.y-p.y)<1.5);
+  if(near) o += '<div class="o">[E] HOLD TO SET</div>';
+  setHTML('obj', o);
+
+  let h='';
+  h += '<span><span class="k">SOUND</span> '+(p.pingCd>0?('<span class="dim">'+p.pingCd.toFixed(1)+'</span>'):'<span class="o">READY</span>')+'</span>';
+  h += '<span><span class="k">FOCUS</span> '+(p.focCd>0?('<span class="dim">'+p.focCd.toFixed(1)+'</span>'):'READY')+'</span>';
+  h += '<span><span class="k">GAIT</span> '+(p.crouch?'CROUCHED':(G.keys['shift']?'<span class="warn">RUNNING</span>':'WALKING'))+'</span>';
+  if(p.listening>0) h += '<span class="o">LISTENING</span>';
+  const t=at(p.x|0,p.y|0);
+  if(t===T_WATER) h+='<span class="warn">WATER — LOUD</span>';
+  else if(t===T_GRIT) h+='<span class="warn">GRIT — LOUD</span>';
+  else if(t===T_DEAD) h+='<span class="warn">STILL AIR</span>';
+  setHTML('hud', h);
+}
+
+/* ------------------------------ BESTIARY UI ----------------------------- */
+function updateBeast(){
+  const el=$('beastList'); if(!el) return;
+  let h='';
+  for(const k of ['listener','still','answer','unknown']){
+    const s=SPECIES[k], kn=G.known[k];
+    if(k==='unknown'){
+      h += '<div class="beast unid"><div class="nm">'+
+           (G.unkStare>0?'——————':'&nbsp;')+'</div>'+
+           '<div class="st">'+(G.unkStare>0?('NO RESOLUTION ×'+G.unkStare):'NO ENTRY')+'</div>'+
+           '<div class="tx">'+(G.unkStare>0
+             ? 'The sounder is in perfect working order. It has been checked twice.'
+             : '&nbsp;')+'</div></div>';
+      continue;
+    }
+    h += '<div class="beast'+(kn?'':' unid')+'">'+
+         '<div class="nm">'+(kn?s.name:'UNIDENTIFIED CONTACT')+'</div>'+
+         '<div class="st">'+(kn?'IDENTIFIED':'NOT IDENTIFIED — FOCUSED SOUNDING, UNDER '+ID_RANGE+' M')+'</div>'+
+         '<div class="tx">'+(kn?s.id:s.unid)+'</div></div>';
+  }
+  el.innerHTML=h;
+}
+function buildSelect(){
+  const el=$('selList'); if(!el||el.dataset.built) return;
+  let h='';
+  for(let i=0;i<LEVELS.length;i++) h+='<button class="btn selb" data-i="'+i+'">'+LEVELS[i].n+'</button>';
+  el.innerHTML=h;
+  el.dataset.built='1';
+  const bs=el.querySelectorAll('.selb');
+  for(let i=0;i<bs.length;i++){
+    bs[i].addEventListener('click',()=>{ Snd.resume(); beginRun(parseInt(bs[i].dataset.i,10)); });
+  }
+}
+
+/* -------------------------------- INPUT --------------------------------- */
+const BLOCK = [' ','arrowup','arrowdown','arrowleft','arrowright'];
+if(typeof document!=='undefined' && document.addEventListener){
+  document.addEventListener('keydown', ev=>{
+    const k=ev.key.toLowerCase();
+    if(BLOCK.indexOf(k)>=0) ev.preventDefault();
+    if(k==='escape'){
+      if(G.state==='play'){ G.state='pause'; show('sPause'); }
+      else if(G.state==='pause'){ G.state='play'; hideAll(); }
+      else if($('sBrief').classList.contains('on')||$('sBeast').classList.contains('on')||
+              $('sKeys').classList.contains('on')||$('sSel').classList.contains('on')){
+        if(G.state==='pause') show('sPause'); else show('sMenu');
+      }
+      return;
+    }
+    if(G.keys[k]) return;
+    G.keys[k]=true;
+    if(G.state!=='play') return;
+    if(k==='c'){ G.p.crouch=!G.p.crouch; }
+    if(k==='m'){ G.mapBig=!G.mapBig; }
+  });
+  document.addEventListener('keyup', ev=>{ G.keys[ev.key.toLowerCase()]=false; });
+
+  /* mouse aim — the sounder points where you look, not where you walk */
+  document.addEventListener('mousemove', ev=>{
+    if(G.state!=='play') return;
+    G.mouseAim=true;
+    G.p.dir = Math.atan2(ev.clientY - VH/2, ev.clientX - VW/2);
+  });
+  document.addEventListener('contextmenu', ev=>{ if(G.state==='play') ev.preventDefault(); });
+  document.addEventListener('mousedown', ev=>{
+    Snd.resume();
+    if(G.state!=='play') return;
+    ev.preventDefault();
+    if(ev.button===0 && G.p.pingCd<=0 && !G.p.setting) sound(false);
+    if(ev.button===2 && G.p.focCd<=0 && !G.p.setting) sound(true);
+  });
+  window.addEventListener('blur', ()=>{ G.keys=Object.create(null); });
+}
+
+/* --------------------------------- LOOP --------------------------------- */
+let lastT = 0;
+function update(dt){
+  G.t += dt; G.dt=dt;
+  G.shake=Math.max(0,G.shake-dt*3);
+  if(toastT>0){ toastT-=dt; if(toastT<=0){ const e=$('toast'); if(e) e.style.opacity='0'; } }
+  if(subT>0){ subT-=dt; if(subT<=0){ const e=$('sub'); if(e) e.style.opacity='0'; } }
+  if(G.state!=='play') return;
+  updatePlayer(dt);
+  updateEnts(dt);
+  updateDread(dt);
+  updateEchoes();
+  updateHUD();
+}
+function frame(ts){
+  const dt=Math.min(0.05,(ts-lastT)/1000||0.016);
+  lastT=ts;
+  update(dt);
+  if(G.state==='play'||G.state==='pause') render();
+  if(typeof requestAnimationFrame!=='undefined') requestAnimationFrame(frame);
+}
+
+/* ------------------------------ MENU WIRING ----------------------------- */
+bindBtn('bStart', ()=>{ Snd.resume(); beginRun(0); });
+bindBtn('bBrief', ()=>show('sBrief'));
+bindBtn('bBriefBack', ()=>show('sMenu'));
+bindBtn('bBeast', ()=>{ updateBeast(); show('sBeast'); });
+bindBtn('bBeastBack', ()=>{ show(G.state==='pause'?'sPause':'sMenu'); });
+bindBtn('bKeys', ()=>show('sKeys'));
+bindBtn('bKeysBack', ()=>show('sMenu'));
+bindBtn('bSel', ()=>{ buildSelect(); show('sSel'); });
+bindBtn('bSelBack', ()=>show('sMenu'));
+bindBtn('bDescend', ()=>{ Snd.resume(); startLevel(G.level); });
+bindBtn('bResume', ()=>{ G.state='play'; hideAll(); });
+bindBtn('bPauseBeast', ()=>{ updateBeast(); show('sBeast'); });
+bindBtn('bPauseMenu', toMainMenu);
+bindBtn('bRetry', ()=>{ startLevel(G.level); });
+bindBtn('bDeadMenu', toMainMenu);
+bindBtn('bWinMenu', toMainMenu);
+
+if(typeof requestAnimationFrame!=='undefined') requestAnimationFrame(frame);
+
+/* ------------------------- headless test surface ------------------------ */
+globalThis.__T = { G, LEVELS, SPECIES, genLevel, startLevel, update, render, sound,
+                   floodFrom, bfsField, makeNoise, idx, at, castRay, los, beginRun,
+                   nextLevel, damage, T_WALL, T_FLOOR, T_GRIT, T_WATER, T_DEAD };
+</script>
+</body>
+</html>
