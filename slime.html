@@ -2289,14 +2289,17 @@ function renderServers(info) {
   }
 }
 
+let probeFails = 0;
 async function refreshServers() {
   try {
     const r = await fetch(NET_ORIGIN + "/servers", { cache: "no-store" });
     const info = await r.json();
+    probeFails = 0;
     renderServers(info);
     setNetHint("Friends on your network join at <code>" +
       (info.__host || NET_ORIGIN) + "</code>");
   } catch (e) {
+    probeFails++;
     renderServers(null);
     // Worded for a stranger on the public site, who has no local copy and no
     // idea what a server is: say that the game already works before asking
@@ -2313,7 +2316,16 @@ async function refreshServers() {
 renderServers(null);
 setNetHint("looking for a server ...");   // never leave the panel blank while probing
 refreshServers();
-setInterval(() => { if (W.state === "menu") refreshServers(); }, 4000);
+// Back off once it is clear nobody is hosting. On a static host -- the public
+// site, say -- there will never be a /servers endpoint, and a 4s probe forever
+// means a 404 in the console every four seconds for as long as the menu is up.
+// Keep polling slowly rather than stopping, so a server started later is still
+// picked up without a reload.
+setInterval(() => {
+  if (W.state !== "menu") return;
+  if (probeFails >= 3 && (probeFails % 8) !== 0) { probeFails++; return; }
+  refreshServers();
+}, 4000);
 
 /* ============================ main loop ============================ */
 let last = 0, acc = 0;
