@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BLOBS</title>
+<style>
+  :root{
+    --ink:#2b2733; --paper:#f6efe2; --line:#d8c9ad;
+    --goo:#6fc94a; --warn:#e0603f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:#bfe0e8;
+    font-family:'Trebuchet MS','Segoe UI',system-ui,sans-serif;color:var(--ink);
+    user-select:none;-webkit-user-select:none}
+  /* The canvas is appended to <body> last, so without an explicit z-index it
+     paints on top of the HUD and every panel. Layer them deliberately. */
+  canvas{display:block;width:100%;height:100%;position:absolute;inset:0;z-index:0}
+  .hidden{display:none !important}
+
+  /* ---------- HUD ---------- */
+  #hud{position:absolute;inset:0;pointer-events:none;z-index:10}
+  #hud>*{pointer-events:auto}
+
+  #top{position:absolute;top:10px;left:10px;display:flex;gap:8px;align-items:stretch}
+  .chip{background:rgba(246,239,226,.92);border:2px solid var(--line);border-radius:12px;
+    padding:6px 11px;font-size:15px;font-weight:bold;box-shadow:0 2px 0 rgba(0,0,0,.12);
+    display:flex;align-items:center;gap:7px;line-height:1}
+  .chip small{font-weight:normal;font-size:11px;opacity:.6;letter-spacing:.5px}
+  #gooChip{color:#3e7a26}
+  #nestWrap{min-width:132px;flex-direction:column;align-items:stretch;gap:4px}
+  #nestBar{height:7px;background:#e2d3b8;border-radius:4px;overflow:hidden}
+  #nestFill{height:100%;width:100%;background:#e86fa0;transition:width .2s}
+
+  #topRight{position:absolute;top:10px;right:10px;display:flex;gap:8px;align-items:flex-start}
+  .btn{background:rgba(246,239,226,.92);border:2px solid var(--line);border-radius:12px;
+    padding:7px 12px;font:inherit;font-size:14px;font-weight:bold;color:var(--ink);cursor:pointer;
+    box-shadow:0 2px 0 rgba(0,0,0,.12)}
+  .btn:hover{background:#fffaf0}
+  .btn:active{transform:translateY(1px);box-shadow:none}
+
+  /* ---------- species bar ---------- */
+  #bar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+    display:flex;gap:8px}
+  .card{width:104px;background:rgba(246,239,226,.94);border:2px solid var(--line);
+    border-radius:14px;padding:8px 6px 7px;text-align:center;cursor:pointer;
+    box-shadow:0 3px 0 rgba(0,0,0,.13);transition:transform .08s}
+  .card:hover{transform:translateY(-2px)}
+  .card.sel{border-color:var(--ink);background:#fffdf6}
+  .card.broke{opacity:.45;filter:grayscale(.6)}
+  .dot{width:26px;height:26px;border-radius:50%;margin:0 auto 4px;
+    box-shadow:inset -4px -5px 0 rgba(0,0,0,.16)}
+  .card .nm{font-size:13px;font-weight:bold;letter-spacing:.3px}
+  .card .cost{font-size:12px;color:#3e7a26;font-weight:bold}
+  .card .key{position:absolute;margin:-46px 0 0 -44px;font-size:10px;opacity:.5}
+
+  #tip{position:absolute;bottom:106px;left:50%;transform:translateX(-50%);
+    background:rgba(43,39,51,.86);color:#f6efe2;padding:6px 14px;border-radius:20px;
+    font-size:13px;max-width:520px;text-align:center;pointer-events:none;
+    opacity:0;transition:opacity .25s}
+  #tip.show{opacity:1}
+
+  #toasts{position:absolute;top:56px;left:50%;transform:translateX(-50%);
+    display:flex;flex-direction:column;gap:5px;align-items:center;pointer-events:none}
+  .toast{background:rgba(43,39,51,.88);color:#f6efe2;padding:5px 14px;border-radius:20px;
+    font-size:14px;font-weight:bold;animation:pop .3s ease-out}
+  @keyframes pop{from{transform:scale(.8) translateY(-6px);opacity:0}}
+
+  /* ---------- panels ---------- */
+  .veil{position:absolute;inset:0;background:rgba(30,40,48,.55);z-index:20;
+    display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+  .panel{background:var(--paper);border:3px solid var(--ink);border-radius:20px;
+    padding:22px 26px;max-width:560px;box-shadow:0 8px 0 rgba(0,0,0,.25)}
+  .panel h1{margin:0 0 2px;font-size:40px;letter-spacing:6px}
+  .panel h2{margin:0 0 12px;font-size:22px}
+  .panel p{margin:8px 0;font-size:14px;line-height:1.5}
+  .panel ul{margin:8px 0;padding-left:20px;font-size:14px;line-height:1.6}
+  .sub{opacity:.65;font-size:13px;margin-top:-2px !important}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .big{font-size:16px;padding:10px 18px}
+  kbd{background:#e6dac2;border:1px solid var(--line);border-bottom-width:2px;
+    border-radius:5px;padding:1px 6px;font:inherit;font-size:12px}
+
+  /* ---------- settings ---------- */
+  #settings{position:absolute;top:56px;right:10px;width:250px;z-index:15;
+    background:rgba(246,239,226,.97);border:2px solid var(--ink);border-radius:14px;
+    padding:12px 14px;box-shadow:0 4px 0 rgba(0,0,0,.2);font-size:13px;
+    max-height:calc(100vh - 180px);overflow-y:auto}   /* never cover the species bar */
+  #settings h3{margin:0 0 8px;font-size:15px;letter-spacing:1px}
+  .opt{margin:9px 0}
+  .opt .lbl{display:flex;justify-content:space-between;font-weight:bold;margin-bottom:4px}
+  .seg{display:flex;gap:4px}
+  .seg button{flex:1;padding:5px 0;font:inherit;font-size:12px;font-weight:bold;
+    border:2px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;color:var(--ink)}
+  .seg button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .note{font-size:11px;opacity:.62;line-height:1.4;margin-top:3px}
+  #perf{font-size:11px;opacity:.7;margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;
+    font-family:Consolas,monospace}
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="top">
+    <div class="chip" id="gooChip"><span id="goo">40</span><small>GOO</small></div>
+    <div class="chip"><span id="pop">0</span><small>BLOBS</small></div>
+    <div class="chip" id="waveChip"><span id="wave">—</span><small>WAVE</small></div>
+    <div class="chip" id="nestWrap">
+      <div style="display:flex;justify-content:space-between;font-size:11px"><span>NEST</span><span id="nestPct">100%</span></div>
+      <div id="nestBar"><div id="nestFill"></div></div>
+    </div>
+  </div>
+
+  <div id="topRight">
+    <button class="btn" id="gearBtn" title="Performance &amp; power settings">⚙ POWER</button>
+    <button class="btn" id="pauseBtn" title="Pause (Esc)">⏸</button>
+  </div>
+
+  <div id="settings" class="hidden">
+    <h3>POWER &amp; PERFORMANCE</h3>
+    <div class="opt">
+      <div class="lbl"><span>Frame cap</span><span id="fpsLbl">30 fps</span></div>
+      <div class="seg" id="fpsSeg">
+        <button data-v="20">20</button><button data-v="30">30</button>
+        <button data-v="45">45</button><button data-v="60">60</button>
+      </div>
+      <div class="note">Lower = less GPU work = less heat and power draw. 30 is plenty for this game.</div>
+    </div>
+    <div class="opt">
+      <div class="lbl"><span>Resolution</span><span id="resLbl">100%</span></div>
+      <div class="seg" id="resSeg">
+        <button data-v="0.5">50%</button><button data-v="0.75">75%</button><button data-v="1">100%</button>
+      </div>
+      <div class="note">Never goes above 1× even on a HiDPI screen.</div>
+    </div>
+    <div class="opt">
+      <div class="lbl"><span>Blob limit</span><span id="capLbl">90</span></div>
+      <div class="seg" id="capSeg">
+        <button data-v="40">40</button><button data-v="90">90</button><button data-v="140">140</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="saverBtn" style="width:100%">🔋 BATTERY SAVER</button>
+    </div>
+    <div class="note">Battery Saver = 20 fps, 50% resolution, 40 blobs.</div>
+    <div id="perf">renderer: —</div>
+  </div>
+
+  <div id="toasts"></div>
+  <div id="tip"></div>
+
+  <div id="bar"></div>
+</div>
+
+<!-- ---------- title ---------- -->
+<div class="veil" id="titleVeil">
+  <div class="panel">
+    <h1>BLOBS</h1>
+    <p class="sub">A very small 3D garden that runs on very little power.</p>
+    <p><b>Click the ground to spawn a blob.</b> They wander off, eat sprouts, make goo, and split when they're full. Spend the goo on more blobs.</p>
+    <ul>
+      <li><b>Ground blobs</b> roam, eat and fight. <b>Floaters</b> hang in the air, drift about, and nothing down there can reach them.</li>
+      <li><b>Grab and fling</b> any blob by dragging it — throw one over the wall and it's gone.</li>
+      <li><b>Right-drag</b> to spin the camera, <b>wheel</b> to zoom.</li>
+      <li><kbd>1</kbd>–<kbd>5</kbd> pick a species, <kbd>Esc</kbd> pauses.</li>
+    </ul>
+    <p class="sub">Running at 30 fps on the low-power GPU. Change that any time with ⚙ POWER.</p>
+    <div class="row">
+      <button class="btn big" id="startTides">🌊 TIDES — defend the nest</button>
+      <button class="btn big" id="startSandbox">🌿 SANDBOX — just blobs</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- pause ---------- -->
+<div class="veil hidden" id="pauseVeil">
+  <div class="panel" style="text-align:center">
+    <h2>PAUSED</h2>
+    <p class="sub" id="pauseWhy">Nothing is being drawn while this is up.</p>
+    <div class="row" style="justify-content:center">
+      <button class="btn big" id="resumeBtn">RESUME</button>
+      <button class="btn big" id="quitBtn">QUIT TO TITLE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------- game over ---------- -->
+<div class="veil hidden" id="overVeil">
+  <div class="panel" style="text-align:center">
+    <h2 id="overTitle">THE NEST IS GONE</h2>
+    <p id="overStats" class="sub"></p>
+    <div class="row" style="justify-content:center">
+      <button class="btn big" id="againBtn">PLAY AGAIN</button>
+      <button class="btn big" id="overQuit">TITLE</button>
+    </div>
+  </div>
+</div>
+
+<div class="veil hidden" id="errVeil">
+  <div class="panel">
+    <h2>Couldn't load the 3D library</h2>
+    <p>This game pulls three.js from unpkg.com the first time it runs, so it needs a connection
+       once. After that the browser caches it.</p>
+    <p class="sub" id="errMsg"></p>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script>
+  // If the module below never boots, say so instead of showing a blank blue screen.
+  window.__booted = false;
+  setTimeout(() => {
+    if (!window.__booted) {
+      document.getElementById('errVeil').classList.remove('hidden');
+      document.getElementById('titleVeil').classList.add('hidden');
+    }
+  }, 8000);
+  window.addEventListener('error', e => {
+    const m = document.getElementById('errMsg');
+    if (m && !window.__booted) m.textContent = String(e.message || e.error || '');
+  });
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* ============================================================================
+   BLOBS — a deliberately low-power 3D toy.
+   Everything that costs GPU time is capped, instanced, or turned off:
+     · low-power adapter hint      · frame cap (default 30)
+     · pixel ratio pinned to 1     · no shadows / no AA / no post
+     · ~8 draw calls total         · auto-pause when unfocused
+   ==========================================================================*/
+
+/* ---------------------------------------------------------------- tuning */
+const ARENA_R   = 26;      // playable radius
+const WALL_H    = 1.5;
+const SPROUT_MAX= 150;
+const SPROUT_RATE = 0.85;  // sprouts per second, natural regrowth
+const CREEP_MAX = 34;
+const WAVE_TIME = 62;      // seconds between waves
+const NEST_HP   = 100;
+const START_GOO = 40;
+const GRAVITY   = 22;
+
+const TEAM_YOU = 0, TEAM_CREEP = 1;
+
+const SPECIES = [
+  { id:'grazer', name:'Grazer', key:'1', cost:8,  color:0x86d45f, team:TEAM_YOU,
+    r:0.58, speed:3.0, hp:6,
+    blurb:'Hunts down sprouts and turns them into goo. Splits in two when it gets fat.' },
+  { id:'seeder', name:'Seeder', key:'2', cost:16, color:0x8fb0f0, team:TEAM_YOU,
+    r:0.70, speed:1.7, hp:9,
+    blurb:'Ambles about planting fresh sprouts. Feeds your grazers so you don\'t run dry.' },
+  { id:'guard',  name:'Guard',  key:'3', cost:26, color:0xf2a03c, team:TEAM_YOU,
+    r:0.78, speed:2.7, hp:22,
+    blurb:'Charges the nearest creep and headbutts it. The only blob that fights back.' },
+  { id:'floater',name:'Floater',key:'4', cost:30, color:0xffd86b, team:TEAM_YOU,
+    r:0.74, speed:1.15, hp:10, floats:true,
+    blurb:'Hangs in the air and drifts. Nothing on the ground can reach it, and it slowly sweats goo.' },
+  { id:'prism',  name:'Prism',  key:'5', cost:44, color:0xd88ce8, team:TEAM_YOU,
+    r:0.86, speed:0,   hp:18,
+    blurb:'Roots in place and pulses. Blobs inside the ring move and eat much faster.' },
+  // last index — not player-spawnable
+  { id:'creep',  name:'Creep',  key:'',  cost:0,  color:0x6b4a86, team:TEAM_CREEP,
+    r:0.66, speed:2.2, hp:8,
+    blurb:'' },
+];
+const SP_GRAZER=0, SP_SEEDER=1, SP_GUARD=2, SP_FLOATER=3, SP_PRISM=4, SP_CREEP=5;
+const PLAYABLE = [SP_GRAZER, SP_SEEDER, SP_GUARD, SP_FLOATER, SP_PRISM];
+
+const PRISM_RANGE = 7.5;
+const FLOAT_GOO   = 3;      // goo a floater sweats out…
+const FLOAT_EVERY = 4.5;    // …every this many seconds
+const GONE_R      = ARENA_R + 1.2;   // past this while airborne = over the wall, gone
+const GRAZER_FULL = 2.1;   // mass at which a grazer splits
+const SPROUT_GOO  = 2;
+const SPROUT_MASS = 0.26;
+
+/* ---------------------------------------------------------------- state */
+const G = {
+  mode:'title',            // title | play | paused | over
+  tides:true,
+  t:0, goo:START_GOO, nest:NEST_HP,
+  wave:0, waveTimer:WAVE_TIME, waveQueue:0, waveGap:0,
+  sel:SP_GRAZER,
+  blobs:[], sprouts:[],
+  peakPop:0, spawned:0, flung:0, eaten:0, splits:0,
+  blobCap:90,
+  seedRoll:0.0,
+};
+let free = [];             // recycled blob slots
+
+/* deterministic-enough RNG so the balance harness can repeat a run */
+let _seed = 1234567;
+function rnd(){ _seed = (_seed * 1103515245 + 12345) & 0x7fffffff; return _seed / 0x7fffffff; }
+function rr(a,b){ return a + rnd()*(b-a); }
+
+/* ---------------------------------------------------------------- renderer */
+const renderer = new THREE.WebGLRenderer({
+  antialias:false,                 // AA is pure GPU cost for a game this chunky
+  powerPreference:'low-power',     // ask Windows for the iGPU, not the hot one
+  alpha:false, stencil:false, depth:true,
+});
+renderer.setPixelRatio(1);         // never devicePixelRatio — that is a 4x bill on HiDPI
+renderer.shadowMap.enabled = false;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0xbfe0e8);
+scene.fog = new THREE.Fog(0xbfe0e8, 46, 96);
+
+const camera = new THREE.PerspectiveCamera(52, 1, 0.5, 140);
+const cam = { yaw: -0.6, pitch: 0.86, dist: 40, tx:0, tz:0 };
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x88a878, 1.15));
+const sun = new THREE.DirectionalLight(0xfff3d8, 0.85);
+sun.position.set(14, 26, 9);
+scene.add(sun);
+
+/* ---------------------------------------------------------------- scenery */
+{
+  const outer = new THREE.Mesh(
+    new THREE.CircleGeometry(120, 24),
+    new THREE.MeshLambertMaterial({ color:0x9fc8a8 }));
+  outer.rotation.x = -Math.PI/2; outer.position.y = -0.35;
+  scene.add(outer);
+
+  const floor = new THREE.Mesh(
+    new THREE.CircleGeometry(ARENA_R, 44),
+    new THREE.MeshLambertMaterial({ color:0xe4dcbe }));
+  floor.rotation.x = -Math.PI/2;
+  scene.add(floor);
+
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(ARENA_R+0.3, ARENA_R+0.3, WALL_H, 44, 1, true),
+    new THREE.MeshLambertMaterial({ color:0xcbb894, side:THREE.DoubleSide }));
+  wall.position.y = WALL_H/2 - 0.2;
+  scene.add(wall);
+
+  const lip = new THREE.Mesh(
+    new THREE.TorusGeometry(ARENA_R+0.3, 0.22, 6, 44),
+    new THREE.MeshLambertMaterial({ color:0xb9a37b }));
+  lip.rotation.x = Math.PI/2; lip.position.y = WALL_H - 0.2;
+  scene.add(lip);
+}
+
+/* the nest — one real mesh, it is the only thing that gets special treatment */
+const nestMat = new THREE.MeshLambertMaterial({ color:0xef7fae });
+const nest = new THREE.Mesh(new THREE.IcosahedronGeometry(2.1, 2), nestMat);
+nest.position.y = 1.7;
+scene.add(nest);
+const nestRing = new THREE.Mesh(
+  new THREE.TorusGeometry(2.9, 0.16, 5, 26),
+  new THREE.MeshLambertMaterial({ color:0xffc0d8 }));
+nestRing.rotation.x = Math.PI/2; nestRing.position.y = 0.12;
+scene.add(nestRing);
+
+/* ---------------------------------------------------------------- instances */
+const BLOB_CAP = 200;                       // hard ceiling incl. creep, never resized
+const blobGeo  = new THREE.IcosahedronGeometry(1, 1);   // 80 tris
+const blobMesh = new THREE.InstancedMesh(blobGeo,
+  new THREE.MeshLambertMaterial({ flatShading:true }), BLOB_CAP);
+blobMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+blobMesh.frustumCulled = false;
+scene.add(blobMesh);
+
+const eyeGeo  = new THREE.IcosahedronGeometry(1, 0);    // 20 tris
+const eyeMesh = new THREE.InstancedMesh(eyeGeo,
+  new THREE.MeshBasicMaterial({ color:0x241f2b }), BLOB_CAP*2);
+eyeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+eyeMesh.frustumCulled = false;
+scene.add(eyeMesh);
+
+const SHADOW_CAP = 56;
+const shadowMesh = new THREE.InstancedMesh(
+  new THREE.CircleGeometry(1, 14),
+  new THREE.MeshBasicMaterial({ color:0x55634b, transparent:true, opacity:0.34,
+                                depthWrite:false }), SHADOW_CAP);
+shadowMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+shadowMesh.frustumCulled = false;
+shadowMesh.renderOrder = 1;
+scene.add(shadowMesh);
+
+const sproutGeo  = new THREE.OctahedronGeometry(0.3, 0);
+const sproutMesh = new THREE.InstancedMesh(sproutGeo,
+  new THREE.MeshLambertMaterial({ color:0x6fbf3f, flatShading:true }), SPROUT_MAX);
+sproutMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+sproutMesh.frustumCulled = false;
+scene.add(sproutMesh);
+
+/* prism aura rings — a handful of real meshes, pooled */
+const AURA_POOL = 5;                  // each visible ring is one draw call — keep it small
+const auraGeo = new THREE.RingGeometry(PRISM_RANGE-0.28, PRISM_RANGE, 30);
+const auraPool = [];
+for (let i=0;i<AURA_POOL;i++){
+  const m = new THREE.Mesh(auraGeo,   // shared geometry, only the material differs per ring
+    new THREE.MeshBasicMaterial({ color:0xd88ce8, transparent:true, opacity:0.22,
+      depthWrite:false }));           // FrontSide: it is only ever seen from above
+  m.rotation.x = -Math.PI/2; m.position.y = 0.05; m.visible = false;
+  scene.add(m); auraPool.push(m);
+}
+
+/* scratch objects — the update loop allocates nothing */
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion();
+const _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+
+/* ---------------------------------------------------------------- blobs */
+function spawnBlob(sp, x, z, mass){
+  const alive = G.blobs.reduce((n,b)=>n+(b.dead?0:1),0);
+  const cap = (SPECIES[sp].team===TEAM_YOU) ? G.blobCap : CREEP_MAX;
+  const same = G.blobs.reduce((n,b)=>n+((!b.dead && SPECIES[b.sp].team===SPECIES[sp].team)?1:0),0);
+  if (same >= cap || alive >= BLOB_CAP) return null;
+
+  const S = SPECIES[sp];
+  let b;
+  if (free.length){ b = G.blobs[free.pop()]; }
+  else { b = {}; b.i = G.blobs.length; G.blobs.push(b); }
+
+  b.dead=false; b.sp=sp; b.x=x; b.z=z; b.y=0; b.vy=0;
+  b.vx=0; b.vz=0; b.dirx=rr(-1,1); b.dirz=rr(-1,1);
+  b.mass = mass ?? 1; b.hp = S.hp; b.maxhp = S.hp;
+  b.phase = rr(0, 6.28); b.squash = 0; b.held=false; b.air=false;
+  b.target = -1; b.retarget = rr(0,0.5); b.cool = 0; b.boost = 1;
+  b.wander = rr(1,3); b.flash = 0;
+  b.floats = !!S.floats;
+  b.hoverY = b.floats ? rr(3.4, 5.4) : 0;   // each floater picks its own altitude
+  if (SPECIES[sp].team===TEAM_YOU) G.spawned++;
+  return b;
+}
+function killBlob(b){
+  if (b.dead) return;
+  b.dead = true; b.held = false;
+  free.push(b.i);
+}
+function radiusOf(b){ return SPECIES[b.sp].r * (0.72 + 0.42*b.mass); }
+function popCount(team){
+  let n=0; for (const b of G.blobs) if (!b.dead && SPECIES[b.sp].team===team) n++;
+  return n;
+}
+
+/* ---------------------------------------------------------------- sprouts */
+function addSprout(x, z){
+  if (G.sprouts.length >= SPROUT_MAX) return false;
+  const d = Math.hypot(x,z);
+  if (d > ARENA_R-1.2){ const k=(ARENA_R-1.2)/d; x*=k; z*=k; }
+  if (d < 3.6) return false;                      // keep the nest apron clear
+  G.sprouts.push({ x, z, spin:rr(0,6.28), pop:0 });
+  return true;
+}
+function scatterSprouts(n){
+  for (let i=0;i<n;i++){
+    const a = rr(0,6.283), r = Math.sqrt(rr(0.03,1))*(ARENA_R-1.5);
+    addSprout(Math.cos(a)*r, Math.sin(a)*r);
+  }
+}
+
+/* ---------------------------------------------------------------- helpers */
+function nearestSprout(x, z, maxD){
+  let best=-1, bd=maxD*maxD;
+  for (let i=0;i<G.sprouts.length;i++){
+    const s=G.sprouts[i], dx=s.x-x, dz=s.z-z, d=dx*dx+dz*dz;
+    if (d<bd){ bd=d; best=i; }
+  }
+  return best;
+}
+/* groundOnly: creep can't reach anything hovering in the air */
+function nearestBlob(x, z, team, maxD, notI, groundOnly){
+  let best=-1, bd=maxD*maxD;
+  for (let i=0;i<G.blobs.length;i++){
+    const b=G.blobs[i];
+    if (b.dead || i===notI || SPECIES[b.sp].team!==team) continue;
+    if (groundOnly && b.floats && !b.air) continue;
+    const dx=b.x-x, dz=b.z-z, d=dx*dx+dz*dz;
+    if (d<bd){ bd=d; best=i; }
+  }
+  return best;
+}
+
+/* ---------------------------------------------------------------- sim */
+function update(dt){
+  G.t += dt;
+
+  /* --- sprout regrowth --- */
+  G.seedRoll += dt * SPROUT_RATE;
+  while (G.seedRoll >= 1){
+    G.seedRoll -= 1;
+    const a = rr(0,6.283), r = Math.sqrt(rr(0.05,1))*(ARENA_R-1.5);
+    addSprout(Math.cos(a)*r, Math.sin(a)*r);
+  }
+
+  /* --- prism boost field: recompute once, blobs read it --- */
+  const prisms = [];
+  for (const b of G.blobs) if (!b.dead && b.sp===SP_PRISM && !b.air) prisms.push(b);
+
+  /* --- per-blob behaviour --- */
+  for (let i=0;i<G.blobs.length;i++){
+    const b = G.blobs[i];
+    if (b.dead) continue;
+    const S = SPECIES[b.sp];
+    b.phase += dt * (2.2 + b.wander*0.4);
+    b.squash *= Math.pow(0.02, dt);
+    b.flash  = Math.max(0, b.flash - dt*3);
+    b.cool   = Math.max(0, b.cool - dt);
+
+    /* boost from prisms */
+    b.boost = 1;
+    if (b.sp !== SP_PRISM){
+      for (const p of prisms){
+        if ((b.x-p.x)**2 + (b.z-p.z)**2 < PRISM_RANGE*PRISM_RANGE){ b.boost = 1.7; break; }
+      }
+    }
+
+    /* held or airborne: no AI, just physics */
+    if (b.held){ continue; }
+    if (b.air){
+      if (b.floats){
+        /* A floater does NOT fall. It is pulled back to its altitude by a damped
+           spring — near-critical, so it eases home instead of bouncing forever.
+           (Buoyancy-as-an-impulse made it a permanent oscillator that never
+           settled, which in turn let creep treat it as a reachable target.) */
+        const K = 6.0, DAMP = 4.6;
+        b.vy += ((b.hoverY - b.y)*K - b.vy*DAMP) * dt;
+        b.y += b.vy*dt;
+        if (b.y < 0.25){ b.y = 0.25; if (b.vy < 0) b.vy = 0; }
+        b.vx *= Math.pow(0.55, dt); b.vz *= Math.pow(0.55, dt);
+        b.x += b.vx*dt; b.z += b.vz*dt;
+      } else {
+        b.vy -= GRAVITY*dt;
+        b.x += b.vx*dt; b.z += b.vz*dt; b.y += b.vy*dt;
+      }
+
+      if (Math.hypot(b.x, b.z) > GONE_R){                 // sailed over the wall
+        if (S.team===TEAM_CREEP){ G.goo += 6; toast('creep flung out  +6'); G.flung++; }
+        else toast(S.name + ' flung out…');
+        killBlob(b); continue;
+      }
+
+      const settled = b.floats
+        ? (Math.abs(b.y - b.hoverY) < 0.3 && Math.abs(b.vy) < 0.7)
+        : (b.y <= 0 && b.vy <= 0);
+      if (settled){
+        b.y = b.floats ? b.hoverY : 0; b.vy = 0; b.air = false;
+        b.squash = b.floats ? 0.25 : 0.55;
+        b.vx *= 0.2; b.vz *= 0.2;
+      }
+      continue;
+    }
+
+    /* ---- species AI ---- */
+    let tx=null, tz=null, spd = S.speed * b.boost;
+
+    if (b.sp === SP_GRAZER){
+      b.retarget -= dt;
+      if (b.target >= G.sprouts.length) b.target = -1;
+      if (b.target < 0 && b.retarget <= 0){
+        b.target = nearestSprout(b.x, b.z, 40); b.retarget = 0.4;
+      }
+      if (b.target >= 0){
+        const s = G.sprouts[b.target];
+        tx = s.x; tz = s.z;
+        if ((s.x-b.x)**2 + (s.z-b.z)**2 < (radiusOf(b)+0.45)**2){
+          G.sprouts.splice(b.target,1);
+          for (const o of G.blobs) if (!o.dead && o.target > b.target) o.target--;
+                                   else if (!o.dead && o.target === b.target && o!==b) o.target = -1;
+          b.target = -1; b.mass += SPROUT_MASS; b.squash = 0.5; G.goo += SPROUT_GOO; G.eaten++;
+          if (b.mass >= GRAZER_FULL){
+            b.mass = 1;
+            const kid = spawnBlob(SP_GRAZER, b.x + rr(-0.8,0.8), b.z + rr(-0.8,0.8), 1);
+            /* only announce the first couple — splits get frequent fast and the
+               toast stack turns into wallpaper */
+            if (kid){ kid.squash = 0.7; if (++G.splits <= 2) toast('a grazer split!'); }
+          }
+        }
+      }
+    }
+    else if (b.sp === SP_SEEDER){
+      if (b.cool <= 0){
+        b.cool = 4.2 / b.boost;
+        const a = rr(0,6.283), d = rr(2.2, 5.0);
+        if (addSprout(b.x + Math.cos(a)*d, b.z + Math.sin(a)*d)) b.squash = 0.35;
+      }
+    }
+    else if (b.sp === SP_GUARD){
+      const t = nearestBlob(b.x, b.z, TEAM_CREEP, 90, i);
+      if (t >= 0){
+        const c = G.blobs[t];
+        tx = c.x; tz = c.z; spd *= 1.15;
+        if ((c.x-b.x)**2 + (c.z-b.z)**2 < (radiusOf(b)+radiusOf(c)+0.2)**2 && b.cool<=0){
+          b.cool = 0.55 / b.boost;
+          c.hp -= 4.5; c.flash = 1; b.squash = 0.5;
+          c.vx += (c.x-b.x)*1.6; c.vz += (c.z-b.z)*1.6;
+          if (c.hp <= 0){ killBlob(c); G.goo += 4; }
+        }
+      } else {                                   // patrol a loose ring near the nest
+        const a = G.t*0.28 + b.phase;
+        tx = Math.cos(a)*7; tz = Math.sin(a)*7; spd *= 0.55;
+      }
+    }
+    else if (b.sp === SP_FLOATER){
+      if (b.cool <= 0){                        // sweats goo on a timer, safe up there
+        b.cool = FLOAT_EVERY / b.boost;
+        G.goo += FLOAT_GOO; b.squash = 0.3;
+      }
+      b.hoverY += Math.sin(G.t*0.5 + b.phase) * 0.3 * dt;    // slow altitude drift
+      b.hoverY = Math.max(3.2, Math.min(5.8, b.hoverY));
+    }
+    else if (b.sp === SP_CREEP){
+      const t = nearestBlob(b.x, b.z, TEAM_YOU, 13, i, true);
+      if (t >= 0){
+        const p = G.blobs[t];
+        tx = p.x; tz = p.z;
+        if ((p.x-b.x)**2 + (p.z-b.z)**2 < (radiusOf(b)+radiusOf(p)+0.15)**2 && b.cool<=0){
+          b.cool = 0.7;
+          p.hp -= 5; p.flash = 1; b.squash = 0.45;
+          if (p.hp <= 0){ killBlob(p); b.mass = Math.min(1.9, b.mass+0.25); b.hp += 2; }
+        }
+      } else {
+        tx = 0; tz = 0;
+        if (b.x*b.x + b.z*b.z < (radiusOf(b)+2.4)**2 && b.cool<=0){
+          b.cool = 1.0; b.squash = 0.5;
+          G.nest = Math.max(0, G.nest - 4);
+          nestHit = 0.4;
+          if (G.nest <= 0){ gameOver(false); return; }
+        }
+      }
+    }
+    /* prism: rooted, does nothing but exist */
+
+    /* steer */
+    if (tx !== null){
+      const dx = tx-b.x, dz = tz-b.z, d = Math.hypot(dx,dz) || 1;
+      b.dirx = dx/d; b.dirz = dz/d;
+    } else if (spd > 0){
+      b.wander -= dt;
+      if (b.wander <= 0){
+        b.wander = rr(1.4, 3.4);
+        const a = rr(0,6.283);
+        b.dirx = Math.cos(a); b.dirz = Math.sin(a);
+      }
+      if (b.x*b.x+b.z*b.z > (ARENA_R-2.5)**2){       // turn back at the wall
+        const d = Math.hypot(b.x,b.z)||1;
+        b.dirx = -b.x/d; b.dirz = -b.z/d;
+      }
+    }
+    if (spd > 0){
+      const acc = 9;
+      b.vx += (b.dirx*spd - b.vx) * Math.min(1, acc*dt);
+      b.vz += (b.dirz*spd - b.vz) * Math.min(1, acc*dt);
+    } else { b.vx *= Math.pow(0.001,dt); b.vz *= Math.pow(0.001,dt); }
+
+    b.x += b.vx*dt; b.z += b.vz*dt;
+
+    /* hop — a little vertical bob while moving, free "life".
+       Floaters bob around their own altitude instead of touching down. */
+    const moving = Math.abs(b.vx)+Math.abs(b.vz);
+    b.y = b.floats
+      ? b.hoverY + Math.sin(b.phase*0.8) * 0.28
+      : Math.max(0, Math.sin(b.phase*1.6) * 0.12 * Math.min(1, moving*0.5));
+
+    /* wall */
+    const d = Math.hypot(b.x, b.z), lim = ARENA_R - radiusOf(b) - 0.35;
+    if (d > lim){ const k = lim/d; b.x*=k; b.z*=k; b.vx*=0.4; b.vz*=0.4; }
+  }
+
+  /* --- separation: O(n²) over ≤200 blobs, but only 2 ops per pair --- */
+  const n = G.blobs.length;
+  for (let i=0;i<n;i++){
+    const a = G.blobs[i]; if (a.dead || a.held || a.air) continue;
+    const ar = radiusOf(a);
+    for (let j=i+1;j<n;j++){
+      const b = G.blobs[j]; if (b.dead || b.held || b.air) continue;
+      if (a.floats !== b.floats) continue;          // different altitudes, they pass by
+      if (a.floats && Math.abs(a.hoverY-b.hoverY) > 1.1) continue;
+      const dx = b.x-a.x, dz = b.z-a.z;
+      const rr2 = ar + radiusOf(b);
+      const d2 = dx*dx + dz*dz;
+      if (d2 > rr2*rr2 || d2 < 1e-6) continue;
+      const d = Math.sqrt(d2), push = (rr2-d) * 0.5;
+      const ux = dx/d, uz = dz/d;
+      a.x -= ux*push; a.z -= uz*push;
+      b.x += ux*push; b.z += uz*push;
+    }
+  }
+
+  /* --- waves --- */
+  if (G.tides){
+    if (G.waveQueue > 0){
+      G.waveGap -= dt;
+      if (G.waveGap <= 0){
+        G.waveGap = 0.45;
+        G.waveQueue--;
+        const a = rr(0,6.283), r = ARENA_R - 1.2;
+        const c = spawnBlob(SP_CREEP, Math.cos(a)*r, Math.sin(a)*r, 1);
+        if (c){ c.hp = c.maxhp = 8 + G.wave*2.5; }
+      }
+    } else {
+      G.waveTimer -= dt;
+      if (G.waveTimer <= 0){
+        G.wave++;
+        G.waveTimer = WAVE_TIME;
+        G.waveQueue = Math.min(CREEP_MAX, 2 + Math.floor(G.wave*1.5));
+        G.waveGap = 0;
+        toast('WAVE ' + G.wave + ' — ' + G.waveQueue + ' creep');
+      }
+    }
+  }
+
+  const pop = popCount(TEAM_YOU);
+  if (pop > G.peakPop) G.peakPop = pop;
+
+  /* soft-lock rescue: no blobs and not enough goo to buy one */
+  if (pop === 0 && G.goo < SPECIES[SP_GRAZER].cost){
+    G.goo = SPECIES[SP_GRAZER].cost;
+  }
+}
+
+/* ---------------------------------------------------------------- render */
+let nestHit = 0;
+function sync(){
+  let bi = 0, ei = 0, ai = 0, shi = 0;
+
+  for (const b of G.blobs){
+    if (b.dead) continue;
+    const S = SPECIES[b.sp];
+    const r = radiusOf(b);
+    const w = Math.sin(b.phase) * 0.07;
+    const sq = b.squash;
+    const sx = r * (1 + w + sq*0.45);
+    const sy = r * (1 - w - sq*0.5) * (b.held ? 1.1 : 1);
+    const cy = b.floats ? b.y : b.y + sy;      // floaters are centred on their altitude
+    _p.set(b.x, cy, b.z);
+    _s.set(sx, sy, sx);
+    _q.set(0,0,0,1);
+    _m.compose(_p, _q, _s);
+    blobMesh.setMatrixAt(bi, _m);
+
+    _c.setHex(S.color);
+    if (b.flash > 0) _c.lerp(_WHITE, Math.min(0.8, b.flash));
+    if (b.hp < b.maxhp) _c.lerp(_DARK, 0.35 * (1 - b.hp/b.maxhp));
+    blobMesh.setColorAt(bi, _c);
+    bi++;
+
+    /* a soft disc on the ground so you can read how high a floater is */
+    if ((b.floats || b.air) && shi < SHADOW_CAP){
+      const h = Math.max(0, cy);
+      const k = Math.max(0.35, 1 - h*0.11);
+      _p.set(b.x, 0.03, b.z); _s.set(r*k, 1, r*k);
+      _q.setFromAxisAngle(_RIGHT, -Math.PI/2);
+      _m.compose(_p,_q,_s);
+      shadowMesh.setMatrixAt(shi++, _m);
+      _q.set(0,0,0,1);
+    }
+
+    /* Eyes, facing travel direction. They have to sit ON the surface — offsets
+       that sum to less than 1 radius bury them invisibly inside the blob, so
+       build the direction first, normalise it, then push out to 0.94r. */
+    const fx = b.dirx, fz = b.dirz;
+    const px = -fz, pz = fx;                 // perpendicular, for the left/right spread
+    const er = r*0.2;
+    for (let k=-1;k<=1;k+=2){
+      let ex = fx*0.78 + px*0.36*k, ez = fz*0.78 + pz*0.36*k, ey = 0.36;
+      const len = Math.hypot(ex, ey, ez) || 1;
+      const out = r*0.94/len;
+      _p.set(b.x + ex*out, cy + ey*out*(sy/r), b.z + ez*out);
+      _s.set(er, er, er);
+      _m.compose(_p, _q, _s);
+      eyeMesh.setMatrixAt(ei++, _m);
+    }
+
+    if (b.sp === SP_PRISM && ai < auraPool.length && !b.air){
+      const m = auraPool[ai++];
+      m.visible = true; m.position.set(b.x, 0.05, b.z);
+      m.material.opacity = 0.16 + 0.07*Math.sin(G.t*2 + b.phase);
+    }
+  }
+
+  /* park the unused instances at zero scale — cheaper than resizing buffers */
+  _s.set(0,0,0); _p.set(0,-50,0); _q.set(0,0,0,1); _m.compose(_p,_q,_s);
+  for (let i=bi;i<BLOB_CAP;i++) blobMesh.setMatrixAt(i,_m);
+  for (let i=ei;i<BLOB_CAP*2;i++) eyeMesh.setMatrixAt(i,_m);
+  for (let i=shi;i<SHADOW_CAP;i++) shadowMesh.setMatrixAt(i,_m);
+  for (let i=ai;i<auraPool.length;i++) auraPool[i].visible = false;
+
+  blobMesh.instanceMatrix.needsUpdate = true;
+  if (blobMesh.instanceColor) blobMesh.instanceColor.needsUpdate = true;
+  eyeMesh.instanceMatrix.needsUpdate = true;
+  shadowMesh.instanceMatrix.needsUpdate = true;
+
+  /* sprouts */
+  let si = 0;
+  for (const s of G.sprouts){
+    s.spin += 0.9 * 0.033;
+    _q.setFromAxisAngle(_UP, s.spin);
+    _p.set(s.x, 0.3 + Math.sin(s.spin*1.4)*0.05, s.z);
+    _s.set(1,1,1);
+    _m.compose(_p,_q,_s);
+    sproutMesh.setMatrixAt(si++, _m);
+  }
+  _s.set(0,0,0); _p.set(0,-50,0); _q.set(0,0,0,1); _m.compose(_p,_q,_s);
+  for (let i=si;i<SPROUT_MAX;i++) sproutMesh.setMatrixAt(i,_m);
+  sproutMesh.instanceMatrix.needsUpdate = true;
+
+  /* nest */
+  const puff = 1 + Math.sin(G.t*1.6)*0.035 + nestHit;
+  nest.scale.set(puff, puff*0.94, puff);
+  nest.rotation.y += 0.0035;
+  nestHit *= 0.86;
+  nestMat.color.setHex(G.nest > 35 ? 0xef7fae : 0xd8556f);
+
+  /* camera */
+  const cp = Math.max(0.25, Math.min(1.4, cam.pitch));
+  camera.position.set(
+    cam.tx + Math.sin(cam.yaw)*Math.cos(cp)*cam.dist,
+    Math.sin(cp)*cam.dist,
+    cam.tz + Math.cos(cam.yaw)*Math.cos(cp)*cam.dist);
+  camera.lookAt(cam.tx, 1.5, cam.tz);
+}
+const _WHITE = new THREE.Color(0xffffff);
+const _DARK  = new THREE.Color(0x3a3040);
+const _UP    = new THREE.Vector3(0,1,0);
+const _RIGHT = new THREE.Vector3(1,0,0);
+
+/* ---------------------------------------------------------------- power */
+const power = { fps:30, res:1, };
+let frameMin = 1000/power.fps;
+
+function applyRes(){
+  const w = Math.max(320, Math.round(innerWidth  * power.res));
+  const h = Math.max(240, Math.round(innerHeight * power.res));
+  renderer.setSize(w, h, false);
+  renderer.domElement.style.width  = '100%';
+  renderer.domElement.style.height = '100%';
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', applyRes);
+applyRes();
+
+/* ---------------------------------------------------------------- loop */
+let last = performance.now(), fpsAcc = 0, fpsN = 0, shownFps = 0;
+function frame(now){
+  requestAnimationFrame(frame);
+  const el = now - last;
+  if (el < frameMin - 1) return;              // <-- the frame cap. Skip, don't draw.
+  last = now;
+
+  if (G.mode !== 'play') return;              // paused/title draws nothing at all
+
+  const dt = Math.min(0.05, el/1000);         // clamp so a stall can't teleport blobs
+  update(dt);
+  if (G.mode !== 'play') { drawOnce(); return; }
+  sync();
+  renderer.render(scene, camera);
+
+  fpsAcc += el; fpsN++;
+  if (fpsAcc > 500){
+    shownFps = Math.round(1000 / (fpsAcc/fpsN));
+    fpsAcc = 0; fpsN = 0;
+    perfEl.textContent =
+      'fps ' + shownFps + ' / cap ' + power.fps + '\n' +
+      'blobs ' + popCount(TEAM_YOU) + '+' + popCount(TEAM_CREEP) +
+      '  sprouts ' + G.sprouts.length + '\n' +
+      'draw calls ' + renderer.info.render.calls +
+      '  tris ' + renderer.info.render.triangles;
+  }
+  refreshHud();
+}
+function drawOnce(){ sync(); renderer.render(scene, camera); }
+requestAnimationFrame(frame);
+
+/* pause when the window is not in front — no point burning power on a hidden game */
+addEventListener('blur', () => { if (G.mode==='play') doPause('Paused — the window lost focus.'); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && G.mode==='play') doPause('Paused — the tab went to the background.');
+});
+
+/* ---------------------------------------------------------------- input */
+const canvas = renderer.domElement;
+const ground = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const hitPt = new THREE.Vector3();
+
+function pickGround(ev){
+  ndc.x = (ev.clientX / innerWidth) * 2 - 1;
+  ndc.y = -(ev.clientY / innerHeight) * 2 + 1;
+  ray.setFromCamera(ndc, camera);
+  return ray.ray.intersectPlane(ground, hitPt) ? hitPt : null;
+}
+function pickBlob(ev){
+  ndc.x = (ev.clientX / innerWidth) * 2 - 1;
+  ndc.y = -(ev.clientY / innerHeight) * 2 + 1;
+  ray.setFromCamera(ndc, camera);
+  let best=null, bd=Infinity;
+  for (const b of G.blobs){
+    if (b.dead) continue;
+    _p.set(b.x, b.floats ? b.y : b.y + radiusOf(b), b.z);
+    const d = ray.ray.distanceSqToPoint(_p);
+    const r = radiusOf(b) * 1.4;        // generous — floaters are small on screen
+    if (d < r*r){
+      const cd = camera.position.distanceToSquared(_p);
+      if (cd < bd){ bd = cd; best = b; }
+    }
+  }
+  return best;
+}
+
+let held = null, dragCam = false, lastX=0, lastY=0, downAt=0, moved=0;
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', ev => {
+  if (G.mode !== 'play') return;
+  canvas.setPointerCapture(ev.pointerId);
+  lastX = ev.clientX; lastY = ev.clientY; moved = 0; downAt = performance.now();
+  if (ev.button === 2 || ev.shiftKey){ dragCam = true; return; }
+  const b = pickBlob(ev);
+  if (b){ held = b; b.held = true; b.air = false; b.squash = 0.3; }
+});
+canvas.addEventListener('pointermove', ev => {
+  const dx = ev.clientX - lastX, dy = ev.clientY - lastY;
+  lastX = ev.clientX; lastY = ev.clientY;
+  moved += Math.abs(dx) + Math.abs(dy);
+  if (dragCam){
+    cam.yaw   -= dx * 0.006;
+    cam.pitch = Math.max(0.25, Math.min(1.4, cam.pitch + dy*0.005));
+    if (G.mode!=='play') drawOnce();
+    return;
+  }
+  if (held){
+    const p = pickGround(ev);
+    if (p){
+      const nx = p.x, nz = p.z;
+      held.vx = (nx - held.x) * 9;              // remember the throw speed
+      held.vz = (nz - held.z) * 9;
+      held.x = nx; held.z = nz;
+      held.y = 2.4;
+    }
+  }
+});
+function release(ev){
+  if (dragCam){ dragCam = false; return; }
+  if (held){
+    const b = held; held = null; b.held = false;
+    const sp = Math.hypot(b.vx, b.vz);
+    if (sp > 2.5){                              // flung
+      b.air = true; b.vy = 5 + Math.min(7, sp*0.28);
+      const k = Math.min(2.4, 1 + sp*0.05);
+      b.vx *= k; b.vz *= k;
+    } else { b.air = true; b.vy = 0; b.vx=0; b.vz=0; }
+    return;
+  }
+  /* a plain click on the ground = spawn */
+  if (moved < 8 && performance.now()-downAt < 600){
+    const p = pickGround(ev);
+    if (p) trySpawn(p.x, p.z);
+  }
+}
+canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointercancel', release);
+canvas.addEventListener('wheel', ev => {
+  ev.preventDefault();
+  cam.dist = Math.max(14, Math.min(64, cam.dist + Math.sign(ev.deltaY)*3));
+  if (G.mode!=='play') drawOnce();
+}, { passive:false });
+
+function trySpawn(x, z){
+  const S = SPECIES[G.sel];
+  if (Math.hypot(x,z) > ARENA_R - 1){ toast('outside the wall'); return; }
+  if (G.goo < S.cost){ toast('not enough goo'); return; }
+  if (popCount(TEAM_YOU) >= G.blobCap){ toast('blob limit reached (⚙ POWER)'); return; }
+  const b = spawnBlob(G.sel, x, z, 1);
+  if (!b){ toast('blob limit reached'); return; }
+  G.goo -= S.cost;
+  b.y = 6; b.air = true; b.vy = 0;             // drops in from above with a splat
+  refreshHud();
+}
+
+addEventListener('keydown', ev => {
+  if (ev.key === 'Escape'){
+    if (G.mode==='play') doPause('Nothing is being drawn while this is up.');
+    else if (G.mode==='paused') doResume();
+    return;
+  }
+  const k = ev.key;
+  for (const idx of PLAYABLE){
+    if (SPECIES[idx].key === k){ selectSpecies(idx); return; }
+  }
+});
+
+/* ---------------------------------------------------------------- HUD */
+const $ = id => document.getElementById(id);
+const perfEl = $('perf');
+const barEl = $('bar');
+
+for (const idx of PLAYABLE){
+  const S = SPECIES[idx];
+  const d = document.createElement('div');
+  d.className = 'card'; d.dataset.sp = idx;
+  d.innerHTML =
+    '<div class="key">' + S.key + '</div>' +
+    '<div class="dot" style="background:#' + S.color.toString(16).padStart(6,'0') + '"></div>' +
+    '<div class="nm">' + S.name + '</div>' +
+    '<div class="cost">' + S.cost + ' goo</div>';
+  d.addEventListener('click', () => selectSpecies(idx));
+  d.addEventListener('mouseenter', () => showTip(S.blurb));
+  d.addEventListener('mouseleave', () => hideTip());
+  barEl.appendChild(d);
+}
+function selectSpecies(i){
+  G.sel = i;
+  for (const c of barEl.children) c.classList.toggle('sel', +c.dataset.sp === i);
+  showTip(SPECIES[i].blurb); setTimeout(hideTip, 2600);
+}
+selectSpecies(SP_GRAZER);
+
+function refreshHud(){
+  $('goo').textContent = Math.floor(G.goo);
+  $('pop').textContent = popCount(TEAM_YOU);
+  const pct = Math.round(G.nest/NEST_HP*100);
+  $('nestFill').style.width = pct + '%';
+  $('nestPct').textContent = pct + '%';
+  if (G.tides){
+    $('wave').textContent = G.waveQueue > 0
+      ? G.wave + ' ▸'
+      : G.wave + '  ' + Math.ceil(G.waveTimer) + 's';
+  } else $('wave').textContent = '—';
+  for (const c of barEl.children){
+    c.classList.toggle('broke', G.goo < SPECIES[+c.dataset.sp].cost);
+  }
+}
+let tipT = 0;
+function showTip(s){ const t=$('tip'); t.textContent = s; t.classList.add('show'); }
+function hideTip(){ $('tip').classList.remove('show'); }
+
+const toastBox = $('toasts');
+function toast(msg){
+  if (toastBox.children.length > 4) toastBox.removeChild(toastBox.firstChild);
+  const d = document.createElement('div');
+  d.className = 'toast'; d.textContent = msg;
+  toastBox.appendChild(d);
+  setTimeout(() => d.remove(), 2200);
+}
+
+/* ---------------------------------------------------------------- flow */
+function startGame(tides){
+  G.mode='play'; G.tides=tides; G.t=0; G.goo=START_GOO; G.nest=NEST_HP;
+  G.wave=0; G.waveTimer=tides?28:1e9; G.waveQueue=0;
+  G.peakPop=0; G.spawned=0; G.flung=0; G.eaten=0; G.splits=0; G.seedRoll=0;
+  G.blobs.length=0; G.sprouts.length=0; free.length=0;
+  scatterSprouts(46);
+  spawnBlob(SP_GRAZER, 5, 0, 1);
+  spawnBlob(SP_GRAZER, -5, 2, 1);
+  $('titleVeil').classList.add('hidden');
+  $('overVeil').classList.add('hidden');
+  $('pauseVeil').classList.add('hidden');
+  $('waveChip').style.display = tides ? '' : 'none';
+  $('nestWrap').style.display = tides ? '' : 'none';
+  last = performance.now();
+  refreshHud();
+  showTip(tides
+    ? 'Click the ground to drop a Grazer. Waves of creep arrive every minute — Guards stop them.'
+    : 'Click the ground to drop a Grazer. No threats here, just blobs. Drag one to fling it.');
+  setTimeout(hideTip, 6000);
+}
+function doPause(why){
+  if (G.mode !== 'play') return;
+  G.mode = 'paused';
+  $('pauseWhy').textContent = why || '';
+  $('pauseVeil').classList.remove('hidden');
+}
+function doResume(){
+  if (G.mode !== 'paused') return;
+  $('pauseVeil').classList.add('hidden');
+  G.mode = 'play'; last = performance.now();
+}
+function gameOver(won){
+  G.mode = 'over';
+  $('overTitle').textContent = won ? 'YOU HELD' : 'THE NEST IS GONE';
+  $('overStats').textContent =
+    'Survived ' + G.wave + ' waves · peak of ' + G.peakPop + ' blobs · ' +
+    G.spawned + ' spawned · ' + G.eaten + ' sprouts eaten · ' + G.flung + ' creep flung out.';
+  $('overVeil').classList.remove('hidden');
+}
+function toTitle(){
+  G.mode = 'title';
+  $('overVeil').classList.add('hidden');
+  $('pauseVeil').classList.add('hidden');
+  $('titleVeil').classList.remove('hidden');
+}
+
+$('startTides').onclick   = () => startGame(true);
+$('startSandbox').onclick = () => startGame(false);
+$('resumeBtn').onclick    = doResume;
+$('quitBtn').onclick      = toTitle;
+$('againBtn').onclick     = () => startGame(G.tides);
+$('overQuit').onclick     = toTitle;
+$('pauseBtn').onclick     = () => (G.mode==='play' ? doPause('') : doResume());
+$('gearBtn').onclick      = () => $('settings').classList.toggle('hidden');
+
+/* ---------------------------------------------------------------- settings */
+function seg(id, apply, initial){
+  const box = $(id);
+  const set = v => {
+    for (const b of box.children) b.classList.toggle('on', +b.dataset.v === +v);
+    apply(+v);
+  };
+  for (const b of box.children) b.onclick = () => set(b.dataset.v);
+  set(initial);
+  return set;
+}
+const setFps = seg('fpsSeg', v => {
+  power.fps = v; frameMin = 1000/v; $('fpsLbl').textContent = v + ' fps';
+}, 30);
+const setRes = seg('resSeg', v => {
+  power.res = v; $('resLbl').textContent = Math.round(v*100) + '%'; applyRes();
+  if (G.mode!=='play') drawOnce();
+}, 1);
+const setCap = seg('capSeg', v => {
+  G.blobCap = v; $('capLbl').textContent = v;
+}, 90);
+
+$('saverBtn').onclick = () => { setFps(20); setRes(0.5); setCap(40); toast('battery saver on'); };
+
+/* report what GPU we actually landed on */
+try {
+  const gl = renderer.getContext();
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  const name = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'unknown';
+  perfEl.textContent = 'gpu: ' + String(name).slice(0, 46);
+} catch(e){}
+
+/* ---------------------------------------------------------------- boot */
+window.__booted = true;
+drawOnce();                       // one frame so the title screen has a garden behind it
+scatterSprouts(40);
+spawnBlob(SP_GRAZER, 4, 2, 1); spawnBlob(SP_SEEDER, -4, -3, 1);
+spawnBlob(SP_FLOATER, -2, 5, 1); spawnBlob(SP_FLOATER, 7, -4, 1);
+drawOnce();
+
+/* test hook — the headless harness drives the real game through this */
+window.__BLOB = { G, SPECIES, update, sync, spawnBlob, addSprout, startGame, trySpawn,
+                  popCount, radiusOf, power, renderer, camera, scene, killBlob,
+                  nearestBlob, TEAM_YOU, TEAM_CREEP,
+                  draw: () => { sync(); renderer.render(scene, camera); },
+                  SP:{SP_GRAZER,SP_SEEDER,SP_GUARD,SP_FLOATER,SP_PRISM,SP_CREEP} };
+</script>
+</body>
+</html>

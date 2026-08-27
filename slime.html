@@ -1,0 +1,2370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>SLIME.IO</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0d1117; }
+  body {
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    color: #e6f0e8; user-select: none; -webkit-user-select: none;
+    touch-action: none; cursor: crosshair;
+  }
+  #game { display: block; position: absolute; inset: 0; }
+
+  .hidden { display: none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: absolute; inset: 0; pointer-events: none; }
+
+  #stats {
+    position: absolute; left: 14px; top: 12px;
+    font-size: 13px; line-height: 1.55; letter-spacing: .04em;
+    text-shadow: 0 2px 0 rgba(0,0,0,.6);
+  }
+  #stats b { font-size: 21px; color: #b7f7c8; letter-spacing: .02em; }
+  #stats b.rg {
+    font-size: 12px; letter-spacing: .2em; color: #0f2418; background: #8ef2ac;
+    border-radius: 20px; padding: 2px 9px; display: inline-block; margin-top: 3px;
+  }
+  #stats .sub { color: #8fa39a; font-size: 12px; }
+
+  /* active power-ups, one chip each, newest effects simply appear in place */
+  #buffs { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; max-width: 260px; }
+  #buffs .bf {
+    display: flex; align-items: baseline; gap: 5px;
+    font-size: 11px; font-weight: 800; letter-spacing: .14em;
+    padding: 3px 9px; border-radius: 20px;
+    background: rgba(10,18,16,.7); border: 1px solid currentColor;
+    text-shadow: none;
+  }
+  #buffs .bf s { font-size: 10px; opacity: .78; letter-spacing: .02em; text-decoration: none; }
+  #buffs .bf.low { animation: bfblink .5s steps(2, end) infinite; }
+  @keyframes bfblink { 50% { opacity: .35; } }
+
+  #board {
+    position: absolute; right: 14px; top: 12px; width: 178px;
+    background: rgba(12,20,18,.62); border: 1px solid rgba(150,220,175,.18);
+    border-radius: 9px; padding: 8px 10px 9px; font-size: 12px; line-height: 1.62;
+  }
+  #board h3 {
+    font-size: 10px; letter-spacing: .22em; color: #7fbf95;
+    text-transform: uppercase; margin-bottom: 5px; font-weight: 700;
+  }
+  #board .row { display: flex; gap: 6px; white-space: nowrap; }
+  #board .row .n { width: 15px; color: #6f8a7c; flex: none; }
+  #board .row .who { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  #board .row .m { color: #93b3a2; flex: none; }
+  #board .me .who, #board .me .m { color: #b7f7c8; font-weight: 700; }
+
+  #mini {
+    position: absolute; right: 14px; bottom: 14px;
+    width: 150px; height: 150px;
+    background: rgba(12,20,18,.55); border: 1px solid rgba(150,220,175,.18);
+    border-radius: 9px;
+  }
+
+  #tips {
+    position: absolute; left: 14px; bottom: 12px; font-size: 12px;
+    color: #7d9488; line-height: 1.7; letter-spacing: .03em;
+  }
+  #tips kbd {
+    background: rgba(180,240,200,.12); border: 1px solid rgba(180,240,200,.25);
+    border-radius: 4px; padding: 1px 5px; font-family: inherit; font-size: 11px;
+    color: #bfe6cd;
+  }
+
+  /* ---------- overlays ---------- */
+  .screen {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; gap: 11px;
+    justify-content: flex-start;
+    justify-content: safe center;
+    background: radial-gradient(ellipse at 50% 40%, rgba(24,42,34,.86), rgba(8,13,12,.95));
+    z-index: 5; padding: 18px 20px; overflow-y: auto;
+  }
+  .logo {
+    font-size: clamp(34px, 6.4vw, 64px); font-weight: 900; letter-spacing: .06em;
+    color: #8ef2ac; line-height: .95;
+    text-shadow: 0 4px 0 #2c6b45, 0 8px 0 #1b4630, 0 14px 26px rgba(0,0,0,.55);
+  }
+  .logo span { color: #ffd479; text-shadow: 0 4px 0 #8a6a20, 0 8px 0 #5b4614, 0 14px 26px rgba(0,0,0,.55); }
+  .tagline { color: #9dbcab; font-size: 13px; letter-spacing: .05em; margin-top: -4px; }
+
+  .panel {
+    background: rgba(10,18,16,.72); border: 1px solid rgba(150,220,175,.2);
+    border-radius: 13px; padding: 13px 18px; display: flex; flex-direction: column;
+    gap: 9px; align-items: center; min-width: 300px;
+  }
+  #name {
+    width: 100%; background: rgba(0,0,0,.4); border: 1px solid rgba(150,220,175,.28);
+    border-radius: 8px; color: #dff6e6; font: inherit; font-size: 16px;
+    padding: 8px 12px; text-align: center; letter-spacing: .08em; outline: none;
+  }
+  #name:focus { border-color: #8ef2ac; }
+  .swatches { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; }
+  .sw {
+    width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+    border: 2px solid rgba(255,255,255,.15);
+  }
+  .sw.on { border-color: #fff; transform: scale(1.14); }
+  button.big {
+    font: inherit; font-size: 17px; font-weight: 800; letter-spacing: .12em;
+    padding: 9px 34px; border-radius: 10px; cursor: pointer; color: #0f2418;
+    background: linear-gradient(#a8f7c1, #5fd188); border: none;
+    border-bottom: 4px solid #2f8a55;
+  }
+  button.big:hover { filter: brightness(1.08); }
+  button.big:active { transform: translateY(2px); border-bottom-width: 2px; }
+
+  /* difficulty picker */
+  .diffs { display: flex; gap: 8px; }
+  .diff {
+    flex: 1; cursor: pointer; text-align: center; padding: 6px 12px;
+    border-radius: 8px; border: 1px solid rgba(150,220,175,.25);
+    background: rgba(0,0,0,.25); color: #9dbcab; font-size: 13px; font-weight: 700;
+    letter-spacing: .1em; line-height: 1.35;
+  }
+  .diff small { display: block; font-size: 10px; font-weight: 400; letter-spacing: .02em; color: #6f8a7c; }
+  .diff:hover { border-color: rgba(150,220,175,.5); }
+  .diff.on { background: rgba(142,242,172,.16); border-color: #8ef2ac; color: #d7f2e0; }
+  .diff.on small { color: #8fbfa0; }
+
+  /* server browser */
+  .servers { min-width: 340px; }
+  .servers h3 {
+    font-size: 10px; letter-spacing: .22em; color: #7fbf95; font-weight: 700;
+    text-transform: uppercase; align-self: flex-start;
+  }
+  #serverList { display: flex; flex-direction: column; gap: 7px; width: 100%; }
+  .srv {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 7px 11px; border-radius: 9px; cursor: pointer;
+    border: 1px solid rgba(150,220,175,.22); background: rgba(0,0,0,.28);
+    font-size: 13px; color: #cfe6d8; text-align: left;
+  }
+  .srv:hover:not(.down) { border-color: #8ef2ac; background: rgba(142,242,172,.12); }
+  .srv .nm { flex: 1; font-weight: 700; letter-spacing: .04em; }
+  .srv .tag {
+    font-size: 10px; letter-spacing: .12em; color: #0f2418; font-weight: 800;
+    padding: 2px 7px; border-radius: 20px; background: #8ef2ac;
+  }
+  .srv .tag.medium { background: #ffd479; }
+  .srv .tag.hard { background: #ff9a8b; }
+  .srv .pop { font-size: 12px; color: #8fa39a; min-width: 62px; text-align: right; }
+  .srv .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #6ee7a8; flex: none;
+  }
+  .srv.down { opacity: .45; cursor: not-allowed; }
+  .srv.down .dot { background: #7d5a5a; }
+  .hint { font-size: 11px; color: #7d9488; line-height: 1.6; text-align: center; }
+  .hint code {
+    background: rgba(180,240,200,.12); border-radius: 4px; padding: 1px 5px;
+    font-family: Consolas, monospace; color: #bfe6cd;
+  }
+
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12px; color: #9dbcab; }
+  .keys i { color: #d7f2e0; font-style: normal; font-weight: 700; }
+
+  #over .logo { color: #ff9a8b; text-shadow: 0 4px 0 #7d3a33, 0 8px 0 #4d211d, 0 14px 26px rgba(0,0,0,.55); }
+  .final { display: flex; gap: 26px; }
+  .final div { text-align: center; }
+  .final .k { font-size: 11px; letter-spacing: .18em; color: #8fa39a; text-transform: uppercase; }
+  .final .v { font-size: 30px; font-weight: 800; color: #b7f7c8; }
+  #eatenBy { color: #d6a3a3; font-size: 14px; }
+
+  #paused {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(6,10,9,.72); z-index: 4; font-size: 34px; font-weight: 800;
+    letter-spacing: .3em; color: #b7f7c8;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="stats">
+    <b id="mass">0</b> <span class="sub">mass</span><br>
+    <span class="sub">rank <span id="rank">-</span> of <span id="alive">-</span> &middot; best <span id="best">0</span> &middot; <span id="clock">0:00</span></span>
+    <span id="roomWrap" class="hidden"><br><span id="room" class="tag"></span> <span class="sub" id="ping"></span></span>
+    <span id="regroup" class="hidden"><br><b class="rg">REGROUPING</b></span>
+    <div id="buffs"></div>
+  </div>
+  <div id="board"><h3>Leaderboard</h3><div id="rows"></div></div>
+  <canvas id="mini" width="150" height="150"></canvas>
+  <div id="tips">
+    <kbd>move</kbd> mouse &nbsp; <kbd>space</kbd>/<kbd>click</kbd> split &nbsp; <kbd>E</kbd> regroup &nbsp; <kbd>W</kbd>/<kbd>right-click</kbd> spit goo &nbsp; <kbd>P</kbd> pause &nbsp; <kbd>M</kbd> mute<br>
+    glowing orbs are power-ups &mdash; run one over
+  </div>
+</div>
+
+<div id="paused" class="hidden">PAUSED</div>
+
+<div id="start" class="screen">
+  <div class="logo">SLIME<span>.IO</span></div>
+  <div class="tagline">eat the goo &middot; split the slime &middot; swallow everyone else</div>
+  <div class="panel">
+    <input id="name" maxlength="14" placeholder="your slime's name" autocomplete="off" spellcheck="false">
+    <div class="swatches" id="swatches"></div>
+    <div class="diffs" id="diffs"></div>
+    <button class="big" id="play">PLAY SOLO</button>
+  </div>
+
+  <div class="panel servers">
+    <h3>MULTIPLAYER &mdash; pick a server</h3>
+    <div id="serverList"></div>
+    <div id="netHint" class="hint"></div>
+  </div>
+  <div class="panel">
+    <div class="keys">
+      <i>mouse</i><span>your slimes ooze toward the cursor</span>
+      <i>space</i><span>split &mdash; every slime tears in half and lunges</span>
+      <i>W</i><span>spit a blob of goo (feed it to a thorn pod)</span>
+      <i>rule</i><span>you eat anything ~10% smaller &mdash; look for the green ring</span>
+      <i>E</i><span>regroup &mdash; your slimes rush back together and merge on contact, no waiting</span>
+      <i>tip</i><span>smaller slimes are FASTER: you cannot win a straight chase, so <b>split</b> to lunge at them</span>
+      <i>thorns</i><span>green spiked pods burst big slimes into pieces</span>
+      <i>power-ups</i><span>ooze over a glowing orb: <b style="color:#7ec8f5">SPEED</b> &middot; <b style="color:#c39cf7">MAGNET</b> pulls goo in &middot; <b style="color:#ffd479">SHIELD</b> nothing can swallow you &middot; <b style="color:#8ef2ac">FEAST</b> triple food &mdash; they show on the minimap, and dying loses them</span>
+    </div>
+  </div>
+</div>
+
+<div id="over" class="screen hidden">
+  <div class="logo">SPLATTED</div>
+  <div id="eatenBy"></div>
+  <div class="panel">
+    <div class="final">
+      <div><div class="k">peak mass</div><div class="v" id="fMass">0</div></div>
+      <div><div class="k">best rank</div><div class="v" id="fRank">-</div></div>
+      <div><div class="k">survived</div><div class="v" id="fTime">0:00</div></div>
+    </div>
+    <button class="big" id="again">PLAY AGAIN</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function () {
+
+/* ============================ tuning ============================ */
+const CFG = {
+  world: 6400,          // square arena, world units
+  goo: 3000,            // food pellets kept alive (density is what makes it feel alive)
+  pods: 20,             // thorn pods (the "viruses")
+  bots: 16,             // rival slimes
+  startMass: 24,
+  splitMin: 34,         // a slime must be this big to tear in half
+  maxCells: 12,
+  spitCost: 18,         // mass lost when you spit
+  spitMass: 13,         // mass of the blob that comes out
+  eatRatio: 1.10,       // must be this many times bigger to swallow
+  podMass: 120,
+  podBurstMin: 150,     // slimes smaller than this can hide in a pod safely
+  decayFrom: 500,       // mass above this slowly evaporates
+  decayRate: 0.0014,   // grazing alone plateaus near 800; past that you must hunt
+  respawnDelay: 2.2,
+  RING: 14,             // soft-body points per slime
+  powers: 14,           // power-ups kept alive in the arena
+  // Measured, not guessed (slime.power.js). At 2.5s the bots hoover the arena
+  // faster than it refills and the pool drains to 10 of 14, so the player keeps
+  // finding an empty map; 1.6s holds it near full at every bot reach.
+  powerEvery: 1.6,      // seconds between replacements, so they are not free
+  powerR: 26,           // pickup radius, world units
+  botPowerReach: 520    // how far a bot will detour for one; 620 left one bot
+                        // in four permanently lit, which made the buffs routine
+};
+
+/* Power-ups. Every effect is a plain seconds-remaining counter on the player,
+   so one tick-down loop drives all of them and a bot gets the buff by simply
+   running over the pickup. Drawn as paths, never glyphs, so no font can make
+   one vanish. `dur` is seconds. */
+const POWERS = {
+  // 1.45 measured as a real x1.45 on the ground (slime.speed.js) and the user
+  // still reported "speed does not speed me up" -- with the camera locked to you
+  // and the arena a sparse dot field there is nothing to read the change
+  // against. Bigger, and paired with the screen rush in drawSpeedRush().
+  speed:  { label: "SPEED",  dur: 8,  color: "#7ec8f5", mult: 1.7 },
+  magnet: { label: "MAGNET", dur: 10, color: "#c39cf7", reach: 300, pull: 460 },
+  shield: { label: "SHIELD", dur: 7,  color: "#ffd479" },
+  feast:  { label: "FEAST",  dur: 10, color: "#8ef2ac", mult: 3 }
+};
+const POWER_KEYS = ["speed", "magnet", "shield", "feast"];
+
+/* Difficulty is one knob set, used by solo play and by the servers alike, so the
+   two can never drift apart. `AI` is live — botThink reads it every tick. */
+const DIFFS = {
+  easy: {
+    label: "EASY", blurb: "fewer, dozier rivals",
+    bots: 10, botMass: [1, 2.2], think: [0.30, 0.55],
+    preyReach: 0.6, lunge: 0.2, flee: 0.55, startMass: 30,
+    goo: 3400, pods: 26, powers: 18
+  },
+  medium: {
+    label: "MEDIUM", blurb: "a fair fight",
+    bots: 16, botMass: [1, 4], think: [0.16, 0.34],
+    preyReach: 1, lunge: 0.55, flee: 0.35, startMass: 24,
+    goo: 3000, pods: 20, powers: 14
+  },
+  hard: {
+    label: "HARD", blurb: "they hunt in earnest",
+    bots: 22, botMass: [1.6, 8], think: [0.09, 0.18],
+    preyReach: 1.7, lunge: 0.9, flee: 0.22, startMass: 22,
+    goo: 2500, pods: 13, powers: 10
+  }
+};
+let AI = DIFFS.medium;
+let difficulty = "medium";
+
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const rint = n => (Math.random() * n) | 0;
+const pick = a => a[(Math.random() * a.length) | 0];
+
+const radiusOf = m => 4 * Math.sqrt(m);
+const speedOf = m => 430 * Math.pow(m, -0.28);
+const mergeTime = m => 9 + m * 0.014;
+
+const PALETTE = [
+  "#6ee7a8", "#7ec8f5", "#f59ec8", "#ffd479", "#c39cf7",
+  "#ff9a76", "#8ef2d8", "#f0f28a", "#ff8fa3", "#9ecbff"
+];
+
+const BOT_NAMES = [
+  "Blobby", "Gooch", "Sir Ooze", "Puddle", "Jellybean", "Slurp", "Wobbles",
+  "Mucus Prime", "Squelch", "Gloop", "Drip", "Bogling", "Custard", "Splot",
+  "Marmalade", "Tapioca", "Nubbin", "Snot Rocket", "Bubbles", "Gelato",
+  "Squishmael", "Yogurt", "Slime Cop", "The Blorp", "Pudding", "Ectoplasm"
+];
+
+/* ============================ world ============================ */
+const W = {
+  time: 0,
+  goo: [],
+  pods: [],
+  spit: [],
+  powers: [],
+  powerAt: 0,     // next moment a replacement pickup may appear
+  players: [],
+  you: null,
+  nextId: 1,
+  mode: "solo",  // solo | net
+  state: "menu"   // menu | play | dead | paused
+};
+
+/* ---- uniform grid, so 1250 pellets do not cost 1250 checks per slime ---- */
+const GRID = { size: 200, n: Math.ceil(CFG.world / 200), buckets: [] };
+for (let i = 0; i < GRID.n * GRID.n; i++) GRID.buckets.push([]);
+const gkey = (x, y) => {
+  const cx = clamp((x / GRID.size) | 0, 0, GRID.n - 1);
+  const cy = clamp((y / GRID.size) | 0, 0, GRID.n - 1);
+  return cy * GRID.n + cx;
+};
+function rebuildGrid() {
+  for (let i = 0; i < GRID.buckets.length; i++) GRID.buckets[i].length = 0;
+  for (let i = 0; i < W.goo.length; i++) {
+    const g = W.goo[i];
+    GRID.buckets[gkey(g.x, g.y)].push(g);
+  }
+}
+// visit every pellet within `rad` of (x,y)
+function eachGooNear(x, y, rad, fn) {
+  const x0 = clamp(((x - rad) / GRID.size) | 0, 0, GRID.n - 1);
+  const x1 = clamp(((x + rad) / GRID.size) | 0, 0, GRID.n - 1);
+  const y0 = clamp(((y - rad) / GRID.size) | 0, 0, GRID.n - 1);
+  const y1 = clamp(((y + rad) / GRID.size) | 0, 0, GRID.n - 1);
+  for (let gy = y0; gy <= y1; gy++) {
+    for (let gx = x0; gx <= x1; gx++) {
+      const b = GRID.buckets[gy * GRID.n + gx];
+      for (let i = 0; i < b.length; i++) fn(b[i]);
+    }
+  }
+}
+
+/* ============================ entities ============================ */
+function makeGoo() {
+  return {
+    x: rnd(20, CFG.world - 20),
+    y: rnd(20, CFG.world - 20),
+    m: rnd(0.8, 1.3),
+    c: PALETTE[rint(PALETTE.length)],
+    wob: Math.random() * TAU,
+    dead: false
+  };
+}
+
+function makePod(x, y) {
+  return {
+    x: x === undefined ? rnd(300, CFG.world - 300) : x,
+    y: y === undefined ? rnd(300, CFG.world - 300) : y,
+    m: CFG.podMass,
+    fed: 0,
+    vx: 0, vy: 0,
+    spin: Math.random() * TAU,
+    dead: false
+  };
+}
+
+function makePower(kind, x, y) {
+  return {
+    kind: kind || pick(POWER_KEYS),
+    x: x === undefined ? rnd(120, CFG.world - 120) : x,
+    y: y === undefined ? rnd(120, CFG.world - 120) : y,
+    born: W.time,
+    spin: Math.random() * TAU,
+    dead: false
+  };
+}
+
+function makeCell(owner, x, y, m) {
+  const ring = new Float32Array(CFG.RING);
+  const rv = new Float32Array(CFG.RING);
+  return {
+    id: W.nextId++,
+    owner, x, y, m,
+    vx: 0, vy: 0,        // steering velocity
+    bx: 0, by: 0,        // boost velocity from splits / knocks
+    merge: 0,            // seconds until it may fuse with a sibling
+    ring, rv,            // soft-body radial offsets (fraction of radius)
+    face: 0,             // facing angle, for the eyes
+    blink: rnd(1, 6),
+    dead: false
+  };
+}
+
+function makePlayer(name, color, isBot) {
+  return {
+    id: W.nextId++,
+    name: name.slice(0, 14),
+    color,
+    isBot,
+    cells: [],
+    // seconds left on each power-up. One counter per kind, so picking the same
+    // one up again tops it back up rather than stacking a second copy.
+    buffs: { speed: 0, magnet: 0, shield: 0, feast: 0 },
+    grabbed: null,   // kind just collected, for the pickup flash
+    grabAt: -9,
+    tx: CFG.world / 2, ty: CFG.world / 2,
+    think: 0,
+    mood: "graze",
+    huntTarget: 0,
+    huntStart: 0,
+    huntBlockUntil: 0,
+    gooTarget: null,
+    gooUntil: 0,
+    wanderUntil: 0,
+    probeX: 0, probeY: 0, probeAt: 0,
+    peak: 0,
+    bestRank: 99,
+    born: W.time,
+    respawn: 0,
+    dead: false
+  };
+}
+
+/* A buff is "on" whenever its counter is above zero. Online the client is told
+   only which ones are lit (a bit mask), and stores 1 for those, so every reader
+   here works unchanged in both modes. */
+function hasBuff(p, kind) {
+  return !!(p && p.buffs && p.buffs[kind] > 0);
+}
+
+function giveBuff(p, kind) {
+  const def = POWERS[kind];
+  if (!def || !p.buffs) return;
+  p.buffs[kind] = def.dur;      // refresh, never stack
+  p.grabbed = kind;
+  p.grabAt = W.time;
+}
+
+function clearBuffs(p) {
+  if (!p.buffs) return;
+  for (let i = 0; i < POWER_KEYS.length; i++) p.buffs[POWER_KEYS[i]] = 0;
+}
+
+function totalMass(p) {
+  let s = 0;
+  for (let i = 0; i < p.cells.length; i++) s += p.cells[i].m;
+  return s;
+}
+
+function centroid(p) {
+  let sx = 0, sy = 0, sm = 0;
+  for (let i = 0; i < p.cells.length; i++) {
+    const c = p.cells[i];
+    sx += c.x * c.m; sy += c.y * c.m; sm += c.m;
+  }
+  if (!sm) return { x: CFG.world / 2, y: CFG.world / 2 };
+  return { x: sx / sm, y: sy / sm };
+}
+
+/* pick a spawn spot that is not inside somebody's mouth */
+function safeSpot(m) {
+  const r = radiusOf(m);
+  let bx = 0, by = 0, bestScore = -1;
+  for (let tries = 0; tries < 14; tries++) {
+    const x = rnd(r + 60, CFG.world - r - 60);
+    const y = rnd(r + 60, CFG.world - r - 60);
+    let worst = 1e9;
+    for (let i = 0; i < W.players.length; i++) {
+      const p = W.players[i];
+      for (let j = 0; j < p.cells.length; j++) {
+        const c = p.cells[j];
+        if (c.m < m * CFG.eatRatio) continue;
+        const d = Math.hypot(c.x - x, c.y - y) - radiusOf(c.m);
+        if (d < worst) worst = d;
+      }
+    }
+    for (let i = 0; i < W.pods.length; i++) {
+      const d = Math.hypot(W.pods[i].x - x, W.pods[i].y - y) - 90;
+      if (d < worst) worst = d;
+    }
+    if (worst > 420) return { x, y };
+    if (worst > bestScore) { bestScore = worst; bx = x; by = y; }
+  }
+  return { x: bx, y: by };
+}
+
+function spawnPlayer(p, m) {
+  const mass = m || CFG.startMass;
+  const s = safeSpot(mass);
+  p.cells.length = 0;
+  p.cells.push(makeCell(p, s.x, s.y, mass));
+  clearBuffs(p);        // dying costs you your power-ups
+  p.dead = false;
+  p.born = W.time;
+  p.peak = Math.max(p.peak, mass);
+}
+
+/* ============================ soft body ============================ */
+// each slime is a ring of springs: it wobbles when hit, squashes when it moves
+function wobble(c, amount, angle) {
+  const R = CFG.RING;
+  if (angle === undefined) {
+    for (let i = 0; i < R; i++) c.rv[i] += amount * (0.6 + Math.random() * 0.8);
+    return;
+  }
+  for (let i = 0; i < R; i++) {
+    const a = (i / R) * TAU;
+    let d = a - angle;
+    while (d > Math.PI) d -= TAU;
+    while (d < -Math.PI) d += TAU;
+    c.rv[i] += amount * Math.cos(d * 0.9) * (Math.abs(d) < 2 ? 1 : 0.15);
+  }
+}
+
+function stepRing(c, dt) {
+  const R = CFG.RING, k = 62, damp = 6.2, link = 120;
+  const ring = c.ring, rv = c.rv;
+  for (let i = 0; i < R; i++) {
+    const prev = ring[(i + R - 1) % R], next = ring[(i + 1) % R];
+    const acc = -k * ring[i] - damp * rv[i] + link * (prev + next - 2 * ring[i]);
+    rv[i] += acc * dt;
+  }
+  for (let i = 0; i < R; i++) {
+    ring[i] += rv[i] * dt;
+    if (ring[i] > 0.42) { ring[i] = 0.42; rv[i] *= -0.3; }
+    if (ring[i] < -0.32) { ring[i] = -0.32; rv[i] *= -0.3; }
+  }
+}
+
+/* ============================ input ============================ */
+const input = { mx: 0, my: 0, split: false, spit: false, muted: false, regroup: false };
+const cam = { x: CFG.world / 2, y: CFG.world / 2, z: 1, tz: 1 };
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d", { alpha: false });
+let VW = 0, VH = 0, DPR = 1;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  VW = window.innerWidth; VH = window.innerHeight;
+  canvas.width = Math.round(VW * DPR);
+  canvas.height = Math.round(VH * DPR);
+  canvas.style.width = VW + "px";
+  canvas.style.height = VH + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+input.mx = VW / 2; input.my = VH / 2;
+
+// Listen for both. Pointer events cover mouse, pen and touch, but some
+// environments deliver only the plain mouse event (headless automation among
+// them), and a slime whose aim never updates just sits there.
+const aimAt = e => { input.mx = e.clientX; input.my = e.clientY; };
+canvas.addEventListener("pointermove", aimAt);
+canvas.addEventListener("mousemove", aimAt);
+// Left click splits, right click spits. A right click also raises contextmenu,
+// so that handler must only swallow the menu — if it acts too, one click fires
+// both actions at once.
+canvas.addEventListener("pointerdown", e => {
+  input.mx = e.clientX; input.my = e.clientY;
+  if (e.button === 0) input.split = true;
+  else if (e.button === 2) input.spit = true;
+});
+canvas.addEventListener("contextmenu", e => { e.preventDefault(); });
+
+window.addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (k === " ") { e.preventDefault(); input.split = true; }
+  else if (k === "w") input.spit = true;
+  else if (k === "e") input.regroup = !input.regroup;   // gather the pieces
+  else if (k === "p") togglePause();
+  else if (k === "m") { input.muted = !input.muted; }
+});
+
+/* mouse position in world units */
+// Where the player is steering. Normally the cursor; while regrouping, the
+// centre of mass, so the scattered halves walk back onto each other. Regroup
+// also clears the fuse cooldown, so they merge the instant they meet - after a
+// split the halves are already touching, which makes it effectively immediate.
+function aimPoint() {
+  const you = W.you;
+  if (input.regroup) {
+    if (you && you.cells.length > 1) {
+      for (const c of you.cells) c.merge = 0;
+      return centroid(you);
+    }
+    input.regroup = false;            // nothing left to gather
+  }
+  return mouseWorld();
+}
+
+function mouseWorld() {
+  return {
+    x: cam.x + (input.mx - VW / 2) / cam.z,
+    y: cam.y + (input.my - VH / 2) / cam.z
+  };
+}
+
+/* ============================ sound (tiny, optional) ============================ */
+let AC = null;
+function blip(freq, dur, vol, type) {
+  if (input.muted || W.state !== "play") return;
+  try {
+    if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === "suspended") AC.resume();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(freq, AC.currentTime);
+    o.frequency.exponentialRampToValueAtTime(freq * 0.6, AC.currentTime + dur);
+    g.gain.setValueAtTime(vol, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur);
+  } catch (err) { /* audio is a nicety, never a crash */ }
+}
+
+/* ============================ actions ============================ */
+function doSplit(p) {
+  const cells = p.cells;
+  if (cells.length >= CFG.maxCells) return;
+  const snapshot = cells.slice();
+  for (let i = 0; i < snapshot.length; i++) {
+    if (p.cells.length >= CFG.maxCells) break;
+    const c = snapshot[i];
+    if (c.m < CFG.splitMin) continue;
+    const half = c.m / 2;
+    c.m = half;
+    const ang = Math.atan2(p.ty - c.y, p.tx - c.x);
+    const child = makeCell(p, c.x + Math.cos(ang) * 2, c.y + Math.sin(ang) * 2, half);
+    child.bx = Math.cos(ang) * 1500;
+    child.by = Math.sin(ang) * 1500;
+    child.merge = mergeTime(half);
+    child.face = ang;
+    c.merge = mergeTime(half);
+    wobble(c, -3.2, ang);
+    wobble(child, 4.5, ang + Math.PI);
+    p.cells.push(child);
+  }
+  if (p === W.you) blip(420, 0.12, 0.06, "triangle");
+}
+
+function doSpit(p) {
+  for (let i = 0; i < p.cells.length; i++) {
+    const c = p.cells[i];
+    if (c.m < CFG.splitMin) continue;
+    c.m -= CFG.spitCost;
+    const ang = Math.atan2(p.ty - c.y, p.tx - c.x);
+    const r = radiusOf(c.m);
+    W.spit.push({
+      x: c.x + Math.cos(ang) * (r + 4),
+      y: c.y + Math.sin(ang) * (r + 4),
+      vx: Math.cos(ang) * 1150,
+      vy: Math.sin(ang) * 1150,
+      m: CFG.spitMass,
+      c: p.color,
+      owner: p.id,
+      age: 0,
+      dead: false
+    });
+    wobble(c, -2.4, ang);
+  }
+  if (p === W.you) blip(240, 0.09, 0.05, "square");
+}
+
+function burstOn(c, ang) {
+  // a thorn pod tears a big slime into as many pieces as it has room for
+  const p = c.owner;
+  const room = CFG.maxCells - p.cells.length;
+  if (room <= 0) return;
+  const pieces = Math.min(room, Math.max(2, Math.min(7, Math.floor(c.m / 42))));
+  const share = c.m / (pieces + 1);
+  c.m = share;
+  for (let i = 0; i < pieces; i++) {
+    const a = ang + (i - (pieces - 1) / 2) * 0.62 + rnd(-0.14, 0.14);
+    const child = makeCell(p, c.x, c.y, share);
+    child.bx = Math.cos(a) * rnd(900, 1500);
+    child.by = Math.sin(a) * rnd(900, 1500);
+    child.merge = mergeTime(share) + 2;
+    child.face = a;
+    wobble(child, 5, a + Math.PI);
+    p.cells.push(child);
+  }
+  c.merge = mergeTime(share) + 2;
+  wobble(c, 6);
+  if (p === W.you) blip(150, 0.3, 0.09, "sawtooth");
+}
+
+/* ============================ bot brains ============================ */
+function botThink(p) {
+  const cells = p.cells;
+  if (!cells.length) return;
+
+  // reason from the biggest blob, that is the one that matters
+  let big = cells[0];
+  for (let i = 1; i < cells.length; i++) if (cells[i].m > big.m) big = cells[i];
+  const myR = radiusOf(big.m);
+  const total = totalMass(p);
+
+  let fleeX = 0, fleeY = 0, threat = 0;
+  let prey = null, preyD = 1e9;
+
+  for (let i = 0; i < W.players.length; i++) {
+    const q = W.players[i];
+    if (q === p) continue;
+    for (let j = 0; j < q.cells.length; j++) {
+      const c = q.cells[j];
+      const dx = c.x - big.x, dy = c.y - big.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 700) continue;
+      if (c.m > big.m * CFG.eatRatio) {
+        const danger = (700 - d) / 700;
+        const w = danger * danger * (c.m / big.m);
+        fleeX -= dx / (d || 1) * w; fleeY -= dy / (d || 1) * w;
+        threat += w;
+      } else if (big.m > c.m * CFG.eatRatio * 1.05 &&
+                 d < (myR * 4 + 120) * AI.preyReach && d < preyD) {
+        prey = c; preyD = d;
+      }
+    }
+  }
+
+  // A chase you cannot finish is worse than no chase at all: a smaller slime is
+  // always the faster one, so an open-field pursuit never lands. Commit only
+  // briefly, then blacklist that target and go back to eating.
+  if (prey) {
+    if (W.time < p.huntBlockUntil) prey = null;
+    else if (p.huntTarget !== prey.id) { p.huntTarget = prey.id; p.huntStart = W.time; }
+    else if (W.time - p.huntStart > 3.5) { p.huntBlockUntil = W.time + 5; prey = null; }
+  } else {
+    p.huntTarget = 0;
+  }
+
+  // thorn pods: lethal above the burst threshold, a hiding place below it
+  let podX = 0, podY = 0;
+  for (let i = 0; i < W.pods.length; i++) {
+    const v = W.pods[i];
+    const dx = v.x - big.x, dy = v.y - big.y;
+    const d = Math.hypot(dx, dy);
+    if (d > 260) continue;
+    if (big.m > CFG.podBurstMin) {
+      const w = (260 - d) / 260;
+      podX -= dx / (d || 1) * w * 1.6; podY -= dy / (d || 1) * w * 1.6;
+    } else if (threat > AI.flee + 0.05) {
+      podX += dx / (d || 1) * 0.9; podY += dy / (d || 1) * 0.9;   // hide behind it
+    }
+  }
+
+  let gx = 0, gy = 0;
+  if (threat > AI.flee) {
+    p.mood = "flee";
+    gx = fleeX; gy = fleeY;
+  } else if (prey) {
+    p.mood = "hunt";
+    gx = (prey.x - big.x); gy = (prey.y - big.y);
+    const n = Math.hypot(gx, gy) || 1; gx /= n; gy /= n;
+    // lunge if the split will still leave each half big enough to swallow
+    if (big.m / 2 > prey.m * CFG.eatRatio * 1.15 && preyD < myR * 2.6 &&
+        big.m >= CFG.splitMin * 1.5 && p.cells.length < 4 && Math.random() < AI.lunge) {
+      p.tx = prey.x; p.ty = prey.y;
+      doSplit(p);
+    }
+  } else {
+    p.mood = "graze";
+    // A power-up beats a pellet whenever one is close enough to be worth the
+    // detour. Aim straight at it and let the normal grazing resume once it is
+    // gone -- no separate mood, so this cannot fight the anti-stall probe.
+    let up = null, ud = 1e9;
+    for (let i = 0; i < W.powers.length; i++) {
+      const u = W.powers[i];
+      if (hasBuff(p, u.kind)) continue;         // already lit, not worth a trip
+      const d = Math.hypot(u.x - big.x, u.y - big.y);
+      if (d < CFG.botPowerReach && d < ud) { ud = d; up = u; }
+    }
+    // Stick with one pellet until it is eaten. Re-picking the nearest one every
+    // think tick makes a bot dither on the spot and never actually reach any.
+    let g = up ? null : p.gooTarget;
+    if (up) p.gooTarget = null;
+    if (g && (g.dead || W.time > p.gooUntil)) g = null;
+    if (W.time < p.wanderUntil) g = null;
+    if (!g && !up) {
+      let best = null, bd = 1e9;
+      eachGooNear(big.x, big.y, 700, cand => {
+        if (cand.dead) return;
+        const ddx = cand.x - big.x, ddy = cand.y - big.y;
+        const d2 = ddx * ddx + ddy * ddy;
+        if (d2 < bd) { bd = d2; best = cand; }
+      });
+      p.gooTarget = best;
+      p.gooUntil = W.time + 3;
+      g = best;
+    }
+    if (up && W.time >= p.wanderUntil) { gx = up.x - big.x; gy = up.y - big.y; }
+    else if (g && W.time >= p.wanderUntil) { gx = g.x - big.x; gy = g.y - big.y; }
+    else {
+      // nothing nearby: strike out for the middle, where the food is
+      gx = CFG.world / 2 - big.x + rnd(-600, 600);
+      gy = CFG.world / 2 - big.y + rnd(-600, 600);
+    }
+  }
+
+  gx += podX * 400; gy += podY * 400;
+
+  // Aim straight at the goal. Every attempt to also push away from the walls
+  // has produced a fixed point where the aim lands on the slime own position,
+  // which the dead zone reads as speed zero and the bot freezes there for good
+  // (a repulsion force pinned them to the wall; clamping pinned them at the
+  // clamp; reflecting a 500 stride pinned them exactly 250 short of it). Cells
+  // already clamp safely against the arena edge, and a slime grazing along a
+  // wall is normal play, so there is nothing here to correct.
+  const n = Math.hypot(gx, gy) || 1;
+  p.tx = clamp(big.x + gx / n * 500, 0, CFG.world);
+  p.ty = clamp(big.y + gy / n * 500, 0, CFG.world);
+
+  // Anti-stall, measured over a two second window so that a bot oscillating on
+  // the spot counts as stuck just as much as one standing perfectly still.
+  if (W.time > p.probeAt) {
+    if (p.mood === "graze" && Math.hypot(big.x - p.probeX, big.y - p.probeY) < 40) {
+      p.gooTarget = null;
+      p.wanderUntil = W.time + 2.5;
+    }
+    p.probeX = big.x; p.probeY = big.y; p.probeAt = W.time + 2;
+  }
+
+  // scattered bots regroup by simply aiming everything at the mob centre
+  if (p.cells.length > 3 && threat < 0.2 && total > 200 && Math.random() < 0.3) {
+    const cm = centroid(p);
+    p.tx = cm.x; p.ty = cm.y;
+  }
+}
+
+/* ============================ simulation ============================ */
+function step(dt) {
+  W.time += dt;
+  rebuildGrid();
+
+  // ---- targets ----
+  if (W.you && !W.you.dead && W.you.cells.length) {
+    const mw = aimPoint();
+    W.you.tx = mw.x; W.you.ty = mw.y;
+    // acting on purpose cancels the regroup - you clearly want control back
+    if (input.split) { input.regroup = false; doSplit(W.you); }
+    if (input.spit) doSpit(W.you);
+  }
+  input.split = false; input.spit = false;
+
+  for (let i = 0; i < W.players.length; i++) {
+    const p = W.players[i];
+    if (!p.isBot || !p.cells.length) continue;
+    p.think -= dt;
+    if (p.think <= 0) { p.think = rnd(AI.think[0], AI.think[1]); botThink(p); }
+  }
+
+  // ---- power-up timers ----
+  for (let i = 0; i < W.players.length; i++) {
+    const b = W.players[i].buffs;
+    if (!b) continue;
+    for (let k = 0; k < POWER_KEYS.length; k++) {
+      const key = POWER_KEYS[k];
+      if (b[key] > 0) { b[key] -= dt; if (b[key] < 0) b[key] = 0; }
+    }
+  }
+
+  // ---- move every slime ----
+  for (let i = 0; i < W.players.length; i++) {
+    const p = W.players[i];
+    const fast = hasBuff(p, "speed") ? POWERS.speed.mult : 1;
+    for (let j = 0; j < p.cells.length; j++) {
+      const c = p.cells[j];
+      const dx = p.tx - c.x, dy = p.ty - c.y;
+      const d = Math.hypot(dx, dy);
+      const r = radiusOf(c.m);
+      let sp = speedOf(c.m) * fast;
+      if (d < r) sp *= d / r;                      // dead zone, no jitter on the cursor
+      const ux = d > 0.01 ? dx / d : 0, uy = d > 0.01 ? dy / d : 0;
+      c.vx = ux * sp; c.vy = uy * sp;
+      if (d > 0.01) c.face = Math.atan2(dy, dx);
+
+      c.x += (c.vx + c.bx) * dt;
+      c.y += (c.vy + c.by) * dt;
+      const decay = Math.exp(-4.5 * dt);
+      c.bx *= decay; c.by *= decay;
+      if (Math.abs(c.bx) < 1) c.bx = 0;
+      if (Math.abs(c.by) < 1) c.by = 0;
+
+      // walls, with a squash on impact
+      if (c.x < r) { if (c.bx < -20) wobble(c, 2.2, Math.PI); c.x = r; c.bx *= -0.25; }
+      if (c.x > CFG.world - r) { if (c.bx > 20) wobble(c, 2.2, 0); c.x = CFG.world - r; c.bx *= -0.25; }
+      if (c.y < r) { if (c.by < -20) wobble(c, 2.2, -Math.PI / 2); c.y = r; c.by *= -0.25; }
+      if (c.y > CFG.world - r) { if (c.by > 20) wobble(c, 2.2, Math.PI / 2); c.y = CFG.world - r; c.by *= -0.25; }
+
+      if (c.m > CFG.decayFrom) c.m -= c.m * CFG.decayRate * dt;
+      if (c.merge > 0) c.merge -= dt;
+      c.blink -= dt;
+      if (c.blink < -0.12) c.blink = rnd(2, 7);
+      stepRing(c, dt);
+    }
+  }
+
+  // ---- siblings: fuse when ready, otherwise shove apart ----
+  for (let i = 0; i < W.players.length; i++) {
+    const p = W.players[i];
+    const cells = p.cells;
+    for (let a = 0; a < cells.length; a++) {
+      for (let b = a + 1; b < cells.length; b++) {
+        const A = cells[a], B = cells[b];
+        if (A.dead || B.dead) continue;
+        const dx = B.x - A.x, dy = B.y - A.y;
+        let d = Math.hypot(dx, dy);
+        if (d < 0.001) { d = 0.001; }
+        const ra = radiusOf(A.m), rb = radiusOf(B.m);
+        const ux = dx / d, uy = dy / d;
+
+        if (A.merge <= 0 && B.merge <= 0) {
+          if (d < Math.max(ra, rb) * 0.92) {
+            const big = A.m >= B.m ? A : B, small = A.m >= B.m ? B : A;
+            big.x = (A.x * A.m + B.x * B.m) / (A.m + B.m);
+            big.y = (A.y * A.m + B.y * B.m) / (A.m + B.m);
+            big.m += small.m;
+            small.dead = true;
+            wobble(big, 3.4);
+            continue;
+          }
+          // drift together
+          const pull = 60 * dt;
+          A.x += ux * pull; A.y += uy * pull;
+          B.x -= ux * pull; B.y -= uy * pull;
+        } else if (d < ra + rb) {
+          const push = (ra + rb - d) * 0.5;
+          const wa = B.m / (A.m + B.m), wb = A.m / (A.m + B.m);
+          A.x -= ux * push * wa; A.y -= uy * push * wa;
+          B.x += ux * push * wb; B.y += uy * push * wb;
+          const sq = Math.min(push * 0.12, 1.1);
+          wobble(A, -sq, Math.atan2(uy, ux));
+          wobble(B, -sq, Math.atan2(-uy, -ux));
+        }
+      }
+    }
+    if (cells.some(c => c.dead)) p.cells = cells.filter(c => !c.dead);
+  }
+
+  // ---- magnet: drag loose pellets in before anybody eats ----
+  // Runs before the eat pass so a pellet dragged onto a slime this tick is
+  // swallowed this tick, which is what makes the buff feel instant.
+  const MAG = POWERS.magnet;
+  for (let i = 0; i < W.players.length; i++) {
+    const p = W.players[i];
+    if (!hasBuff(p, "magnet")) continue;
+    for (let j = 0; j < p.cells.length; j++) {
+      const c = p.cells[j];
+      const reach = MAG.reach + radiusOf(c.m);
+      eachGooNear(c.x, c.y, reach, g => {
+        if (g.dead) return;
+        const dx = c.x - g.x, dy = c.y - g.y;
+        const d = Math.hypot(dx, dy);
+        if (d > reach || d < 0.01) return;
+        // pull hardest close in, so distant pellets drift rather than teleport
+        const k = MAG.pull * (0.35 + 0.65 * (1 - d / reach)) * dt;
+        const step2 = Math.min(k, d);
+        g.x += dx / d * step2;
+        g.y += dy / d * step2;
+      });
+    }
+  }
+
+  // ---- eat goo ----
+  for (let i = 0; i < W.players.length; i++) {
+    const p = W.players[i];
+    const bite = hasBuff(p, "feast") ? POWERS.feast.mult : 1;
+    for (let j = 0; j < p.cells.length; j++) {
+      const c = p.cells[j];
+      const r = radiusOf(c.m);
+      eachGooNear(c.x, c.y, r + 8, g => {
+        if (g.dead) return;
+        const dx = g.x - c.x, dy = g.y - c.y;
+        if (dx * dx + dy * dy < r * r) {
+          g.dead = true;
+          c.m += g.m * bite;
+          wobble(c, 0.55, Math.atan2(dy, dx));
+          if (p === W.you && Math.random() < 0.25) blip(rnd(620, 900), 0.05, 0.022, "sine");
+        }
+      });
+    }
+  }
+  if (W.goo.some(g => g.dead)) W.goo = W.goo.filter(g => !g.dead);
+  while (W.goo.length < CFG.goo) W.goo.push(makeGoo());
+
+  // ---- power-ups: run one over to collect it ----
+  for (let i = 0; i < W.players.length; i++) {
+    const p = W.players[i];
+    for (let j = 0; j < p.cells.length && W.powers.length; j++) {
+      const c = p.cells[j];
+      const r = radiusOf(c.m) + CFG.powerR;
+      for (let k = 0; k < W.powers.length; k++) {
+        const u = W.powers[k];
+        if (u.dead) continue;
+        const dx = u.x - c.x, dy = u.y - c.y;
+        if (dx * dx + dy * dy > r * r) continue;
+        u.dead = true;
+        giveBuff(p, u.kind);
+        wobble(c, 1.4, Math.atan2(dy, dx));
+        if (p === W.you) blip(880, 0.09, 0.05, "square");
+      }
+    }
+  }
+  if (W.powers.some(u => u.dead)) W.powers = W.powers.filter(u => !u.dead);
+  // Replacements trickle in rather than popping back instantly: a pickup that
+  // reappears the same tick it is taken stops being worth crossing the map for.
+  if (W.powers.length < CFG.powers && W.time >= W.powerAt) {
+    W.powers.push(makePower());
+    // Catch up in proportion to how far behind we are. A FLAT refill rate is a
+    // queue with a hard service cap: bots take them in bursts, and the pool
+    // spent whole runs sitting at 10 of 14 with no way back. The floor of
+    // `powerEvery` still stops a collected orb popping straight back.
+    const short = CFG.powers - W.powers.length;
+    W.powerAt = W.time + CFG.powerEvery / (1 + short * 0.5);
+  }
+
+  // ---- spat goo ----
+  for (let i = 0; i < W.spit.length; i++) {
+    const s = W.spit[i];
+    s.age += dt;
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    const dec = Math.exp(-3.4 * dt);
+    s.vx *= dec; s.vy *= dec;
+    const r = radiusOf(s.m);
+    s.x = clamp(s.x, r, CFG.world - r);
+    s.y = clamp(s.y, r, CFG.world - r);
+
+    // feed a pod, and it buds a new one away from the feeder
+    for (let k = 0; k < W.pods.length && !s.dead; k++) {
+      const v = W.pods[k];
+      const rr = radiusOf(v.m);
+      if (Math.hypot(v.x - s.x, v.y - s.y) < rr) {
+        s.dead = true;
+        v.fed++;
+        if (v.fed >= 6) {
+          v.fed = 0;
+          const a = Math.atan2(s.vy, s.vx);
+          const nv = makePod(v.x + Math.cos(a) * 10, v.y + Math.sin(a) * 10);
+          nv.vx = Math.cos(a) * 700; nv.vy = Math.sin(a) * 700;
+          W.pods.push(nv);
+        }
+      }
+    }
+    if (s.dead) continue;
+
+    for (let pi = 0; pi < W.players.length && !s.dead; pi++) {
+      const p = W.players[pi];
+      for (let j = 0; j < p.cells.length; j++) {
+        const c = p.cells[j];
+        if (s.age < 0.32 && p.id === s.owner) continue;   // do not re-eat your own spit instantly
+        const cr = radiusOf(c.m);
+        const dx = s.x - c.x, dy = s.y - c.y;
+        if (dx * dx + dy * dy < cr * cr && c.m > s.m) {
+          s.dead = true;
+          c.m += s.m;
+          wobble(c, 1.1, Math.atan2(dy, dx));
+          break;
+        }
+      }
+    }
+  }
+  if (W.spit.some(s => s.dead)) W.spit = W.spit.filter(s => !s.dead);
+
+  // ---- pods drift when they have just budded ----
+  for (let i = 0; i < W.pods.length; i++) {
+    const v = W.pods[i];
+    v.x += v.vx * dt; v.y += v.vy * dt;
+    const dec = Math.exp(-2.6 * dt);
+    v.vx *= dec; v.vy *= dec;
+    const r = radiusOf(v.m);
+    v.x = clamp(v.x, r, CFG.world - r);
+    v.y = clamp(v.y, r, CFG.world - r);
+    v.spin += dt * 0.35;
+  }
+
+  // ---- slime vs slime, and slime vs pod ----
+  const all = [];
+  for (let i = 0; i < W.players.length; i++) {
+    const p = W.players[i];
+    for (let j = 0; j < p.cells.length; j++) all.push(p.cells[j]);
+  }
+
+  for (let i = 0; i < all.length; i++) {
+    const A = all[i];
+    if (A.dead) continue;
+    const ra = radiusOf(A.m);
+
+    for (let k = 0; k < W.pods.length; k++) {
+      const v = W.pods[k];
+      if (v.dead) continue;
+      const rv2 = radiusOf(v.m);
+      const d = Math.hypot(v.x - A.x, v.y - A.y);
+      if (A.m > CFG.podBurstMin && d < ra - rv2 * 0.55) {
+        A.m += v.m * 0.5;
+        v.dead = true;
+        burstOn(A, Math.atan2(A.y - v.y, A.x - v.x) + Math.PI);
+      }
+    }
+
+    for (let j = i + 1; j < all.length; j++) {
+      const B = all[j];
+      if (B.dead || A.dead || A.owner === B.owner) continue;
+      const rb = radiusOf(B.m);
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const d = Math.hypot(dx, dy);
+      if (d > ra + rb) continue;
+      let eater = null, food = null;
+      // The prey is ALWAYS faster (smaller means faster), so demanding a deep
+      // engulf meant a straight chase essentially never landed. Ask only that
+      // the prey centre is comfortably inside the eater.
+      if (A.m > B.m * CFG.eatRatio && d < ra - rb * 0.18) { eater = A; food = B; }
+      else if (B.m > A.m * CFG.eatRatio && d < rb - ra * 0.18) { eater = B; food = A; }
+      if (!eater) continue;
+      // SHIELD only stops another slime swallowing you. Thorn pods still burst
+      // a shielded slime, so there is always a way to break one open.
+      if (hasBuff(food.owner, "shield")) {
+        const ux2 = (food.x - eater.x) / (d || 1), uy2 = (food.y - eater.y) / (d || 1);
+        food.bx += ux2 * 260; food.by += uy2 * 260;      // bounce off instead
+        eater.bx -= ux2 * 90; eater.by -= uy2 * 90;
+        wobble(food, 1.5, Math.atan2(-uy2, -ux2));
+        if (food.owner === W.you || eater.owner === W.you) blip(540, 0.09, 0.04, "sine");
+        continue;
+      }
+      eater.m += food.m;
+      food.dead = true;
+      wobble(eater, 1.6 + Math.min(food.m / eater.m, 1) * 3, Math.atan2(food.y - eater.y, food.x - eater.x));
+      if (eater.owner === W.you) blip(320 + Math.min(food.m, 400), 0.16, 0.07, "triangle");
+      else if (food.owner === W.you) blip(120, 0.35, 0.1, "sawtooth");
+      if (food.owner === W.you && food.owner.cells.length <= 1) W.killer = eater.owner.name;
+    }
+  }
+  if (W.pods.some(v => v.dead)) W.pods = W.pods.filter(v => !v.dead);
+  while (W.pods.length < CFG.pods) W.pods.push(makePod());
+
+  // ---- deaths and respawns ----
+  for (let i = 0; i < W.players.length; i++) {
+    const p = W.players[i];
+    if (p.cells.some(c => c.dead)) p.cells = p.cells.filter(c => !c.dead);
+    p.peak = Math.max(p.peak, totalMass(p));
+    if (!p.cells.length && !p.dead) {
+      p.dead = true;
+      p.respawn = CFG.respawnDelay;
+      if (p === W.you) onYouDied();
+    }
+    if (p.dead && p.isBot) {
+      p.respawn -= dt;
+      if (p.respawn <= 0) {
+        p.name = pick(BOT_NAMES) + (Math.random() < 0.25 ? " " + (rint(90) + 10) : "");
+        p.color = pick(PALETTE);
+        p.peak = 0;
+        spawnPlayer(p);
+      }
+    }
+  }
+
+  updateRanks();
+}
+
+function displayMass(p) {
+  return W.mode === "net" ? (p.netMass || 0) : totalMass(p);
+}
+
+function leaderboard() {
+  const live = W.players.filter(p => p.cells.length > 0);
+  live.sort((a, b) => displayMass(b) - displayMass(a));
+  return live;
+}
+
+function updateRanks() {
+  const board = leaderboard();
+  W.board = board;
+  if (W.you) {
+    const idx = board.indexOf(W.you);
+    W.youRank = idx < 0 ? null : idx + 1;
+    if (W.youRank && W.youRank < W.you.bestRank) W.you.bestRank = W.youRank;
+  }
+}
+
+/* ============================ rendering ============================ */
+function blobPath(c, r, sx, sy, t) {
+  const R = CFG.RING;
+  const pts = [];
+  const sp = Math.hypot(c.vx + c.bx, c.vy + c.by);
+  const stretch = clamp(sp / 900, 0, 0.19);
+  const dir = Math.atan2(c.vy + c.by, c.vx + c.bx);
+  const breathe = 0.018 * Math.sin(t * 2.2 + c.id * 1.7);
+
+  for (let i = 0; i < R; i++) {
+    const a = (i / R) * TAU;
+    let d = a - dir;
+    const along = Math.cos(d);
+    const rr = r * (1 + c.ring[i] + breathe + stretch * along - stretch * 0.55 * (1 - Math.abs(along)));
+    pts.push(sx + Math.cos(a) * rr, sy + Math.sin(a) * rr);
+  }
+
+  // quadratic curves through the midpoints keep the outline smooth and cheap
+  ctx.beginPath();
+  let mx = (pts[0] + pts[(R - 1) * 2]) / 2;
+  let my = (pts[1] + pts[(R - 1) * 2 + 1]) / 2;
+  ctx.moveTo(mx, my);
+  for (let i = 0; i < R; i++) {
+    const cx = pts[i * 2], cy = pts[i * 2 + 1];
+    const nx = pts[((i + 1) % R) * 2], ny = pts[((i + 1) % R) * 2 + 1];
+    ctx.quadraticCurveTo(cx, cy, (cx + nx) / 2, (cy + ny) / 2);
+  }
+  ctx.closePath();
+}
+
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  r = clamp(Math.round(r + amt), 0, 255);
+  g = clamp(Math.round(g + amt), 0, 255);
+  b = clamp(Math.round(b + amt), 0, 255);
+  return "rgb(" + r + "," + g + "," + b + ")";
+}
+
+/* The buff tells: a shield ring, speed chevrons, feast sparkles, and -- for
+   your own slimes only -- the magnet's reach, because drawing every rival's
+   pull radius turns the screen to soup. */
+function drawAura(c, sx, sy, R, p, t, mine) {
+  // Each buff gets its OWN band. Drawn at a shared radius they pile into one
+  // annulus and cancel out: the shield's translucent halo painted straight over
+  // the feast sparkles and turned them into dark notches.
+  if (hasBuff(p, "magnet") && mine) {
+    const reach = (POWERS.magnet.reach + radiusOf(c.m)) * cam.z;
+    ctx.beginPath();
+    ctx.arc(sx, sy, reach, 0, TAU);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(186,140,250,.55)";
+    ctx.setLineDash([9, 8]);
+    ctx.lineDashOffset = -t * 26;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+  }
+
+  // band 1, tight to the body
+  if (hasBuff(p, "shield")) {
+    const pulse = 1 + Math.sin(t * 5) * 0.02;
+    const rr = R * 1.2 * pulse + 3;
+    ctx.beginPath();
+    ctx.arc(sx, sy, rr, 0, TAU);
+    ctx.lineWidth = Math.max(5, R * 0.24);
+    ctx.strokeStyle = "rgba(255,212,121,.16)";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(sx, sy, rr, 0, TAU);
+    ctx.lineWidth = Math.max(2, R * 0.1);
+    ctx.strokeStyle = "rgba(255,212,121,.9)";
+    ctx.stroke();
+  }
+
+  // band 2, clear of the shield
+  if (hasBuff(p, "feast") && R > 6) {
+    ctx.fillStyle = "#8ef2ac";
+    for (let i = 0; i < 4; i++) {
+      const a = t * 1.7 + i * (TAU / 4);
+      const rr = R * 1.55 + 7 + Math.sin(t * 3 + i) * R * 0.07;
+      const px = sx + Math.cos(a) * rr, py = sy + Math.sin(a) * rr;
+      const s = Math.max(2.4, R * 0.11);
+      ctx.beginPath();
+      ctx.moveTo(px, py - s);
+      ctx.lineTo(px + s * 0.4, py - s * 0.4);
+      ctx.lineTo(px + s, py);
+      ctx.lineTo(px + s * 0.4, py + s * 0.4);
+      ctx.lineTo(px, py + s);
+      ctx.lineTo(px - s * 0.4, py + s * 0.4);
+      ctx.lineTo(px - s, py);
+      ctx.lineTo(px - s * 0.4, py - s * 0.4);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // band 3, streaming off the back only while actually moving: chevrons on a
+  // parked slime are noise, and they read as a tell for "this thing is fast"
+  if (hasBuff(p, "speed")) {
+    const sp = Math.hypot(c.vx, c.vy);
+    const lead = clamp(sp / (speedOf(c.m) * 0.6), 0, 1);
+    if (lead > 0.05) {
+      const a = c.face + Math.PI;
+      ctx.strokeStyle = "#7ec8f5";
+      ctx.lineWidth = Math.max(1.6, R * 0.1);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (let i = 0; i < 3; i++) {
+        const off = R * (1.75 + i * 0.36) + 6 + (t * 110 % 16);
+        const w = R * 0.44 + 3;
+        ctx.beginPath();
+        ctx.moveTo(sx + Math.cos(a) * off + Math.cos(a + 2.2) * w,
+                   sy + Math.sin(a) * off + Math.sin(a + 2.2) * w);
+        ctx.lineTo(sx + Math.cos(a) * off, sy + Math.sin(a) * off);
+        ctx.lineTo(sx + Math.cos(a) * off + Math.cos(a - 2.2) * w,
+                   sy + Math.sin(a) * off + Math.sin(a - 2.2) * w);
+        ctx.globalAlpha = (0.85 - i * 0.24) * lead;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.lineCap = "butt";
+      ctx.lineJoin = "miter";
+    }
+  }
+}
+
+function drawCell(c, t, myMass) {
+  const r = radiusOf(c.m);
+  const sx = (c.x - cam.x) * cam.z + VW / 2;
+  const sy = (c.y - cam.y) * cam.z + VH / 2;
+  const R = r * cam.z;
+  if (sx + R < -20 || sx - R > VW + 20 || sy + R < -20 || sy - R > VH + 20) return;
+
+  const p = c.owner;
+  const mine = p === W.you;
+
+  blobPath(c, R, sx, sy, t);
+  ctx.fillStyle = p.color;
+  ctx.fill();
+
+  // jelly: a lighter lobe up and left, a darker crescent down and right
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = shade(p.color, 34);
+  ctx.beginPath();
+  ctx.ellipse(sx - R * 0.24, sy - R * 0.3, R * 0.72, R * 0.6, -0.5, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,.14)";
+  ctx.beginPath();
+  ctx.ellipse(sx + R * 0.42, sy + R * 0.5, R * 0.8, R * 0.66, -0.5, 0, TAU);
+  ctx.fill();
+  // a glossy dot
+  ctx.fillStyle = "rgba(255,255,255,.42)";
+  ctx.beginPath();
+  ctx.ellipse(sx - R * 0.36, sy - R * 0.42, R * 0.17, R * 0.11, -0.6, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+
+  blobPath(c, R, sx, sy, t);
+  ctx.lineWidth = Math.max(1, R * 0.055);
+  ctx.strokeStyle = mine ? "rgba(255,255,255,.85)" : shade(p.color, -60);
+  ctx.stroke();
+
+  drawAura(c, sx, sy, R, p, t, mine);
+
+  // Edible or dangerous? Without this the size rule is invisible and a slime
+  // you cannot swallow looks exactly like one you can.
+  if (!mine && myMass > 0 && R > 7) {
+    let ring = null;
+    if (myMass > c.m * CFG.eatRatio) ring = "rgba(180,255,205,.75)";
+    else if (c.m > myMass * CFG.eatRatio) ring = "rgba(255,120,110,.7)";
+    if (ring) {
+      ctx.beginPath();
+      ctx.arc(sx, sy, R * 1.22 + 3, 0, TAU);
+      ctx.lineWidth = Math.max(1.2, R * 0.05);
+      ctx.strokeStyle = ring;
+      ctx.setLineDash([R * 0.34 + 3, R * 0.28 + 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // ---- eyes ----
+  // The pair stays level in screen space. Rotating the whole pair with the
+  // heading stacks them diagonally at big sizes and they stop reading as a
+  // face at all, so only the pupils turn.
+  if (R > 9) {
+    const eyeR = clamp(R * 0.17, 2.2, 22);
+    const spread = R * 0.30;
+    const ey = sy - R * 0.16;
+    const look = Math.min(eyeR * 0.42, 3 + eyeR * 0.3);
+    const closed = c.blink < 0;
+    for (let s = -1; s <= 1; s += 2) {
+      const ex = sx + spread * s;
+      if (closed) {
+        ctx.strokeStyle = "rgba(20,30,26,.9)";
+        ctx.lineWidth = Math.max(1, eyeR * 0.36);
+        ctx.beginPath();
+        ctx.moveTo(ex - eyeR * 0.85, ey); ctx.lineTo(ex + eyeR * 0.85, ey);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = "#fdfffe";
+        ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, TAU); ctx.fill();
+        ctx.fillStyle = "#16241d";
+        ctx.beginPath();
+        ctx.arc(ex + Math.cos(c.face) * look, ey + Math.sin(c.face) * look,
+                eyeR * 0.5, 0, TAU);
+        ctx.fill();
+      }
+    }
+  }
+
+  // ---- name and mass ----
+  if (R > 17) {
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const fs = clamp(R * 0.34, 10, 30);
+    ctx.font = "700 " + fs.toFixed(0) + "px 'Trebuchet MS', sans-serif";
+    ctx.lineWidth = Math.max(2, fs * 0.22);
+    ctx.strokeStyle = "rgba(0,0,0,.5)";
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeText(p.name, sx, sy + R * 0.42);
+    ctx.fillText(p.name, sx, sy + R * 0.42);
+    if (R > 34) {
+      const f2 = clamp(R * 0.24, 9, 22);
+      ctx.font = "700 " + f2.toFixed(0) + "px 'Trebuchet MS', sans-serif";
+      ctx.lineWidth = Math.max(2, f2 * 0.22);
+      ctx.strokeText(Math.round(c.m), sx, sy + R * 0.42 + fs * 0.95);
+      ctx.fillText(Math.round(c.m), sx, sy + R * 0.42 + fs * 0.95);
+    }
+  }
+}
+
+function drawPod(v, t) {
+  const r = radiusOf(v.m);
+  const sx = (v.x - cam.x) * cam.z + VW / 2;
+  const sy = (v.y - cam.y) * cam.z + VH / 2;
+  const R = r * cam.z;
+  if (sx + R < -20 || sx - R > VW + 20 || sy + R < -20 || sy - R > VH + 20) return;
+
+  const spikes = 16;
+  ctx.beginPath();
+  for (let i = 0; i <= spikes * 2; i++) {
+    const a = (i / (spikes * 2)) * TAU + v.spin;
+    const rr = i % 2 ? R * 1.16 : R * 0.9;
+    const x = sx + Math.cos(a) * rr, y = sy + Math.sin(a) * rr;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = "#2f7a46";
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.5, R * 0.07);
+  ctx.strokeStyle = "#7ef0a2";
+  ctx.stroke();
+  ctx.fillStyle = "rgba(126,240,162,.22)";
+  ctx.beginPath();
+  ctx.arc(sx, sy, R * 0.55, 0, TAU);
+  ctx.fill();
+}
+
+/* Pickup icons, as paths. A capsule of colour, a bobbing float, and a glyph
+   drawn with lines -- lightning, horseshoe, shield, star. */
+function powerIcon(kind, x, y, s) {
+  ctx.beginPath();
+  if (kind === "speed") {
+    ctx.moveTo(x + s * 0.22, y - s);
+    ctx.lineTo(x - s * 0.34, y + s * 0.12);
+    ctx.lineTo(x + s * 0.02, y + s * 0.12);
+    ctx.lineTo(x - s * 0.2, y + s);
+    ctx.lineTo(x + s * 0.4, y - s * 0.16);
+    ctx.lineTo(x + s * 0.02, y - s * 0.16);
+    ctx.closePath();
+    ctx.fill();
+  } else if (kind === "magnet") {
+    ctx.lineWidth = s * 0.42;
+    ctx.lineCap = "butt";
+    ctx.arc(x, y - s * 0.1, s * 0.62, Math.PI, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.62, y - s * 0.1); ctx.lineTo(x - s * 0.62, y + s * 0.6);
+    ctx.moveTo(x + s * 0.62, y - s * 0.1); ctx.lineTo(x + s * 0.62, y + s * 0.6);
+    ctx.stroke();
+  } else if (kind === "shield") {
+    ctx.moveTo(x, y - s);
+    ctx.lineTo(x + s * 0.72, y - s * 0.52);
+    ctx.quadraticCurveTo(x + s * 0.72, y + s * 0.5, x, y + s);
+    ctx.quadraticCurveTo(x - s * 0.72, y + s * 0.5, x - s * 0.72, y - s * 0.52);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * (TAU / 10);
+      const rr = i % 2 ? s * 0.42 : s;
+      const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawPower(u, t) {
+  const def = POWERS[u.kind] || POWERS.speed;
+  const bob = Math.sin(t * 2.2 + u.spin) * 4;
+  const sx = (u.x - cam.x) * cam.z + VW / 2;
+  const sy = (u.y - cam.y) * cam.z + VH / 2 + bob * cam.z;
+  const R = CFG.powerR * cam.z;
+  if (sx + R * 3 < 0 || sx - R * 3 > VW || sy + R * 3 < 0 || sy - R * 3 > VH) return;
+
+  // halo, so one is visible from across the arena even zoomed out
+  const glow = 0.5 + Math.sin(t * 3 + u.spin) * 0.16;
+  ctx.globalAlpha = 0.2 * glow;
+  ctx.fillStyle = def.color;
+  ctx.beginPath();
+  ctx.arc(sx, sy, R * 1.85, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.beginPath();
+  ctx.arc(sx, sy, R, 0, TAU);
+  ctx.fillStyle = "rgba(10,18,16,.86)";
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.6, R * 0.13);
+  ctx.strokeStyle = def.color;
+  ctx.stroke();
+
+  ctx.fillStyle = def.color;
+  ctx.strokeStyle = def.color;
+  powerIcon(u.kind, sx, sy, R * 0.52);
+  ctx.lineCap = "butt";
+}
+
+/* The screen rush: streaks tearing past the edges of the viewport while SPEED
+   is lit on YOUR slime. The camera is locked to you and the arena is a sparse
+   dot field, so raw velocity is almost unreadable -- this is the only thing
+   that actually says "you are moving fast". Screen space, edges only, so it
+   never covers what you are trying to eat. */
+function drawSpeedRush(t) {
+  const you = W.you;
+  if (!you || !you.cells.length || !hasBuff(you, "speed")) return;
+
+  let vx = 0, vy = 0, m = 0;
+  for (let i = 0; i < you.cells.length; i++) {
+    const c = you.cells[i];
+    vx += c.vx * c.m; vy += c.vy * c.m; m += c.m;
+  }
+  if (m <= 0) return;
+  vx /= m; vy /= m;
+  const sp = Math.hypot(vx, vy);
+  const full = speedOf(m) * POWERS.speed.mult;
+  const k = clamp(sp / (full * 0.55), 0, 1);
+  if (k < 0.12) return;                    // parked: no streaks
+
+  const ang = Math.atan2(vy, vx);
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  const cx = VW / 2, cy = VH / 2;
+  const span = Math.hypot(VW, VH);
+  const clear = Math.min(VW, VH) * 0.32;   // keep the middle of the screen clean
+
+  ctx.save();
+  ctx.strokeStyle = "#cfeaff";
+  ctx.lineCap = "round";
+  const N = 68;   // many are culled by the clear zone, so oversubscribe
+  for (let i = 0; i < N; i++) {
+    // a stable pseudo-random lane per streak: no allocation, no frame-to-frame
+    // jitter, and the same lane every frame so they read as continuous lines
+    const h = Math.sin(i * 12.9898) * 43758.5453;
+    const seed = h - Math.floor(h);
+    const h2 = Math.sin(i * 78.233) * 12345.6789;
+    const seed2 = h2 - Math.floor(h2);
+
+    // lateral offset from the travel axis, biased away from the centre
+    const side = (seed - 0.5) * 2;
+    const lat = (clear + seed2 * (span * 0.42)) * (side < 0 ? -1 : 1) * (0.35 + Math.abs(side));
+    // slide backwards along the travel axis, wrapping
+    const cycle = span * 1.25;
+    const along = ((seed2 * cycle) - (t * (420 + k * 900) * (0.6 + seed * 0.8))) % cycle;
+    const a0 = (along + cycle) % cycle - cycle * 0.5;
+    // wide spread of lengths: a set of equal bars reads as scanlines, not speed
+    const len = (14 + seed * seed * 150) * (0.4 + k);
+
+    const x0 = cx + ca * a0 - sa * lat;
+    const y0 = cy + sa * a0 + ca * lat;
+    const x1 = x0 - ca * len, y1 = y0 - sa * len;
+    if (Math.max(x0, x1) < -60 || Math.min(x0, x1) > VW + 60 ||
+        Math.max(y0, y1) < -60 || Math.min(y0, y1) > VH + 60) continue;
+
+    // Fade on whichever END is nearest the centre, not just the start: a long
+    // streak that begins outside the clear zone still reaches into it, which is
+    // how streaks kept landing on top of the slime.
+    const dist = Math.min(Math.hypot(x0 - cx, y0 - cy), Math.hypot(x1 - cx, y1 - cy));
+    if (dist < clear) continue;
+    // Faint streaks are worse than none: the whole point is that the player
+    // could not feel the buff, and at 0.5 alpha over the dark floor these were
+    // barely distinguishable from the blue pellets already lying around.
+    const edge = clamp((dist - clear) / (clear * 0.9), 0, 1);
+    ctx.globalAlpha = 0.85 * k * edge;
+    ctx.lineWidth = 1.1 + seed2 * 1.9;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.lineCap = "butt";
+  ctx.restore();
+}
+
+function draw(t) {
+  ctx.fillStyle = "#0d1117";
+  ctx.fillRect(0, 0, VW, VH);
+
+  const left = cam.x - VW / 2 / cam.z, right = cam.x + VW / 2 / cam.z;
+  const top = cam.y - VH / 2 / cam.z, bot = cam.y + VH / 2 / cam.z;
+
+  // arena floor
+  const fx = (Math.max(0, left) - cam.x) * cam.z + VW / 2;
+  const fy = (Math.max(0, top) - cam.y) * cam.z + VH / 2;
+  const fw = (Math.min(CFG.world, right) - Math.max(0, left)) * cam.z;
+  const fh = (Math.min(CFG.world, bot) - Math.max(0, top)) * cam.z;
+  ctx.fillStyle = "#18241f";
+  ctx.fillRect(fx, fy, fw, fh);
+
+  // grid
+  const gs = 100;
+  ctx.strokeStyle = "rgba(130,215,170,.09)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = Math.floor(Math.max(0, left) / gs) * gs; x <= Math.min(CFG.world, right); x += gs) {
+    const sx = (x - cam.x) * cam.z + VW / 2;
+    ctx.moveTo(sx, fy); ctx.lineTo(sx, fy + fh);
+  }
+  for (let y = Math.floor(Math.max(0, top) / gs) * gs; y <= Math.min(CFG.world, bot); y += gs) {
+    const sy = (y - cam.y) * cam.z + VH / 2;
+    ctx.moveTo(fx, sy); ctx.lineTo(fx + fw, sy);
+  }
+  ctx.stroke();
+
+  // border
+  ctx.strokeStyle = "rgba(255,120,120,.5)";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(
+    (0 - cam.x) * cam.z + VW / 2, (0 - cam.y) * cam.z + VH / 2,
+    CFG.world * cam.z, CFG.world * cam.z
+  );
+
+  // goo, only what is on screen
+  const pad = 30;
+  ctx.save();
+  eachGooNear((left + right) / 2, (top + bot) / 2,
+    Math.max(right - left, bot - top) / 2 + pad, g => {
+      const sx = (g.x - cam.x) * cam.z + VW / 2;
+      const sy = (g.y - cam.y) * cam.z + VH / 2;
+      if (sx < -pad || sx > VW + pad || sy < -pad || sy > VH + pad) return;
+      const R = Math.max(1.4, radiusOf(g.m) * cam.z * 1.35);
+      ctx.fillStyle = g.c;
+      ctx.beginPath();
+      ctx.arc(sx, sy, R, 0, TAU);
+      ctx.fill();
+    });
+  ctx.restore();
+
+  // spat goo
+  for (let i = 0; i < W.spit.length; i++) {
+    const s = W.spit[i];
+    const sx = (s.x - cam.x) * cam.z + VW / 2;
+    const sy = (s.y - cam.y) * cam.z + VH / 2;
+    const R = radiusOf(s.m) * cam.z;
+    if (sx + R < 0 || sx - R > VW || sy + R < 0 || sy - R > VH) continue;
+    ctx.fillStyle = s.c;
+    ctx.beginPath(); ctx.arc(sx, sy, R, 0, TAU); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,.25)";
+    ctx.lineWidth = Math.max(1, R * 0.12);
+    ctx.stroke();
+  }
+
+  for (let i = 0; i < W.pods.length; i++) drawPod(W.pods[i], t);
+  for (let i = 0; i < W.powers.length; i++) drawPower(W.powers[i], t);
+
+  // slimes, smallest first so the big ones sit on top
+  const all = [];
+  for (let i = 0; i < W.players.length; i++) {
+    const p = W.players[i];
+    for (let j = 0; j < p.cells.length; j++) all.push(p.cells[j]);
+  }
+  all.sort((a, b) => a.m - b.m);
+  // our biggest slime decides what is edible; work it out once per frame
+  let myMass = 0;
+  if (W.you) for (const c of W.you.cells) if (c.m > myMass) myMass = c.m;
+  for (let i = 0; i < all.length; i++) drawCell(all[i], t, myMass);
+
+  drawSpeedRush(t);
+}
+
+/* ---------- minimap ---------- */
+const mini = document.getElementById("mini");
+const mctx = mini.getContext("2d");
+function drawMini() {
+  const S = 150, k = S / CFG.world;
+  mctx.clearRect(0, 0, S, S);
+  mctx.fillStyle = "rgba(19,28,26,.9)";
+  mctx.fillRect(0, 0, S, S);
+  mctx.strokeStyle = "rgba(120,200,160,.16)";
+  mctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    mctx.beginPath();
+    mctx.moveTo(S / 4 * i, 0); mctx.lineTo(S / 4 * i, S);
+    mctx.moveTo(0, S / 4 * i); mctx.lineTo(S, S / 4 * i);
+    mctx.stroke();
+  }
+  // power-ups, so you can go and get one on purpose instead of stumbling on it
+  for (let i = 0; i < W.powers.length; i++) {
+    const u = W.powers[i];
+    mctx.fillStyle = (POWERS[u.kind] || POWERS.speed).color;
+    mctx.beginPath();
+    mctx.arc(u.x * k, u.y * k, 2.1, 0, TAU);
+    mctx.fill();
+  }
+
+  const board = W.board || [];
+  for (let i = 0; i < board.length; i++) {
+    const p = board[i];
+    if (p === W.you) continue;
+    if (i > 6) break;
+    const cm = centroid(p);
+    mctx.fillStyle = "rgba(255,255,255,.45)";
+    mctx.beginPath();
+    mctx.arc(cm.x * k, cm.y * k, clamp(Math.sqrt(displayMass(p)) * 0.16, 1.5, 5), 0, TAU);
+    mctx.fill();
+  }
+  if (W.you && W.you.cells.length) {
+    for (let i = 0; i < W.you.cells.length; i++) {
+      const c = W.you.cells[i];
+      mctx.fillStyle = W.you.color;
+      mctx.beginPath();
+      mctx.arc(c.x * k, c.y * k, clamp(Math.sqrt(c.m) * 0.2, 2, 6), 0, TAU);
+      mctx.fill();
+    }
+    // viewport box
+    const cm = centroid(W.you);
+    mctx.strokeStyle = "rgba(255,255,255,.35)";
+    mctx.strokeRect(
+      (cm.x - VW / 2 / cam.z) * k, (cm.y - VH / 2 / cam.z) * k,
+      VW / cam.z * k, VH / cam.z * k
+    );
+  }
+}
+
+/* ---------- HUD ---------- */
+const el = {
+  mass: document.getElementById("mass"),
+  rank: document.getElementById("rank"),
+  alive: document.getElementById("alive"),
+  best: document.getElementById("best"),
+  clock: document.getElementById("clock"),
+  rows: document.getElementById("rows"),
+  room: document.getElementById("room"),
+  regroup: document.getElementById("regroup"),
+  buffs: document.getElementById("buffs"),
+  roomWrap: document.getElementById("roomWrap"),
+  ping: document.getElementById("ping")
+};
+function fmtTime(s) {
+  const m = Math.floor(s / 60), r = Math.floor(s % 60);
+  return m + ":" + (r < 10 ? "0" : "") + r;
+}
+let hudTick = 0;
+let lastBuffHTML = "";
+function drawHUD(dt) {
+  hudTick -= dt;
+  if (hudTick > 0) return;
+  hudTick = 0.12;
+
+  const you = W.you;
+  const board = W.board || [];
+  el.mass.textContent = you ? Math.round(displayMass(you)) : 0;
+  el.rank.textContent = W.youRank || "-";
+  el.alive.textContent = W.mode === "net" ? (W.aliveCount || board.length) : board.length;
+  el.best.textContent = you ? Math.round(you.peak) : 0;
+  el.clock.textContent = fmtTime(you ? W.time - you.born : 0);
+  if (W.mode === "net") el.ping.textContent = NET.ping ? NET.ping + "ms" : "";
+  el.regroup.classList.toggle("hidden", !input.regroup);
+
+  // active power-ups, longest first so a chip does not jump around as it counts
+  let bhtml = "";
+  if (you && you.buffs) {
+    const live = POWER_KEYS.filter(k => you.buffs[k] > 0)
+      .sort((a, b) => you.buffs[b] - you.buffs[a]);
+    for (const k of live) {
+      const left = you.buffs[k];
+      // online we are sent whole seconds; never render "0s" on a live buff
+      const secs = Math.max(1, Math.ceil(left));
+      bhtml += '<span class="bf' + (left <= 3 ? " low" : "") + '" style="color:' +
+        POWERS[k].color + '">' + POWERS[k].label + "<s>" + secs + "s</s></span>";
+    }
+  }
+  if (bhtml !== lastBuffHTML) { el.buffs.innerHTML = bhtml; lastBuffHTML = bhtml; }
+
+  let html = "";
+  for (let i = 0; i < Math.min(10, board.length); i++) {
+    const p = board[i];
+    const me = p === W.you ? " me" : "";
+    html += '<div class="row' + me + '"><span class="n">' + (i + 1) +
+      '</span><span class="who">' + escapeHTML(p.name) +
+      '</span><span class="m">' + Math.round(displayMass(p)) + "</span></div>";
+  }
+  el.rows.innerHTML = html;
+}
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, ch =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+}
+
+/* ============================ camera ============================ */
+function updateCamera(dt) {
+  const you = W.you;
+  if (!you || !you.cells.length) return;
+  const cm = centroid(you);
+  let spread = 0;
+  for (let i = 0; i < you.cells.length; i++) {
+    const c = you.cells[i];
+    spread = Math.max(spread, Math.hypot(c.x - cm.x, c.y - cm.y) + radiusOf(c.m));
+  }
+  const minDim = Math.min(VW, VH);
+  cam.tz = clamp(minDim * 0.44 / (spread * 2.2 + 240), 0.2, 1.4);
+  const k = 1 - Math.exp(-8 * dt);
+  cam.x = lerp(cam.x, cm.x, k);
+  cam.y = lerp(cam.y, cm.y, k);
+  cam.z = lerp(cam.z, cam.tz, 1 - Math.exp(-3.2 * dt));
+}
+
+/* ============================ game flow ============================ */
+const scr = {
+  start: document.getElementById("start"),
+  over: document.getElementById("over"),
+  hud: document.getElementById("hud"),
+  paused: document.getElementById("paused")
+};
+
+function setDifficulty(name) {
+  if (!DIFFS[name]) name = "medium";
+  difficulty = name;
+  AI = DIFFS[name];
+  // keep CFG in step with the chosen knobs so nothing reads a stale roster size
+  CFG.bots = AI.bots;
+  CFG.startMass = AI.startMass;
+  CFG.goo = AI.goo;
+  CFG.pods = AI.pods;
+  if (AI.powers !== undefined) CFG.powers = AI.powers;
+  return AI;
+}
+
+function buildWorld() {
+  W.time = 0;
+  W.goo.length = 0;
+  W.pods.length = 0;
+  W.spit.length = 0;
+  W.powers.length = 0;
+  W.powerAt = 0;
+  W.players.length = 0;
+  W.killer = null;
+  for (let i = 0; i < CFG.goo; i++) W.goo.push(makeGoo());
+  for (let i = 0; i < CFG.pods; i++) W.pods.push(makePod());
+  // seed the full set: one kind after another, so no arena opens all-magnets
+  for (let i = 0; i < CFG.powers; i++) W.powers.push(makePower(POWER_KEYS[i % POWER_KEYS.length]));
+  const names = BOT_NAMES.slice();
+  for (let i = 0; i < AI.bots; i++) {
+    const n = names.length ? names.splice(rint(names.length), 1)[0] : "Blob " + i;
+    const b = makePlayer(n, PALETTE[i % PALETTE.length], true);
+    W.players.push(b);
+    spawnPlayer(b, rnd(CFG.startMass * AI.botMass[0], CFG.startMass * AI.botMass[1]));
+  }
+}
+
+let chosenColor = PALETTE[0];
+function startGame() {
+  // PLAY AGAIN has to know which world it is restarting into
+  if (W.mode === "net") {
+    if (NET.ws && NET.ws.readyState === 1) {
+      scr.over.classList.add("hidden");
+      W.state = "play";
+      netSend({ t: "respawn" });
+      return;
+    }
+    W.mode = "solo";     // the server went away; fall back to a solo run
+    el.roomWrap.classList.add("hidden");
+  }
+  const raw = (document.getElementById("name").value || "").trim();
+  const name = raw || "you";
+  setDifficulty(difficulty);
+  buildWorld();
+  const you = makePlayer(name, chosenColor, false);
+  W.players.push(you);
+  W.you = you;
+  spawnPlayer(you);
+  const cm = centroid(you);
+  cam.x = cm.x; cam.y = cm.y; cam.z = 1; cam.tz = 1;
+  W.state = "play";
+  scr.start.classList.add("hidden");
+  scr.over.classList.add("hidden");
+  scr.hud.classList.remove("hidden");
+  updateRanks();
+}
+
+function onYouDied() {
+  W.state = "dead";
+  document.getElementById("fMass").textContent = Math.round(W.you.peak);
+  document.getElementById("fRank").textContent =
+    W.you.bestRank === 99 ? "-" : "#" + W.you.bestRank;
+  document.getElementById("fTime").textContent = fmtTime(W.time - W.you.born);
+  document.getElementById("eatenBy").textContent =
+    W.killer ? "swallowed by " + W.killer : "you dissolved";
+  scr.over.classList.remove("hidden");
+}
+
+function togglePause() {
+  if (W.mode === "net") return;   // cannot pause a world other people are in
+  if (W.state === "play") { W.state = "paused"; scr.paused.classList.remove("hidden"); }
+  else if (W.state === "paused") { W.state = "play"; scr.paused.classList.add("hidden"); }
+}
+
+/* colour swatches */
+const swWrap = document.getElementById("swatches");
+PALETTE.forEach((c, i) => {
+  const d = document.createElement("div");
+  d.className = "sw" + (i === 0 ? " on" : "");
+  d.style.background = c;
+  d.addEventListener("click", () => {
+    chosenColor = c;
+    [].forEach.call(swWrap.children, n => n.classList.remove("on"));
+    d.classList.add("on");
+  });
+  swWrap.appendChild(d);
+});
+/* difficulty picker */
+const diffWrap = document.getElementById("diffs");
+Object.keys(DIFFS).forEach(key => {
+  const d = DIFFS[key];
+  const b = document.createElement("div");
+  b.className = "diff" + (key === difficulty ? " on" : "");
+  b.dataset.diff = key;
+  b.innerHTML = d.label + "<small>" + d.blurb + "</small>";
+  b.addEventListener("click", () => {
+    setDifficulty(key);
+    [].forEach.call(diffWrap.children, n => n.classList.remove("on"));
+    b.classList.add("on");
+  });
+  diffWrap.appendChild(b);
+});
+
+document.getElementById("play").addEventListener("click", startGame);
+document.getElementById("again").addEventListener("click", startGame);
+document.getElementById("name").addEventListener("keydown", e => {
+  if (e.key === "Enter") startGame();
+});
+
+/* ============================ multiplayer ============================ */
+/* The server is authoritative and runs the very same simulation this file does
+   (slime-server.js boots this script headlessly), so the rules cannot drift.
+   The client sends only its aim point and two button flags, then renders an
+   interpolated view of the snapshots that come back. */
+
+const NET = {
+  ws: null,
+  room: null,
+  id: null,              // our player id on the server
+  snaps: [],             // recent snapshots, newest last
+  dir: new Map(),        // pid -> { name, color }
+  dirV: -1,
+  players: new Map(),    // pid -> local player object (renderer reuses these)
+  cells: new Map(),      // cellId -> local cell object (keeps its wobble ring)
+  lastSend: 0,
+  ping: 0,
+  pingSent: 0,
+  status: "",
+  noticeUntil: 0,
+  serverT: 0
+};
+
+// A page served over http talks to its own origin. Opened straight off disk it
+// still tries localhost, so running the server and double-clicking the file works.
+const NET_ORIGIN = location.protocol.indexOf("http") === 0
+  ? location.origin : "http://localhost:8080";
+const NET_WS = NET_ORIGIN.replace(/^http/, "ws");
+
+const INTERP = 110;      // ms of deliberate lag, so we always interpolate between
+                         // two known snapshots instead of extrapolating past one
+
+function netSend(obj) {
+  if (NET.ws && NET.ws.readyState === 1) NET.ws.send(JSON.stringify(obj));
+}
+
+function joinServer(room) {
+  if (NET.ws) { try { NET.ws.close(); } catch (e) {} }
+  NET.snaps.length = 0;
+  NET.players.clear();
+  NET.cells.clear();
+  NET.dir.clear();
+  NET.dirV = -1;
+  NET.room = room;
+  NET.status = "connecting";
+  NET.noticeUntil = 0;
+  setNetHint("Connecting to " + room + " ...", true);
+
+  let ws;
+  try { ws = new WebSocket(NET_WS + "/play"); }
+  catch (e) { setNetHint("Could not reach the server.", true); return; }
+  NET.ws = ws;
+
+  ws.addEventListener("open", () => {
+    netSend({
+      t: "join", room,
+      name: (document.getElementById("name").value || "").trim() || "slime",
+      color: chosenColor
+    });
+  });
+
+  ws.addEventListener("message", ev => {
+    let m;
+    try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (m.t === "joined") onJoined(m);
+    else if (m.t === "s") onSnapshot(m);
+    else if (m.t === "dead") onNetDeath(m);
+    else if (m.t === "pong") NET.ping = Math.round(performance.now() - NET.pingSent);
+    else if (m.t === "full") setNetHint("That server is full - try another.", true);
+  });
+
+  ws.addEventListener("close", () => {
+    if (W.mode === "net" && W.state !== "menu") {
+      W.state = "menu";
+      scr.hud.classList.add("hidden");
+      scr.over.classList.add("hidden");
+      scr.start.classList.remove("hidden");
+      setNetHint("Lost the connection to " + (NET.room || "the server") + ".", true);
+    }
+    NET.status = "closed";
+    refreshServers();
+  });
+
+  ws.addEventListener("error", () => { setNetHint("Could not reach the server.", true); });
+}
+
+function onJoined(m) {
+  NET.id = m.id;
+  NET.status = "playing";
+  CFG.world = m.world;
+  W.mode = "net";
+  W.state = "play";
+  W.killer = null;
+  W.goo.length = 0; W.pods.length = 0; W.spit.length = 0; W.players.length = 0;
+  cam.x = m.x; cam.y = m.y; cam.z = 1; cam.tz = 1;
+  scr.start.classList.add("hidden");
+  scr.over.classList.add("hidden");
+  scr.hud.classList.remove("hidden");
+  setRoomBadge(m.room, m.diff);
+}
+
+function onSnapshot(m) {
+  if (m.dir) {
+    for (const row of m.dir) NET.dir.set(row[0], { name: row[1], color: row[2] });
+    NET.dirV = m.dv;
+  } else if (m.dv !== NET.dirV) {
+    netSend({ t: "dir" });          // we are behind; ask for the directory
+  }
+  m.at = performance.now();
+  NET.snaps.push(m);
+  while (NET.snaps.length > 20) NET.snaps.shift();
+}
+
+function onNetDeath(m) {
+  W.killer = m.by || null;
+  W.state = "dead";
+  document.getElementById("fMass").textContent = Math.round(m.peak || 0);
+  document.getElementById("fRank").textContent = m.rank ? "#" + m.rank : "-";
+  document.getElementById("fTime").textContent = fmtTime(m.alive || 0);
+  document.getElementById("eatenBy").textContent =
+    m.by ? "swallowed by " + m.by : "you dissolved";
+  scr.over.classList.remove("hidden");
+}
+
+/* look up (or build) the local stand-in for a networked player */
+function netPlayer(pid) {
+  let p = NET.players.get(pid);
+  if (!p) {
+    const info = NET.dir.get(pid) || { name: "slime", color: PALETTE[pid % PALETTE.length] };
+    p = makePlayer(info.name, info.color, false);
+    p.netMass = 0;
+    NET.players.set(pid, p);
+  } else {
+    const info = NET.dir.get(pid);
+    if (info) { p.name = info.name; p.color = info.color; }
+  }
+  return p;
+}
+
+function netCell(cid, p, x, y, m) {
+  let c = NET.cells.get(cid);
+  if (!c) {
+    c = makeCell(p, x, y, m);
+    NET.cells.set(cid, c);
+  }
+  c.owner = p;
+  return c;
+}
+
+/* Rebuild the world from two snapshots and render between them. */
+function netUpdate(dt) {
+  const snaps = NET.snaps;
+  if (!snaps.length) return;
+
+  const target = performance.now() - INTERP;
+  let a = null, b = null;
+  for (let i = snaps.length - 1; i >= 0; i--) {
+    if (snaps[i].at <= target) { a = snaps[i]; b = snaps[i + 1] || null; break; }
+  }
+  if (!a) { a = snaps[0]; b = snaps[1] || null; }
+  const span = b ? (b.at - a.at) : 0;
+  const f = span > 0 ? clamp((target - a.at) / span, 0, 1) : 0;
+
+  // ---- cells, interpolated ----
+  const seen = new Set();
+  const prev = new Map();
+  if (b) for (let i = 0; i < b.c.length; i += 5) prev.set(b.c[i], i);
+
+  for (const p of NET.players.values()) p.cells.length = 0;
+
+  for (let i = 0; i < a.c.length; i += 5) {
+    const cid = a.c[i], pid = a.c[i + 4];
+    let x = a.c[i + 1], y = a.c[i + 2], mass = a.c[i + 3];
+    const j = prev.get(cid);
+    if (j !== undefined && f > 0) {
+      x = lerp(x, b.c[j + 1], f);
+      y = lerp(y, b.c[j + 2], f);
+      mass = lerp(mass, b.c[j + 3], f);
+    }
+    const p = netPlayer(pid);
+    const c = netCell(cid, p, x, y, mass);
+    // a local velocity estimate drives the squash and the eyes
+    const vx = (x - c.x) / Math.max(dt, 0.001), vy = (y - c.y) / Math.max(dt, 0.001);
+    if (Math.abs(vx) + Math.abs(vy) > 2) c.face = Math.atan2(vy, vx);
+    c.vx = clamp(vx, -900, 900); c.vy = clamp(vy, -900, 900);
+    c.x = x; c.y = y; c.m = mass;
+    c.blink -= dt;
+    if (c.blink < -0.12) c.blink = rnd(2, 7);
+    stepRing(c, dt);              // the wobble is cosmetic, so it lives client-side
+    p.cells.push(c);
+    seen.add(cid);
+  }
+  for (const cid of Array.from(NET.cells.keys())) if (!seen.has(cid)) NET.cells.delete(cid);
+
+  // ---- static-ish things: take the newest we have ----
+  W.goo.length = 0;
+  for (let i = 0; i < a.g.length; i += 3)
+    W.goo.push({ x: a.g[i], y: a.g[i + 1], m: 1, c: PALETTE[a.g[i + 2]] || PALETTE[0], dead: false });
+  W.pods.length = 0;
+  for (let i = 0; i < a.v.length; i += 3)
+    W.pods.push({ x: a.v[i], y: a.v[i + 1], m: a.v[i + 2], fed: 0, vx: 0, vy: 0, spin: W.time * 0.35, dead: false });
+  W.spit.length = 0;
+  for (let i = 0; i < a.p.length; i += 4)
+    W.spit.push({ x: a.p[i], y: a.p[i + 1], m: a.p[i + 2], c: PALETTE[a.p[i + 3]] || PALETTE[0], age: 1, dead: false });
+  W.powers.length = 0;
+  const ups = a.u || [];
+  for (let i = 0; i < ups.length; i += 3)
+    W.powers.push({
+      kind: POWER_KEYS[ups[i + 2]] || POWER_KEYS[0],
+      x: ups[i], y: ups[i + 1],
+      // spin is derived from the position, not random: it has to be the SAME
+      // every snapshot or the pickup jitters instead of bobbing
+      born: 0, spin: (ups[i] * 0.013 + ups[i + 1] * 0.007) % TAU,
+      dead: false
+    });
+  // draw() looks pellets up through the grid, and only step() rebuilds it.
+  // Online there is no local step(), so without this the goo is invisible.
+  rebuildGrid();
+
+  // ---- who is who ----
+  W.players.length = 0;
+  for (const p of NET.players.values()) { p.netMass = 0; W.players.push(p); }
+  W.board = [];
+  for (let i = 0; i < a.b.length; i += 2) {
+    const p = netPlayer(a.b[i]);
+    p.netMass = a.b[i + 1];
+    W.board.push(p);
+  }
+  // ---- power-ups: a bit mask for everybody, real seconds for us ----
+  // Rivals only need their aura lit, so a flag is stored as "1 second left" and
+  // every hasBuff() reader works in both modes without knowing which it is in.
+  for (const p of NET.players.values()) if (p.buffs) clearBuffs(p);
+  const bf = a.bf || [];
+  for (let i = 0; i < bf.length; i += 2) {
+    const p = netPlayer(bf[i]), mask = bf[i + 1];
+    for (let k = 0; k < POWER_KEYS.length; k++) if (mask & (1 << k)) p.buffs[POWER_KEYS[k]] = 1;
+  }
+
+  W.you = NET.players.get(NET.id) || null;
+  if (W.you && W.you.buffs) {
+    clearBuffs(W.you);
+    const bt = a.bt || [];
+    for (let i = 0; i < bt.length; i += 2) W.you.buffs[POWER_KEYS[bt[i]]] = bt[i + 1];
+  }
+  if (W.you && !W.you.netMass) {
+    let s = 0; for (const c of W.you.cells) s += c.m;
+    W.you.netMass = s;
+  }
+  W.youRank = a.r || null;
+  W.aliveCount = a.n || W.board.length;
+  if (W.you) {
+    W.you.peak = Math.max(W.you.peak || 0, W.you.netMass || 0);
+    W.you.born = W.time - (a.al || 0);
+  }
+  W.time += dt;
+
+  // ---- our input, at a steady rate ----
+  const now = performance.now();
+  if (now - NET.lastSend > 40 && W.state === "play") {
+    NET.lastSend = now;
+    if (input.split) input.regroup = false;
+    const mw = aimPoint();
+    // send our viewport too, so the server sends exactly what we can see
+    netSend({ t: "in", x: Math.round(mw.x), y: Math.round(mw.y),
+              s: input.split ? 1 : 0, w: input.spit ? 1 : 0,
+              r: input.regroup ? 1 : 0,
+              vw: Math.round(VW / 2 / cam.z), vh: Math.round(VH / 2 / cam.z) });
+    input.split = false; input.spit = false;
+  }
+  if (now - NET.pingSent > 2000) { NET.pingSent = now; netSend({ t: "ping" }); }
+}
+
+/* ---------- the server browser ---------- */
+const SERVERS = [
+  { id: "puddle", name: "The Puddle", diff: "easy" },
+  { id: "marsh", name: "Mudmarsh", diff: "medium" },
+  { id: "deep", name: "The Deep", diff: "hard" }
+];
+
+function setNetHint(msg, sticky) {
+  // The lobby refreshes every 4s. Without this, a disconnect notice is wiped
+  // by the very next refresh and the player never learns why they got booted.
+  if (!sticky && NET.noticeUntil && performance.now() < NET.noticeUntil) return;
+  if (sticky) NET.noticeUntil = performance.now() + 9000;
+  document.getElementById("netHint").innerHTML = msg;
+}
+
+function setRoomBadge(room, diff) {
+  const s = SERVERS.find(x => x.id === room);
+  el.room.textContent = s ? s.name : room;
+  el.room.className = "tag " + (diff || "");
+  el.roomWrap.classList.remove("hidden");
+}
+
+function renderServers(info) {
+  const list = document.getElementById("serverList");
+  list.innerHTML = "";
+  for (const s of SERVERS) {
+    const up = info && info[s.id];
+    const b = document.createElement("div");
+    b.className = "srv" + (up ? "" : " down");
+    b.innerHTML = '<span class="dot"></span><span class="nm">' + s.name +
+      '</span><span class="tag ' + s.diff + '">' + s.diff.toUpperCase() + "</span>" +
+      '<span class="pop">' + (up ? up.players + "/" + up.cap + " playing" : "offline") + "</span>";
+    if (up) b.addEventListener("click", () => joinServer(s.id));
+    list.appendChild(b);
+  }
+}
+
+async function refreshServers() {
+  try {
+    const r = await fetch(NET_ORIGIN + "/servers", { cache: "no-store" });
+    const info = await r.json();
+    renderServers(info);
+    setNetHint("Friends on your network join at <code>" +
+      (info.__host || NET_ORIGIN) + "</code>");
+  } catch (e) {
+    renderServers(null);
+    // Worded for a stranger on the public site, who has no local copy and no
+    // idea what a server is: say that the game already works before asking
+    // anything of them.
+    setNetHint("No server found &mdash; <b>PLAY SOLO</b> works right here. " +
+      "To play with friends, run <code>node slime-server.js</code> next to this " +
+      "file and reload.");
+  }
+}
+
+/* Draw the browser at once, then keep the counts fresh while the menu is up.
+   This must live AFTER the SERVERS list: it used to run in the UI-wiring block
+   further up the file and died on the temporal dead zone. */
+renderServers(null);
+setNetHint("looking for a server ...");   // never leave the panel blank while probing
+refreshServers();
+setInterval(() => { if (W.state === "menu") refreshServers(); }, 4000);
+
+/* ============================ main loop ============================ */
+let last = 0, acc = 0;
+const FIXED = 1 / 60;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (!last) last = now;
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.25) dt = 0.25;          // a stall must never fast-forward the sim
+
+  if (W.state === "play" || W.state === "dead") {
+    if (W.mode === "net") {
+      // the server owns the simulation; we only interpolate what it sends
+      netUpdate(dt);
+    } else {
+      acc += dt;
+      let guard = 0;
+      while (acc >= FIXED && guard < 5) { step(FIXED); acc -= FIXED; guard++; }
+      if (guard >= 5) acc = 0;
+    }
+    updateCamera(dt);
+  }
+
+  if (W.state !== "menu") {
+    draw(W.time);
+    drawMini();
+    drawHUD(dt);
+  } else {
+    ctx.fillStyle = "#0d1117";
+    ctx.fillRect(0, 0, VW, VH);
+  }
+}
+requestAnimationFrame(frame);
+
+/* ============================ test hooks ============================ */
+window.__SLIME = {
+  CFG, W, cam, input, PALETTE, POWERS, POWER_KEYS,
+  makePower, hasBuff, giveBuff, clearBuffs,
+  step, draw, startGame, buildWorld, spawnPlayer, makePlayer, makeCell, makePod,
+  doSplit, doSpit, burstOn, botThink, totalMass, centroid, leaderboard, aimPoint,
+  radiusOf, speedOf, mergeTime, safeSpot, wobble, updateCamera,
+  setDifficulty, DIFFS, displayMass, NET, SERVERS, joinServer, netUpdate,
+  refreshServers, renderServers,
+  getDifficulty: () => difficulty,
+  setState: s => { W.state = s; },
+  headless: () => { W.state = "play"; }
+};
+
+})();
+</script>
+</body>
+</html>

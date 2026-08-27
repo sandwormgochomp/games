@@ -1,6 +1,6 @@
-# Thirty-Six Games
+# Thirty-Eight Games
 
-Thirty-six single-file HTML games, plus four tools. No build step, no dependencies to
+Thirty-eight single-file HTML games, plus four tools. No build step, no dependencies to
 install — each `.html` file is the whole thing. Open it in a browser and play.
 
 **Play them in your browser: https://sandwormgochomp.github.io/games/**
@@ -11,6 +11,7 @@ install — each `.html` file is the whole thing. Open it in a browser and play.
 |---|---|---|
 | **AEGIS** | `aegis.html` | Wave defense, 100 levels, data-driven bestiary and refits |
 | **BEETLEBOUND** | `beetlebound.html` | Endless racer — tap to jump, hold to fly, outrun the rain |
+| **BLOBS** | `blob.html` | 3D sandbox — spawn a colony of blobs, pick them up and fling them |
 | **BULWARK** | `bulwark.html` | Tower defence — 100 generated approaches, 6 towers × 4 tiers, research tree |
 | **CHAINBREAKER** | `chainbreaker.html` | Deckbuilding roguelike where the Chain persists across turns |
 | **CHORUS** | `chorus.html` | Puzzle platformer — each 20s breath leaves a self behind as a platform |
@@ -32,6 +33,7 @@ install — each `.html` file is the whole thing. Open it in a browser and play.
 | **RING** | `ring.html` | Arcade — escape a collapsing reactor through 9 concentric rings, 100 levels |
 | **RUSTBUCKET** | `rustbucket.html` | Scrapyard metroidvania — five sockets of swappable parts are the progression |
 | **SIXTY** | `heist.html` | Stealth in one perfect minute; deterministic guards, so the clock is the level |
+| **SLIME.IO** | `slime.html` | Soft-body arena .io — split to lunge, four power-ups, optional online play |
 | **SPELLBOUND** | `spellbound.html` | Spelling bee — 807 words in 10 bands, 1000 seeded levels |
 | **THE TRADE** | `thetrade.html` | Market game — only you see true worth, and suspicion is the other scoreboard |
 | **THE UNDERSTUDY** | `understudy.html` | Puppet-show stage sim — you can only work a puppet you stand beside |
@@ -66,8 +68,13 @@ Not games. Three things to make things with, and one thing to just watch.
 
 ---
 
-`index.html` is a landing page linking to all forty.
+`index.html` is a landing page linking to all forty-two.
 
 CANDLE FIRE, HIVEBOUND, LAST CALL and MOSSFORD load three.js from unpkg via an import
-map, so those four need a network connection. The other thirty-six are entirely
+map, so those four need a network connection. The other thirty-eight are entirely
 offline — no network, no assets, no CDN.
+
+SLIME.IO plays solo straight from the page. Its optional multiplayer needs a server
+you run yourself: `node slime-server.js` beside `slime.html` and `slime.env.js`, then
+open the address it prints. Those two `.js` files are the only non-`.html` files here,
+and nothing else depends on them.
